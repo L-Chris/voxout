@@ -1,0 +1,6 @@
+node_modules
+dist
+audio
+.git
+.env
+npm-debug.log

@@ -1,0 +1,20 @@
+{
+  "name": "rebook-tts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TTS service for rebook with provider-based synthesis.",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsc -w -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
