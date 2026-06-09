@@ -12,8 +12,7 @@
     "sourceMap": true,
     "rootDir": "./src",
     "outDir": "./dist",
-    "types": ["node"],
-    "typeRoots": ["../rebook/node_modules/@types"]
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"]
 }
