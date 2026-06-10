@@ -3,6 +3,11 @@ export function getSynthesisTimeoutMs(): number {
   return Number.isFinite(value) && value > 0 ? value : 45000
 }
 
+export function getSynthesisRetryCount(): number {
+  const value = Number(process.env.TTS_SYNTHESIS_RETRIES ?? 1)
+  return Number.isFinite(value) && value >= 0 ? Math.min(5, Math.floor(value)) : 1
+}
+
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {

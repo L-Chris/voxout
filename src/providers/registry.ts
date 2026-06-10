@@ -1,6 +1,7 @@
 import { EdgeTtsProvider } from './edge.js'
+import { MimoTtsProvider } from './mimo.js'
 import { MockTtsProvider } from './mock.js'
-import type { TtsProvider } from '../types.js'
+import type { TtsProvider, TtsProviderCapabilities } from '../types.js'
 
 const providers = new Map<string, TtsProvider>()
 
@@ -16,12 +17,14 @@ export function getProvider(id = 'mock'): TtsProvider {
   return provider
 }
 
-export function listProviders(): Array<{ id: string, name: string }> {
+export function listProviders(): Array<{ id: string, name: string, capabilities?: TtsProviderCapabilities }> {
   return [...providers.values()].map(provider => ({
     id: provider.id,
     name: provider.name,
+    capabilities: provider.capabilities,
   }))
 }
 
 registerProvider(new MockTtsProvider())
 registerProvider(new EdgeTtsProvider())
+registerProvider(new MimoTtsProvider())

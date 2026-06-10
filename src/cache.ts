@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SynthesizeRequest, SynthesizeResult } from './types.js'
 
@@ -18,7 +18,7 @@ export class AudioCache {
     const extension = getAudioExtension(request)
     const fileName = `${key}.${extension}`
     const filePath = join(this.audioDir, fileName)
-    const existing = await exists(filePath)
+    const existing = await getUsableCachedFile(filePath)
     if (existing) {
       return {
         segmentId: request.segment.id,
@@ -31,6 +31,9 @@ export class AudioCache {
     }
 
     const result = await create()
+    if (result.audio.length < 128) {
+      throw new Error(`TTS provider returned empty audio for segment ${request.segment.id}`)
+    }
     await writeFile(filePath, result.audio)
     return {
       segmentId: request.segment.id,
@@ -53,6 +56,9 @@ function getCacheKey(request: SynthesizeRequest): string {
       rate: request.segment.rate ?? request.rate ?? '',
       pitch: request.segment.pitch ?? request.pitch ?? '',
       volume: request.segment.volume ?? request.volume ?? '',
+      emotion: request.segment.emotion ?? '',
+      voicePrompt: request.segment.voicePrompt ?? request.voicePrompt ?? '',
+      stylePrompt: request.segment.stylePrompt ?? request.stylePrompt ?? '',
       text: request.segment.text,
     }))
     .digest('hex')
@@ -61,6 +67,10 @@ function getCacheKey(request: SynthesizeRequest): string {
 function getAudioExtension(request: SynthesizeRequest): 'mp3' | 'wav' {
   const provider = request.provider ?? 'mock'
   if (provider === 'edge') return 'mp3'
+  if (provider === 'mimo') {
+    const outputFormat = normalizeAudioFormat(request.outputFormat ?? process.env.MIMO_TTS_FORMAT)
+    return outputFormat === 'mp3' ? 'mp3' : 'wav'
+  }
   if (request.outputFormat?.includes('mp3')) return 'mp3'
   return 'wav'
 }
@@ -69,10 +79,19 @@ function getMimeType(extension: 'mp3' | 'wav'): string {
   return extension === 'mp3' ? 'audio/mpeg' : 'audio/wav'
 }
 
-async function exists(path: string): Promise<boolean> {
+function normalizeAudioFormat(format: string | undefined): 'mp3' | 'wav' {
+  const value = format?.toLowerCase()
+  if (value?.includes('mp3')) return 'mp3'
+  return 'wav'
+}
+
+async function getUsableCachedFile(path: string): Promise<boolean> {
   try {
-    await stat(path)
-    return true
+    const fileStat = await stat(path)
+    if (!fileStat.isFile()) return false
+    if (fileStat.size >= 128) return true
+    await rm(path, { force: true })
+    return false
   } catch {
     return false
   }

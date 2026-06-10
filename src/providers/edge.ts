@@ -7,20 +7,62 @@ import type { SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
 const DEFAULT_VOICE = 'zh-CN-XiaoyiNeural'
 const DEFAULT_LANG = 'zh-CN'
 const DEFAULT_OUTPUT_FORMAT = 'audio-24khz-96kbitrate-mono-mp3'
+const EDGE_VOICES_URL = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list'
+const EDGE_TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4'
+const DEFAULT_VOICE_CACHE_MS = 24 * 60 * 60 * 1000
+
+interface EdgeVoicePayload {
+  ShortName?: string
+  FriendlyName?: string
+  DisplayName?: string
+  LocalName?: string
+  Locale?: string
+  Gender?: string
+}
 
 export class EdgeTtsProvider implements TtsProvider {
   readonly id = 'edge'
   readonly name = 'Microsoft Edge TTS'
+  private voiceCache: { expiresAt: number, voices: TtsVoice[] } | null = null
 
   async listVoices(): Promise<TtsVoice[]> {
-    return [
-      { id: 'zh-CN-XiaoyiNeural', name: 'Xiaoyi', locale: 'zh-CN', gender: 'Female', provider: this.id },
-      { id: 'zh-CN-YunxiNeural', name: 'Yunxi', locale: 'zh-CN', gender: 'Male', provider: this.id },
-      { id: 'zh-CN-YunjianNeural', name: 'Yunjian', locale: 'zh-CN', gender: 'Male', provider: this.id },
-      { id: 'zh-CN-XiaoxiaoNeural', name: 'Xiaoxiao', locale: 'zh-CN', gender: 'Female', provider: this.id },
-      { id: 'en-US-AriaNeural', name: 'Aria', locale: 'en-US', gender: 'Female', provider: this.id },
-      { id: 'en-US-GuyNeural', name: 'Guy', locale: 'en-US', gender: 'Male', provider: this.id },
-    ]
+    const now = Date.now()
+    if (this.voiceCache && this.voiceCache.expiresAt > now) return this.voiceCache.voices
+
+    const voices = await this.fetchVoices().catch(() => FALLBACK_EDGE_VOICES)
+    const cacheMs = Math.max(0, Number(process.env.EDGE_TTS_VOICES_CACHE_MS ?? DEFAULT_VOICE_CACHE_MS))
+    if (cacheMs > 0) {
+      this.voiceCache = {
+        expiresAt: now + cacheMs,
+        voices,
+      }
+    }
+    return voices
+  }
+
+  private async fetchVoices(): Promise<TtsVoice[]> {
+    const url = new URL(process.env.EDGE_TTS_VOICES_URL ?? EDGE_VOICES_URL)
+    if (!url.searchParams.has('trustedclienttoken')) {
+      url.searchParams.set('trustedclienttoken', process.env.EDGE_TTS_TRUSTED_CLIENT_TOKEN ?? EDGE_TRUSTED_CLIENT_TOKEN)
+    }
+    const timeoutMs = Number(process.env.EDGE_TTS_VOICES_TIMEOUT_MS ?? 10000)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok) throw new Error(`Edge voices request failed: ${response.status}`)
+      const payload = await response.json() as EdgeVoicePayload[]
+      if (!Array.isArray(payload)) throw new Error('Edge voices response was not an array.')
+      const voices = payload
+        .map(voice => normalizeEdgeVoice(voice, this.id))
+        .filter((voice): voice is TtsVoice => !!voice)
+        .sort((a, b) => a.locale === b.locale
+          ? a.id.localeCompare(b.id)
+          : (a.locale ?? '').localeCompare(b.locale ?? ''))
+      return voices.length ? voices : FALLBACK_EDGE_VOICES
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   async synthesize(request: SynthesizeRequest) {
@@ -50,6 +92,26 @@ export class EdgeTtsProvider implements TtsProvider {
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
+  }
+}
+
+const FALLBACK_EDGE_VOICES: TtsVoice[] = [
+  { id: 'zh-CN-XiaoyiNeural', name: 'Xiaoyi', locale: 'zh-CN', gender: 'Female', provider: 'edge' },
+  { id: 'zh-CN-YunxiNeural', name: 'Yunxi', locale: 'zh-CN', gender: 'Male', provider: 'edge' },
+  { id: 'zh-CN-YunjianNeural', name: 'Yunjian', locale: 'zh-CN', gender: 'Male', provider: 'edge' },
+  { id: 'zh-CN-XiaoxiaoNeural', name: 'Xiaoxiao', locale: 'zh-CN', gender: 'Female', provider: 'edge' },
+  { id: 'en-US-AriaNeural', name: 'Aria', locale: 'en-US', gender: 'Female', provider: 'edge' },
+  { id: 'en-US-GuyNeural', name: 'Guy', locale: 'en-US', gender: 'Male', provider: 'edge' },
+]
+
+function normalizeEdgeVoice(voice: EdgeVoicePayload, provider: string): TtsVoice | null {
+  if (!voice.ShortName) return null
+  return {
+    id: voice.ShortName,
+    name: voice.DisplayName ?? voice.LocalName ?? voice.FriendlyName ?? voice.ShortName,
+    locale: voice.Locale,
+    gender: voice.Gender,
+    provider,
   }
 }
 

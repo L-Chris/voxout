@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict'
+import { afterEach, test } from 'node:test'
+import { MimoTtsProvider } from '../dist/providers/mimo.js'
+import { listProviders } from '../dist/providers/registry.js'
+
+const originalFetch = globalThis.fetch
+const originalEnv = { ...process.env }
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  process.env = { ...originalEnv }
+})
+
+test('Mimo provider sends preset voice synthesis requests', async () => {
+  const captured = await synthesizeWithMockedFetch({
+    providerRequest: {
+      voice: '冰糖',
+      segment: {
+        id: 'preset',
+        text: '你好，rebook。',
+      },
+    },
+  })
+
+  assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
+  assert.equal(captured.headers['api-key'], 'test-key')
+  assert.equal(captured.headers.authorization, 'Bearer test-key')
+  assert.equal(captured.body.model, 'mimo-v2.5-tts')
+  assert.deepEqual(captured.body.messages, [
+    { role: 'assistant', content: '你好，rebook。' },
+  ])
+  assert.deepEqual(captured.body.audio, {
+    format: 'wav',
+    voice: '冰糖',
+  })
+})
+
+test('Mimo provider creates a designed voice sample then voice-clones target speech', async () => {
+  const captures = await synthesizeWithMockedFetch({
+    providerRequest: {
+      outputFormat: 'mp3',
+      segment: {
+        id: 'design',
+        text: '别动。',
+        voicePrompt: '年轻男性，冷静克制，嗓音清亮。',
+        stylePrompt: '低声，紧张。',
+      },
+    },
+    returnAllCaptures: true,
+  })
+
+  assert.equal(captures.length, 2)
+  assert.equal(captures[0].body.model, 'mimo-v2.5-tts-voicedesign')
+  assert.deepEqual(captures[0].body.messages, [
+    {
+      role: 'user',
+      content: '年轻男性，冷静克制，嗓音清亮。',
+    },
+    { role: 'assistant', content: '你好，我会用这个声音为角色说话。' },
+  ])
+  assert.deepEqual(captures[0].body.audio, {
+    format: 'wav',
+    optimize_text_preview: true,
+  })
+
+  assert.equal(captures[1].body.model, 'mimo-v2.5-tts-voiceclone')
+  assert.deepEqual(captures[1].body.messages, [
+    { role: 'user', content: '低声，紧张。' },
+    { role: 'assistant', content: '别动。' },
+  ])
+  assert.equal(captures[1].body.audio.format, 'mp3')
+  assert.match(captures[1].body.audio.voice, /^data:audio\/wav;base64,/)
+})
+
+test('Mimo provider exposes voice design capability metadata', async () => {
+  const provider = new MimoTtsProvider()
+  const voices = await provider.listVoices()
+  assert.equal(provider.capabilities.voiceDesign, true)
+  assert.ok(voices.length > 0)
+  assert.equal(voices[0].capabilities.voiceDesign, true)
+
+  const providers = listProviders()
+  const mimo = providers.find(item => item.id === 'mimo')
+  assert.equal(mimo.capabilities.voiceDesign, true)
+})
+
+async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = false }) {
+  process.env.MIMO_API_KEY = 'test-key'
+  delete process.env.MIMO_BASE_URL
+  delete process.env.MIMO_TTS_MODEL
+  delete process.env.MIMO_VOICE_DESIGN_MODEL
+  delete process.env.MIMO_VOICE_CLONE_MODEL
+  delete process.env.MIMO_VOICE_SAMPLE_TEXT
+  delete process.env.MIMO_TTS_FORMAT
+  delete process.env.MIMO_OPTIMIZE_TEXT_PREVIEW
+
+  const captures = []
+  globalThis.fetch = async (url, init) => {
+    captures.push({
+      url,
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    })
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          audio: {
+            data: Buffer.alloc(256, 1).toString('base64'),
+            transcript: providerRequest.segment.text,
+          },
+        },
+      }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  const provider = new MimoTtsProvider()
+  const result = await provider.synthesize(providerRequest)
+  assert.equal(result.audio.length, 256)
+  assert.equal(result.mimeType, providerRequest.outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav')
+  return returnAllCaptures ? captures : captures[0]
+}

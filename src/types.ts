@@ -6,6 +6,11 @@ export interface TtsVoice {
   locale?: string
   gender?: string
   provider: string
+  capabilities?: TtsProviderCapabilities
+}
+
+export interface TtsProviderCapabilities {
+  voiceDesign?: boolean
 }
 
 export interface TtsSegment {
@@ -21,6 +26,8 @@ export interface TtsSegment {
   pitch?: string
   volume?: string
   emotion?: string
+  voicePrompt?: string
+  stylePrompt?: string
 }
 
 export interface SynthesizeRequest {
@@ -31,6 +38,8 @@ export interface SynthesizeRequest {
   rate?: string
   pitch?: string
   volume?: string
+  voicePrompt?: string
+  stylePrompt?: string
   segment: TtsSegment
 }
 
@@ -51,6 +60,8 @@ export interface TtsJobRequest {
   rate?: string
   pitch?: string
   volume?: string
+  voicePrompt?: string
+  stylePrompt?: string
   concurrency?: number
   segments: TtsSegment[]
 }
@@ -71,6 +82,7 @@ export interface TtsJob {
 export interface TtsProvider {
   readonly id: string
   readonly name: string
+  readonly capabilities?: TtsProviderCapabilities
   listVoices(): Promise<TtsVoice[]>
   synthesize(request: SynthesizeRequest): Promise<{
     audio: Buffer

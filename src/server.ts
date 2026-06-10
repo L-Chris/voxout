@@ -4,13 +4,21 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AudioCache } from './cache.js'
+import { loadDotEnv } from './env.js'
 import { getProvider, listProviders } from './providers/registry.js'
 import { TaskManager } from './task-manager.js'
 import { getSynthesisTimeoutMs, withTimeout } from './timeout.js'
 import type { SynthesizeRequest, TtsJobRequest } from './types.js'
 
-const port = Number(process.env.PORT ?? 4177)
 const rootDir = fileURLToPath(new URL('..', import.meta.url))
+await loadDotEnv([
+  join(process.cwd(), '.env'),
+  join(process.cwd(), '.env.local'),
+  join(rootDir, '.env'),
+  join(rootDir, '.env.local'),
+])
+
+const port = Number(process.env.PORT ?? 4177)
 const audioDir = process.env.TTS_AUDIO_DIR ?? join(rootDir, 'audio')
 const cache = new AudioCache(audioDir)
 const tasks = new TaskManager(cache)

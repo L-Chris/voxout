@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { SynthesizeRequest, SynthesizeResult, TtsJob, TtsJobRequest } from './types.js'
 import { getProvider } from './providers/registry.js'
 import { AudioCache } from './cache.js'
-import { getSynthesisTimeoutMs, withTimeout } from './timeout.js'
+import { getSynthesisRetryCount, getSynthesisTimeoutMs, withTimeout } from './timeout.js'
 
 export class TaskManager {
   private readonly jobs = new Map<string, TtsJob>()
@@ -57,12 +57,17 @@ export class TaskManager {
           rate: request.rate,
           pitch: request.pitch,
           volume: request.volume,
+          voicePrompt: request.voicePrompt,
+          stylePrompt: request.stylePrompt,
           segment,
         }
-        const result = await withTimeout(
-          this.cache.getOrCreate(synthesizeRequest, () => provider.synthesize(synthesizeRequest)),
-          timeoutMs,
-          `TTS synthesis timed out after ${timeoutMs}ms for segment ${segment.id}`,
+        const result = await synthesizeWithRetries(
+          synthesizeRequest,
+          () => withTimeout(
+            this.cache.getOrCreate(synthesizeRequest, () => provider.synthesize(synthesizeRequest)),
+            timeoutMs,
+            `TTS synthesis timed out after ${timeoutMs}ms for segment ${segment.id}`,
+          ),
         )
         orderedResults[index] = result
         job.results = orderedResults.filter((item): item is SynthesizeResult => Boolean(item))
@@ -80,4 +85,26 @@ export class TaskManager {
     job.status = job.failed === 0 ? 'done' : job.completed > 0 ? 'partial' : 'failed'
     job.updatedAt = new Date().toISOString()
   }
+}
+
+async function synthesizeWithRetries(
+  request: SynthesizeRequest,
+  synthesize: () => Promise<SynthesizeResult>,
+): Promise<SynthesizeResult> {
+  const retryCount = getSynthesisRetryCount()
+  let lastError: unknown
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
+    try {
+      return await synthesize()
+    } catch (error) {
+      lastError = error
+      if (attempt < retryCount) await delay(Math.min(1000, 200 * (attempt + 1)))
+    }
+  }
+  const message = lastError instanceof Error ? lastError.message : String(lastError)
+  throw new Error(`TTS synthesis failed after ${retryCount + 1} attempt(s) for segment ${request.segment.id}: ${message}`)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }

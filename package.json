@@ -7,6 +7,7 @@
   "main": "./dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "start": "node dist/server.js",
     "dev": "tsc -w -p tsconfig.json"
   },
