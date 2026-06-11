@@ -49,7 +49,7 @@ export class AudioCache {
 function getCacheKey(request: SynthesizeRequest): string {
   return createHash('sha256')
     .update(JSON.stringify({
-      provider: request.provider ?? 'mock',
+      provider: request.segment.provider ?? request.provider ?? 'mock',
       voice: request.segment.voice ?? request.voice ?? '',
       lang: request.lang ?? '',
       outputFormat: request.outputFormat ?? '',
@@ -59,14 +59,17 @@ function getCacheKey(request: SynthesizeRequest): string {
       emotion: request.segment.emotion ?? '',
       voicePrompt: request.segment.voicePrompt ?? request.voicePrompt ?? '',
       stylePrompt: request.segment.stylePrompt ?? request.stylePrompt ?? '',
+      soundEffectPrompt: request.segment.soundEffectPrompt ?? '',
+      soundEffectDurationSeconds: request.segment.soundEffectDurationSeconds ?? '',
       text: request.segment.text,
     }))
     .digest('hex')
 }
 
 function getAudioExtension(request: SynthesizeRequest): 'mp3' | 'wav' {
-  const provider = request.provider ?? 'mock'
+  const provider = request.segment.provider ?? request.provider ?? 'mock'
   if (provider === 'edge') return 'mp3'
+  if (provider === 'elevenlabs') return 'mp3'
   if (provider === 'mimo') {
     const outputFormat = normalizeAudioFormat(request.outputFormat ?? process.env.MIMO_TTS_FORMAT)
     return outputFormat === 'mp3' ? 'mp3' : 'wav'

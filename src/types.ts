@@ -11,6 +11,7 @@ export interface TtsVoice {
 
 export interface TtsProviderCapabilities {
   voiceDesign?: boolean
+  soundEffects?: boolean
 }
 
 export interface TtsSegment {
@@ -21,6 +22,9 @@ export interface TtsSegment {
   endOffset?: number
   speaker?: string
   text: string
+  provider?: string
+  soundEffectPrompt?: string
+  soundEffectDurationSeconds?: number
   voice?: string
   rate?: string
   pitch?: string

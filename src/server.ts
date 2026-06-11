@@ -52,7 +52,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/v1/tts/synthesize') {
       const body = await readJson<SynthesizeRequest>(req)
       validateSynthesizeRequest(body)
-      const provider = getProvider(body.provider)
+      const provider = getProvider(body.segment.provider ?? body.provider)
       const timeoutMs = getSynthesisTimeoutMs()
       const result = await withTimeout(
         cache.getOrCreate(body, () => provider.synthesize(body)),

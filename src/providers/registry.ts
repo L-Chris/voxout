@@ -1,4 +1,5 @@
 import { EdgeTtsProvider } from './edge.js'
+import { ElevenLabsSoundEffectProvider } from './elevenlabs.js'
 import { MimoTtsProvider } from './mimo.js'
 import { MockTtsProvider } from './mock.js'
 import type { TtsProvider, TtsProviderCapabilities } from '../types.js'
@@ -28,3 +29,4 @@ export function listProviders(): Array<{ id: string, name: string, capabilities?
 registerProvider(new MockTtsProvider())
 registerProvider(new EdgeTtsProvider())
 registerProvider(new MimoTtsProvider())
+registerProvider(new ElevenLabsSoundEffectProvider())
