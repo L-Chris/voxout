@@ -38,6 +38,18 @@
     @apply max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg bg-white shadow-xl;
   }
 
+  .audio-source-control {
+    @apply rounded-md border border-slate-300 bg-white focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100;
+  }
+
+  .audio-source-control .textarea {
+    @apply rounded-b-none border-0 focus:ring-0;
+  }
+
+  .audio-source-actions {
+    @apply flex items-center justify-between gap-3 border-t border-slate-200 px-3 py-2;
+  }
+
   .provider-card {
     @apply w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-slate-900 hover:border-blue-300;
   }

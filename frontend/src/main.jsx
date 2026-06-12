@@ -447,22 +447,40 @@ function SpeechTestForm({ form, onFormChange, provider }) {
 function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Audio source
-        <input
-          className="input"
-          type="file"
-          accept="audio/*,video/mp4,video/webm"
-          onChange={event => onFileChange(event.target.files?.[0] ?? null)}
-        />
-        {file ? <small className="font-normal text-slate-500">{file.name}</small> : null}
-        <textarea
-          className="textarea min-h-24 font-mono text-xs"
-          placeholder="https://example.com/audio.m4a, BV1..., data:audio/wav;base64,..."
-          value={form.audioSource}
-          onChange={event => onFormChange({ ...form, audioSource: event.target.value })}
-        />
-      </label>
+      <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+        <label htmlFor="audio-source">Audio source</label>
+        <div className="audio-source-control">
+          <textarea
+            id="audio-source"
+            className="textarea min-h-24 font-mono text-xs"
+            placeholder="https://example.com/audio.m4a, BV1..., data:audio/wav;base64,..."
+            value={form.audioSource}
+            onChange={event => {
+              onFileChange(null)
+              onFormChange({ ...form, audioSource: event.target.value })
+            }}
+          />
+          <div className="audio-source-actions">
+            <span className="truncate text-sm font-normal text-slate-500">
+              {file ? file.name : 'Paste an audio source or choose a file'}
+            </span>
+            <label className="btn-secondary shrink-0 cursor-pointer" htmlFor="audio-file">
+              Choose file
+            </label>
+            <input
+              className="sr-only"
+              id="audio-file"
+              type="file"
+              accept="audio/*,video/mp4,video/webm"
+              onChange={event => {
+                const nextFile = event.target.files?.[0] ?? null
+                onFileChange(nextFile)
+                if (nextFile) onFormChange({ ...form, audioSource: '' })
+              }}
+            />
+          </div>
+        </div>
+      </div>
       <label className="grid gap-1.5 text-sm font-semibold">
         Language
         <input
