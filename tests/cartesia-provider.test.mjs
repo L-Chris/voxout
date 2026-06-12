@@ -27,7 +27,7 @@ test('Cartesia provider sends text-to-speech requests', async () => {
     voiceId: 'cartesia-voice-1',
     outputFormat: 'mp3',
     lang: 'en-US',
-    rate: '1.1',
+    speed: 1.1,
     segment: {
       id: 'tts',
       text: 'Hello from Cartesia.',

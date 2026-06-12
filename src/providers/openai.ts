@@ -117,7 +117,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         input: text,
         voice: request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoice') ?? DEFAULT_VOICE,
         response_format: responseFormat,
-        speed: normalizeSpeed(request.rate),
+        speed: normalizeSpeed(request.speed),
         stream_format: streamFormat,
         instructions: normalizeInstructions(request.instructions ?? request.segment.stylePrompt ?? request.stylePrompt),
       })),
@@ -289,10 +289,9 @@ function getMimeType(format: string, responseType: string | undefined): string {
   return 'audio/mpeg'
 }
 
-function normalizeSpeed(value: string | undefined): number | undefined {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
+function normalizeSpeed(value: number | undefined): number | undefined {
+  if (value == null) return undefined
+  return Number.isFinite(value) ? value : undefined
 }
 
 function normalizeInstructions(value: string | undefined): string | undefined {

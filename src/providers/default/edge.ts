@@ -90,7 +90,7 @@ export class EdgeTtsProvider implements TtsProvider {
         outputFormat,
         saveSubtitles: false,
         pitch: request.segment.pitch ?? request.pitch ?? 'default',
-        rate: request.segment.rate ?? request.rate ?? 'default',
+        rate: request.segment.rate ?? normalizeEdgeRate(request.speed),
         volume: request.segment.volume ?? request.volume ?? 'default',
         timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         proxy: getConfigString(context, 'proxy'),
@@ -133,7 +133,7 @@ async function createEdgeSpeechStream(request: SynthesizeRequest, context: Provi
     outputFormat,
     saveSubtitles: false,
     pitch: request.segment.pitch ?? request.pitch ?? 'default',
-    rate: request.segment.rate ?? request.rate ?? 'default',
+    rate: request.segment.rate ?? normalizeEdgeRate(request.speed),
     volume: request.segment.volume ?? request.volume ?? 'default',
     timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
     proxy: getConfigString(context, 'proxy'),
@@ -184,7 +184,7 @@ async function createEdgeSpeechStream(request: SynthesizeRequest, context: Provi
       ws.on('close', () => close())
 
       const requestId = randomBytes(16).toString('hex')
-      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${buildSsml(request.segment.text, voice, request.lang ?? inferLangFromVoice(voice), request.segment.rate ?? request.rate ?? 'default', request.segment.pitch ?? request.pitch ?? 'default', request.segment.volume ?? request.volume ?? 'default')}`)
+      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${buildSsml(request.segment.text, voice, request.lang ?? inferLangFromVoice(voice), request.segment.rate ?? normalizeEdgeRate(request.speed), request.segment.pitch ?? request.pitch ?? 'default', request.segment.volume ?? request.volume ?? 'default')}`)
     },
     cancel() {
       cancelStream?.()
@@ -290,6 +290,11 @@ function normalizeEdgeVoice(voice: EdgeVoicePayload, provider: string): TtsVoice
 function inferLangFromVoice(voice: string): string {
   const match = /^([a-z]{2}-[A-Z]{2})-/.exec(voice)
   return match?.[1] ?? DEFAULT_LANG
+}
+
+function normalizeEdgeRate(speed: number | undefined): string {
+  if (speed == null || !Number.isFinite(speed) || speed <= 0 || speed === 1) return 'default'
+  return `${Math.round((speed - 1) * 100)}%`
 }
 
 function normalizeEdgeOutputFormat(value: string | undefined): string {

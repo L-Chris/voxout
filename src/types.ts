@@ -81,7 +81,7 @@ export interface SynthesizeRequest {
   lang?: string
   outputFormat?: string
   streamFormat?: 'audio' | 'sse'
-  rate?: string
+  speed?: number
   pitch?: string
   volume?: string
   voicePrompt?: string

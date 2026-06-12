@@ -482,7 +482,7 @@ function normalizeSynthesizeInput(providerId: string, input: unknown): Synthesiz
     lang: typeof value.lang === 'string' ? value.lang : undefined,
     outputFormat: typeof value.outputFormat === 'string' ? value.outputFormat : undefined,
     streamFormat: value.streamFormat === 'audio' || value.streamFormat === 'sse' ? value.streamFormat : undefined,
-    rate: typeof value.rate === 'string' ? value.rate : typeof value.speed === 'number' ? String(value.speed) : undefined,
+    speed: typeof value.speed === 'number' ? value.speed : undefined,
     pitch: typeof value.pitch === 'string' ? value.pitch : undefined,
     volume: typeof value.volume === 'string' ? value.volume : undefined,
     voicePrompt: typeof value.voicePrompt === 'string' ? value.voicePrompt : undefined,

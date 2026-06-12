@@ -196,7 +196,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
         output_format: normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT),
         language: normalizeLanguage(request.lang),
         generation_config: compactObject({
-          speed: normalizeSpeed(request.rate),
+          speed: normalizeSpeed(request.speed),
         }),
         pronunciation_dict_id: getConfigString(context, 'pronunciationDictId'),
       })),
@@ -282,10 +282,9 @@ function normalizeLanguage(value: string | undefined): string | undefined {
   return normalized.split(/[-_]/)[0]
 }
 
-function normalizeSpeed(value: string | undefined): number | undefined {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+function normalizeSpeed(value: number | undefined): number | undefined {
+  if (value == null) return undefined
+  return Number.isFinite(value) && value > 0 ? value : undefined
 }
 
 async function resolveAudio(request: TranscribeRequest): Promise<{ data: Buffer, mimeType: string, fileName: string }> {
