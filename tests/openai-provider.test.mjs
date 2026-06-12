@@ -110,6 +110,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
 
   const provider = new OpenAiProvider()
   const result = await provider.transcribe({
+    model: 'whisper-1',
     audioData: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
     mimeType: 'audio/wav',
     language: 'en',
@@ -121,7 +122,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
 
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
-  assert.equal(captured.model, 'gpt-4o-transcribe')
+  assert.equal(captured.model, 'whisper-1')
   assert.equal(captured.responseFormat, 'json')
   assert.equal(captured.language, 'en')
   assert.equal(captured.file.type, 'audio/wav')

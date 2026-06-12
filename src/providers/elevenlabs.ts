@@ -118,7 +118,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
     const apiKey = getApiKey(context)
     const form = new FormData()
-    form.set('model_id', getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
+    form.set('model_id', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
     const language = normalizeLanguageCode(request.language)
     if (language) form.set('language_code', language)
 

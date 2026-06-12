@@ -180,6 +180,7 @@ test('Mimo provider sends speech recognition requests', async () => {
 
   const provider = new MimoTtsProvider()
   const result = await provider.transcribe({
+    model: 'mimo-custom-asr',
     audioData: Buffer.from('audio').toString('base64'),
     mimeType: 'audio/wav',
     language: 'zh',
@@ -192,7 +193,7 @@ test('Mimo provider sends speech recognition requests', async () => {
   assert.equal(captured.length, 1)
   assert.equal(captured[0].url, 'https://api.xiaomimimo.com/v1/chat/completions')
   assert.equal(captured[0].headers['api-key'], 'test-key')
-  assert.equal(captured[0].body.model, 'mimo-v2.5-asr')
+  assert.equal(captured[0].body.model, 'mimo-custom-asr')
   assert.deepEqual(captured[0].body.messages, [
     {
       role: 'user',

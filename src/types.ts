@@ -101,6 +101,7 @@ export interface TtsProvider {
 
 export interface TranscribeRequest {
   provider?: string
+  model?: string
   url?: string
   bvid?: string
   audioData?: string

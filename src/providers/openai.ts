@@ -136,7 +136,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     const audio = await resolveTranscriptionAudio(request)
     const responseFormat = normalizeTranscriptionResponseFormat(request.format)
     const form = new FormData()
-    form.set('model', getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
+    form.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
     form.set('file', new Blob([audio.data], { type: audio.mimeType }), audio.fileName)
     form.set('response_format', responseFormat)
     const language = normalizeLanguage(request.language)

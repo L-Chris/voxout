@@ -107,7 +107,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
 
     const audioData = await resolveAudioDataUrl(request, context)
     const response = await postMimoCompletion(apiKey, {
-      model: getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL,
+      model: request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL,
       messages: [
         {
           role: 'user',

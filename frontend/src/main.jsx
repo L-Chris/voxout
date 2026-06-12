@@ -47,7 +47,7 @@ function App() {
     setDesignForm(defaultDesignForm())
     setCloneForm(defaultCloneForm())
     setCloneFile(null)
-    setTranscriptionForm(defaultTranscriptionForm())
+    setTranscriptionForm(defaultTranscriptionForm(selectedProvider))
     setTranscriptionFile(null)
     setIsConfigOpen(false)
     setSaveStatus('')
@@ -208,6 +208,7 @@ function App() {
     const form = new FormData()
     form.set('model', selectedProvider.id)
     form.set('response_format', transcriptionForm.responseFormat)
+    if (transcriptionForm.model.trim()) form.set('model_id', transcriptionForm.model.trim())
     if (transcriptionForm.language.trim()) form.set('language', transcriptionForm.language.trim())
     if (transcriptionFile) {
       form.set('file', transcriptionFile)
@@ -443,6 +444,7 @@ function App() {
                       <TranscriptionTestForm
                         file={transcriptionFile}
                         form={transcriptionForm}
+                        modelField={getProviderField(selectedProvider, 'asrModel')}
                         onFileChange={setTranscriptionFile}
                         onFormChange={setTranscriptionForm}
                       />
@@ -653,7 +655,8 @@ function IsolationTestForm({ file, form, onFileChange, onFormChange }) {
   )
 }
 
-function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
+function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormChange }) {
+  const modelListId = modelField?.options?.length ? 'transcription-model-options' : undefined
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <AudioSourceControl
@@ -663,6 +666,25 @@ function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
         onFileChange={onFileChange}
         onFormChange={onFormChange}
       />
+      {modelField ? (
+        <label className="grid gap-1.5 text-sm font-semibold">
+          Model
+          <input
+            className="input"
+            list={modelListId}
+            placeholder={modelField.placeholder || 'provider default'}
+            value={form.model}
+            onChange={event => onFormChange({ ...form, model: event.target.value })}
+          />
+          {modelListId ? (
+            <datalist id={modelListId}>
+              {modelField.options.map(option => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          ) : null}
+        </label>
+      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Language
         <input
@@ -1057,9 +1079,10 @@ function defaultCloneForm() {
   }
 }
 
-function defaultTranscriptionForm() {
+function defaultTranscriptionForm(provider) {
   return {
     audioSource: '',
+    model: getProviderField(provider, 'asrModel') ? provider?.config?.asrModel ?? '' : '',
     language: 'auto',
     responseFormat: 'json',
   }
@@ -1097,6 +1120,10 @@ function formatVoiceOption(voice) {
       voice.gender,
     ].filter(Boolean).join(' · '),
   }
+}
+
+function getProviderField(provider, key) {
+  return (provider?.fields || []).find(field => field.key === key)
 }
 
 createRoot(document.querySelector('#root')).render(<App />)

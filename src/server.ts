@@ -286,6 +286,7 @@ async function createOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   const file = form.files.file
   const responseFormat = normalizeTranscriptionResponseFormat(form.fields.response_format)
   const request: TranscribeRequest = {
+    model: form.fields.model_id || form.fields.asr_model || form.fields.asrModel,
     url: form.fields.url,
     bvid: form.fields.bvid,
     audioData: form.fields.audioData,

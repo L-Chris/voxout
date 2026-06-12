@@ -70,6 +70,7 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
 
   const provider = new ElevenLabsProvider()
   const result = await provider.transcribe({
+    model: 'scribe_v1',
     url: 'https://example.com/audio.mp3',
     language: 'en',
     format: 'raw',
@@ -84,7 +85,7 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
 
   assert.equal(captured.url, 'https://api.elevenlabs.io/v1/speech-to-text')
   assert.equal(captured.headers['xi-api-key'], 'test-eleven-key')
-  assert.equal(captured.modelId, 'scribe_v2')
+  assert.equal(captured.modelId, 'scribe_v1')
   assert.equal(captured.sourceUrl, 'https://example.com/audio.mp3')
   assert.equal(captured.languageCode, 'en')
   assert.equal(result.text, 'Recognized text')
