@@ -235,56 +235,56 @@ export interface ProviderConfigInput {
 }
 
 export interface ProviderConfigRecord extends ProviderRuntimeConfig {
-  providerId: string
-  createdAt?: string
-  updatedAt?: string
+  provider_id: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface VoiceRecord {
   id: string
-  voiceId: string
+  voice_id: string
   name: string
   description?: string
   language?: string
-  previewMimeType?: string
-  previewAudio?: string
+  preview_mime_type?: string
+  preview_audio?: string
   metadata: JsonObject
-  links: VoiceProviderLinkRecord[]
-  createdAt?: string
-  updatedAt?: string
+  provider_links: VoiceProviderLinkRecord[]
+  created_at?: string
+  updated_at?: string
 }
 
 export interface VoiceProviderLinkRecord {
   id: string
-  voiceRecordId: string
-  providerId: string
-  providerAccountId: string
-  providerVoiceId?: string
-  providerVoiceKey: string
-  previewMimeType?: string
-  previewAudio?: string
+  voice_record_id: string
+  provider_id: string
+  provider_account_id: string
+  provider_voice_id?: string
+  provider_voice_key: string
+  preview_mime_type?: string
+  preview_audio?: string
   metadata: JsonObject
-  createdAt?: string
-  updatedAt?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface VoiceInput {
-  voiceId?: string
+  voice_id?: string
   name: string
   description?: string
   language?: string
-  previewMimeType?: string
-  previewAudio?: string
+  preview_mime_type?: string
+  preview_audio?: string
   metadata?: JsonObject
-  providerLink?: VoiceProviderLinkInput
+  provider_link?: VoiceProviderLinkInput
 }
 
 export interface VoiceProviderLinkInput {
-  providerId: string
-  providerAccountId?: string
-  providerVoiceId?: string
-  providerVoiceKey?: string
-  previewMimeType?: string
-  previewAudio?: string
+  provider_id: string
+  provider_account_id?: string
+  provider_voice_id?: string
+  provider_voice_key?: string
+  preview_mime_type?: string
+  preview_audio?: string
   metadata?: JsonObject
 }

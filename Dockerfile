@@ -30,4 +30,4 @@ RUN mkdir -p /app/audio
 
 EXPOSE 4177
 
-CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ]; then npx prisma db push --accept-data-loss; fi; node dist/server.js"]
+CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ]; then node prisma/rename-snake-case-columns.mjs && npx prisma db push --accept-data-loss; fi; node dist/server.js"]

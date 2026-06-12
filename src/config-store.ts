@@ -35,20 +35,20 @@ export class ProviderConfigStore {
 
   async listConfigs(): Promise<ProviderConfigRecord[]> {
     if (!this.prisma) return []
-    const records = await this.prisma.providerConfig.findMany({ orderBy: { providerId: 'asc' } })
+    const records = await this.prisma.providerConfig.findMany({ orderBy: { provider_id: 'asc' } })
     return records.map(record => ({
-      providerId: record.providerId,
+      provider_id: record.provider_id,
       enabled: record.enabled,
       config: toJsonObject(record.config),
       secrets: toJsonObject(record.secrets),
-      createdAt: record.createdAt.toISOString(),
-      updatedAt: record.updatedAt.toISOString(),
+      created_at: record.created_at.toISOString(),
+      updated_at: record.updated_at.toISOString(),
     }))
   }
 
-  async getConfig(providerId: string): Promise<ProviderRuntimeConfig> {
+  async getConfig(provider_id: string): Promise<ProviderRuntimeConfig> {
     if (!this.prisma) return { enabled: true, config: {}, secrets: {} }
-    const record = await this.prisma.providerConfig.findUnique({ where: { providerId } })
+    const record = await this.prisma.providerConfig.findUnique({ where: { provider_id } })
     if (!record) return { enabled: true, config: {}, secrets: {} }
     return {
       enabled: record.enabled,
@@ -57,19 +57,19 @@ export class ProviderConfigStore {
     }
   }
 
-  async upsertConfig(providerId: string, input: ProviderConfigInput): Promise<ProviderConfigRecord> {
+  async upsertConfig(provider_id: string, input: ProviderConfigInput): Promise<ProviderConfigRecord> {
     if (!this.prisma) {
       throw new Error('DATABASE_URL is required before provider settings can be persisted.')
     }
     const config = sanitizeObject(input.config)
     const secrets = sanitizeObject(input.secrets)
-    const existing = await this.prisma.providerConfig.findUnique({ where: { providerId } })
+    const existing = await this.prisma.providerConfig.findUnique({ where: { provider_id } })
     const hasNewSecrets = Object.keys(secrets).length > 0
     const mergedSecrets = hasNewSecrets ? secrets : toJsonObject(existing?.secrets)
     const record = await this.prisma.providerConfig.upsert({
-      where: { providerId },
+      where: { provider_id },
       create: {
-        providerId,
+        provider_id,
         enabled: input.enabled ?? true,
         config,
         secrets: mergedSecrets,
@@ -81,82 +81,82 @@ export class ProviderConfigStore {
       },
     })
     return {
-      providerId: record.providerId,
+      provider_id: record.provider_id,
       enabled: record.enabled,
       config: toJsonObject(record.config),
       secrets: toJsonObject(record.secrets),
-      createdAt: record.createdAt.toISOString(),
-      updatedAt: record.updatedAt.toISOString(),
+      created_at: record.created_at.toISOString(),
+      updated_at: record.updated_at.toISOString(),
     }
   }
 
-  async listVoices(providerId?: string): Promise<VoiceRecord[]> {
+  async listVoices(provider_id?: string): Promise<VoiceRecord[]> {
     if (!this.prisma) {
       const voices = globalForPrisma.voices ?? []
-      return providerId ? voices.filter(voice => voice.links.some(link => link.providerId === providerId)) : voices
+      return provider_id ? voices.filter(voice => voice.provider_links.some(link => link.provider_id === provider_id)) : voices
     }
     const records = await this.prisma.voice.findMany({
-      where: providerId ? { providerLinks: { some: { providerId } } } : undefined,
-      include: { providerLinks: true },
+      where: provider_id ? { provider_links: { some: { provider_id } } } : undefined,
+      include: { provider_links: true },
       orderBy: [{ name: 'asc' }],
     })
     return records.map(toVoiceRecord)
   }
 
-  async getVoice(providerId: string, voiceId: string): Promise<VoiceRecord | null> {
+  async getVoice(provider_id: string, voice_id: string): Promise<VoiceRecord | null> {
     if (!this.prisma) {
       return (globalForPrisma.voices ?? []).find(voice => (
-        voice.voiceId === voiceId
-        || voice.links.some(link => link.providerId === providerId && (link.providerVoiceId === voiceId || link.providerVoiceKey === voiceId))
+        voice.voice_id === voice_id
+        || voice.provider_links.some(link => link.provider_id === provider_id && (link.provider_voice_id === voice_id || link.provider_voice_key === voice_id))
       )) ?? null
     }
     const record = await this.prisma.voice.findUnique({
-      where: { voiceId },
-      include: { providerLinks: true },
+      where: { voice_id },
+      include: { provider_links: true },
     })
     if (record) return toVoiceRecord(record)
     const link = await this.prisma.voiceProviderLink.findFirst({
       where: {
-        providerId,
+        provider_id,
         OR: [
-          { providerVoiceId: voiceId },
-          { providerVoiceKey: voiceId },
+          { provider_voice_id: voice_id },
+          { provider_voice_key: voice_id },
         ],
       },
-      include: { voice: { include: { providerLinks: true } } },
+      include: { voice: { include: { provider_links: true } } },
     })
     return link ? toVoiceRecord(link.voice) : null
   }
 
   async upsertVoice(input: VoiceInput): Promise<VoiceRecord> {
     const metadata = sanitizeObject(input.metadata)
-    const voiceId = input.voiceId?.trim() || createLocalVoiceId(input.name)
+    const voice_id = input.voice_id?.trim() || createLocalVoiceId(input.name)
     if (!this.prisma) {
       const voices = globalForPrisma.voices ?? []
-      const index = voices.findIndex(voice => voice.voiceId === voiceId)
+      const index = voices.findIndex(voice => voice.voice_id === voice_id)
       const now = new Date().toISOString()
       const existing = index >= 0 ? voices[index] : undefined
       const record: VoiceRecord = {
-        id: existing?.id ?? voiceId,
-        voiceId,
+        id: existing?.id ?? voice_id,
+        voice_id,
         name: input.name,
         description: input.description,
         language: input.language,
-        previewMimeType: input.previewMimeType,
-        previewAudio: input.previewAudio,
+        preview_mime_type: input.preview_mime_type,
+        preview_audio: input.preview_audio,
         metadata,
-        links: existing?.links ?? [],
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
+        provider_links: existing?.provider_links ?? [],
+        created_at: existing?.created_at ?? now,
+        updated_at: now,
       }
-      if (input.providerLink) {
-        const link = toMemoryVoiceProviderLink(record.id, input.providerLink, now)
-        const linkIndex = record.links.findIndex(item => (
-          item.providerId === link.providerId
-          && item.providerAccountId === link.providerAccountId
+      if (input.provider_link) {
+        const link = toMemoryVoiceProviderLink(record.id, input.provider_link, now)
+        const linkIndex = record.provider_links.findIndex(item => (
+          item.provider_id === link.provider_id
+          && item.provider_account_id === link.provider_account_id
         ))
-        if (linkIndex >= 0) record.links[linkIndex] = { ...record.links[linkIndex], ...link, updatedAt: now }
-        else record.links.push(link)
+        if (linkIndex >= 0) record.provider_links[linkIndex] = { ...record.provider_links[linkIndex], ...link, updated_at: now }
+        else record.provider_links.push(link)
       }
       if (index >= 0) voices[index] = record
       else voices.push(record)
@@ -164,61 +164,61 @@ export class ProviderConfigStore {
       return record
     }
     const record = await this.prisma.voice.upsert({
-      where: { voiceId },
+      where: { voice_id },
       create: {
-        voiceId,
+        voice_id,
         name: input.name,
         description: input.description,
         language: input.language,
-        previewMimeType: input.previewMimeType,
-        previewAudio: input.previewAudio,
+        preview_mime_type: input.preview_mime_type,
+        preview_audio: input.preview_audio,
         metadata,
       },
       update: {
         name: input.name,
         description: input.description,
         language: input.language,
-        previewMimeType: input.previewMimeType,
-        previewAudio: input.previewAudio,
+        preview_mime_type: input.preview_mime_type,
+        preview_audio: input.preview_audio,
         metadata,
       },
-      include: { providerLinks: true },
+      include: { provider_links: true },
     })
-    if (!input.providerLink) return toVoiceRecord(record)
-    const providerLink = input.providerLink
-    const providerAccountId = providerLink.providerAccountId?.trim() || 'default'
-    const providerVoiceKey = providerLink.providerVoiceKey?.trim()
-      || providerLink.providerVoiceId?.trim()
-      || voiceId
+    if (!input.provider_link) return toVoiceRecord(record)
+    const provider_link = input.provider_link
+    const provider_account_id = provider_link.provider_account_id?.trim() || 'default'
+    const provider_voice_key = provider_link.provider_voice_key?.trim()
+      || provider_link.provider_voice_id?.trim()
+      || voice_id
     await this.prisma.voiceProviderLink.upsert({
       where: {
-        voiceRecordId_providerId_providerAccountId: {
-          voiceRecordId: record.id,
-          providerId: providerLink.providerId,
-          providerAccountId,
+        voice_record_id_provider_id_provider_account_id: {
+          voice_record_id: record.id,
+          provider_id: provider_link.provider_id,
+          provider_account_id,
         },
       },
       create: {
-        voiceRecordId: record.id,
-        providerId: providerLink.providerId,
-        providerAccountId,
-        providerVoiceId: providerLink.providerVoiceId,
-        providerVoiceKey,
-        previewMimeType: providerLink.previewMimeType,
-        previewAudio: providerLink.previewAudio,
-        metadata: sanitizeObject(providerLink.metadata),
+        voice_record_id: record.id,
+        provider_id: provider_link.provider_id,
+        provider_account_id,
+        provider_voice_id: provider_link.provider_voice_id,
+        provider_voice_key,
+        preview_mime_type: provider_link.preview_mime_type,
+        preview_audio: provider_link.preview_audio,
+        metadata: sanitizeObject(provider_link.metadata),
       },
       update: {
-        providerVoiceId: providerLink.providerVoiceId,
-        providerVoiceKey,
-        previewMimeType: providerLink.previewMimeType,
-        previewAudio: providerLink.previewAudio,
-        metadata: sanitizeObject(providerLink.metadata),
+        provider_voice_id: provider_link.provider_voice_id,
+        provider_voice_key,
+        preview_mime_type: provider_link.preview_mime_type,
+        preview_audio: provider_link.preview_audio,
+        metadata: sanitizeObject(provider_link.metadata),
       },
     })
     const updated = await this.prisma.voice.findUniqueOrThrow({
       where: { id: record.id },
-      include: { providerLinks: true },
+      include: { provider_links: true },
     })
     return toVoiceRecord(updated)
   }
@@ -238,93 +238,93 @@ function toJsonObject(value: unknown): JsonObject {
 
 function toVoiceRecord(record: {
   id: string
-  voiceId: string
+  voice_id: string
   name: string
   description: string | null
   language: string | null
-  previewMimeType: string | null
-  previewAudio: string | null
+  preview_mime_type: string | null
+  preview_audio: string | null
   metadata: unknown
-  providerLinks?: Array<{
+  provider_links?: Array<{
     id: string
-    voiceRecordId: string
-    providerId: string
-    providerAccountId: string
-    providerVoiceId: string | null
-    providerVoiceKey: string
-    previewMimeType: string | null
-    previewAudio: string | null
+    voice_record_id: string
+    provider_id: string
+    provider_account_id: string
+    provider_voice_id: string | null
+    provider_voice_key: string
+    preview_mime_type: string | null
+    preview_audio: string | null
     metadata: unknown
-    createdAt: Date
-    updatedAt: Date
+    created_at: Date
+    updated_at: Date
   }>
-  createdAt: Date
-  updatedAt: Date
+  created_at: Date
+  updated_at: Date
 }): VoiceRecord {
   return {
     id: record.id,
-    voiceId: record.voiceId,
+    voice_id: record.voice_id,
     name: record.name,
     description: record.description ?? undefined,
     language: record.language ?? undefined,
-    previewMimeType: record.previewMimeType ?? undefined,
-    previewAudio: record.previewAudio ?? undefined,
+    preview_mime_type: record.preview_mime_type ?? undefined,
+    preview_audio: record.preview_audio ?? undefined,
     metadata: toJsonObject(record.metadata),
-    links: (record.providerLinks ?? []).map(toVoiceProviderLinkRecord),
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
+    provider_links: (record.provider_links ?? []).map(toVoiceProviderLinkRecord),
+    created_at: record.created_at.toISOString(),
+    updated_at: record.updated_at.toISOString(),
   }
 }
 
 function toVoiceProviderLinkRecord(record: {
   id: string
-  voiceRecordId: string
-  providerId: string
-  providerAccountId: string
-  providerVoiceId: string | null
-  providerVoiceKey: string
-  previewMimeType: string | null
-  previewAudio: string | null
+  voice_record_id: string
+  provider_id: string
+  provider_account_id: string
+  provider_voice_id: string | null
+  provider_voice_key: string
+  preview_mime_type: string | null
+  preview_audio: string | null
   metadata: unknown
-  createdAt: Date
-  updatedAt: Date
+  created_at: Date
+  updated_at: Date
 }): VoiceProviderLinkRecord {
   return {
     id: record.id,
-    voiceRecordId: record.voiceRecordId,
-    providerId: record.providerId,
-    providerAccountId: record.providerAccountId,
-    providerVoiceId: record.providerVoiceId ?? undefined,
-    providerVoiceKey: record.providerVoiceKey,
-    previewMimeType: record.previewMimeType ?? undefined,
-    previewAudio: record.previewAudio ?? undefined,
+    voice_record_id: record.voice_record_id,
+    provider_id: record.provider_id,
+    provider_account_id: record.provider_account_id,
+    provider_voice_id: record.provider_voice_id ?? undefined,
+    provider_voice_key: record.provider_voice_key,
+    preview_mime_type: record.preview_mime_type ?? undefined,
+    preview_audio: record.preview_audio ?? undefined,
     metadata: toJsonObject(record.metadata),
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
+    created_at: record.created_at.toISOString(),
+    updated_at: record.updated_at.toISOString(),
   }
 }
 
 function toMemoryVoiceProviderLink(
-  voiceRecordId: string,
-  input: NonNullable<VoiceInput['providerLink']>,
+  voice_record_id: string,
+  input: NonNullable<VoiceInput['provider_link']>,
   now: string,
 ): VoiceProviderLinkRecord {
-  const providerAccountId = input.providerAccountId?.trim() || 'default'
-  const providerVoiceKey = input.providerVoiceKey?.trim()
-    || input.providerVoiceId?.trim()
-    || voiceRecordId
+  const provider_account_id = input.provider_account_id?.trim() || 'default'
+  const provider_voice_key = input.provider_voice_key?.trim()
+    || input.provider_voice_id?.trim()
+    || voice_record_id
   return {
-    id: `${voiceRecordId}:${input.providerId}:${providerAccountId}`,
-    voiceRecordId,
-    providerId: input.providerId,
-    providerAccountId,
-    providerVoiceId: input.providerVoiceId,
-    providerVoiceKey,
-    previewMimeType: input.previewMimeType,
-    previewAudio: input.previewAudio,
+    id: `${voice_record_id}:${input.provider_id}:${provider_account_id}`,
+    voice_record_id,
+    provider_id: input.provider_id,
+    provider_account_id,
+    provider_voice_id: input.provider_voice_id,
+    provider_voice_key,
+    preview_mime_type: input.preview_mime_type,
+    preview_audio: input.preview_audio,
     metadata: sanitizeObject(input.metadata),
-    createdAt: now,
-    updatedAt: now,
+    created_at: now,
+    updated_at: now,
   }
 }
 
