@@ -13,6 +13,7 @@ function App() {
   const [testResult, setTestResult] = useState(null)
   const [formValues, setFormValues] = useState({})
   const [voiceOptions, setVoiceOptions] = useState([])
+  const [voiceFilter, setVoiceFilter] = useState({ locale: '', gender: '' })
   const [speechForm, setSpeechForm] = useState(defaultSpeechForm())
   const [effectForm, setEffectForm] = useState(defaultEffectForm())
   const [isolationForm, setIsolationForm] = useState(defaultIsolationForm())
@@ -25,6 +26,8 @@ function App() {
 
   const apiBaseUrl = normalizeApiBaseUrl(appConfig.apiBaseUrl)
   const selectedProvider = providers.find(provider => provider.id === selectedProviderId) ?? providers[0]
+  const filteredVoiceOptions = useMemo(() => filterVoiceOptions(voiceOptions, voiceFilter), [voiceOptions, voiceFilter])
+  const voiceFilterOptions = useMemo(() => getVoiceFilterOptions(voiceOptions), [voiceOptions])
 
   useEffect(() => {
     loadConfig().then(setAppConfig).catch(() => setAppConfig({ apiBaseUrl: '' }))
@@ -52,6 +55,7 @@ function App() {
     setIsConfigOpen(false)
     setSaveStatus('')
     setFormValues({})
+    setVoiceFilter({ locale: '', gender: '' })
     clearTestResult()
   }, [selectedProvider?.id])
 
@@ -74,6 +78,14 @@ function App() {
       cancelled = true
     }
   }, [selectedProvider?.id, apiBaseUrl])
+
+  useEffect(() => {
+    if (!voiceOptions.length) return
+    setSpeechForm(current => {
+      if (filteredVoiceOptions.some(option => option.value === current.voice)) return current
+      return { ...current, voice: filteredVoiceOptions[0]?.value ?? '' }
+    })
+  }, [filteredVoiceOptions, voiceOptions.length])
 
   async function loadProviders() {
     const response = await fetch(apiUrl('/api/providers', apiBaseUrl))
@@ -465,7 +477,10 @@ function App() {
                         onFormChange={setSpeechForm}
                         supportsStreaming={Boolean(selectedProvider.capabilities?.ttsStreaming)}
                         supportsVoiceId={supportsVoiceId(selectedProvider)}
-                        voiceOptions={voiceOptions}
+                        voiceFilter={voiceFilter}
+                        voiceFilterOptions={voiceFilterOptions}
+                        voiceOptions={filteredVoiceOptions}
+                        onVoiceFilterChange={setVoiceFilter}
                       />
                     )}
                     <div className="flex items-center gap-3">
@@ -572,7 +587,16 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
   )
 }
 
-function SpeechTestForm({ form, onFormChange, supportsStreaming, supportsVoiceId, voiceOptions }) {
+function SpeechTestForm({
+  form,
+  onFormChange,
+  onVoiceFilterChange,
+  supportsStreaming,
+  supportsVoiceId,
+  voiceFilter,
+  voiceFilterOptions,
+  voiceOptions,
+}) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -583,6 +607,36 @@ function SpeechTestForm({ form, onFormChange, supportsStreaming, supportsVoiceId
           onChange={event => onFormChange({ ...form, input: event.target.value })}
         />
       </label>
+      {voiceFilterOptions.hasMetadata ? (
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+          <label className="grid gap-1.5 text-sm font-semibold">
+            Voice language
+            <select
+              className="input"
+              value={voiceFilter.locale}
+              onChange={event => onVoiceFilterChange({ ...voiceFilter, locale: event.target.value })}
+            >
+              <option value="">All languages</option>
+              {voiceFilterOptions.locales.map(locale => (
+                <option key={locale} value={locale}>{locale}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold">
+            Voice gender
+            <select
+              className="input"
+              value={voiceFilter.gender}
+              onChange={event => onVoiceFilterChange({ ...voiceFilter, gender: event.target.value })}
+            >
+              <option value="">All genders</option>
+              {voiceFilterOptions.genders.map(gender => (
+                <option key={gender} value={gender}>{gender}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Voice
         {voiceOptions.length ? (
@@ -1139,12 +1193,40 @@ function formatBytes(value) {
 function formatVoiceOption(voice) {
   return {
     value: voice.id,
+    locale: voice.locale || voice.language || '',
+    gender: voice.gender || '',
     label: [
       voice.name || voice.id,
-      voice.locale,
+      voice.locale || voice.language,
       voice.gender,
     ].filter(Boolean).join(' · '),
   }
+}
+
+function filterVoiceOptions(options, filter) {
+  return options.filter(option => {
+    const localeMatches = !filter.locale || normalizeFilterValue(option.locale) === normalizeFilterValue(filter.locale)
+    const genderMatches = !filter.gender || normalizeFilterValue(option.gender) === normalizeFilterValue(filter.gender)
+    return localeMatches && genderMatches
+  })
+}
+
+function getVoiceFilterOptions(options) {
+  const locales = uniqueSorted(options.map(option => option.locale).filter(Boolean))
+  const genders = uniqueSorted(options.map(option => option.gender).filter(Boolean))
+  return {
+    locales,
+    genders,
+    hasMetadata: locales.length > 0 || genders.length > 0,
+  }
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b))
+}
+
+function normalizeFilterValue(value) {
+  return String(value || '').trim().toLowerCase()
 }
 
 function getProviderField(provider, key) {
