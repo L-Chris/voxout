@@ -13,7 +13,6 @@ function App() {
   const [testResult, setTestResult] = useState(null)
   const [formValues, setFormValues] = useState({})
   const [voiceOptions, setVoiceOptions] = useState([])
-  const [voiceFilter, setVoiceFilter] = useState({ locale: '', gender: '' })
   const [speechForm, setSpeechForm] = useState(defaultSpeechForm())
   const [effectForm, setEffectForm] = useState(defaultEffectForm())
   const [isolationForm, setIsolationForm] = useState(defaultIsolationForm())
@@ -26,8 +25,7 @@ function App() {
 
   const apiBaseUrl = normalizeApiBaseUrl(appConfig.apiBaseUrl)
   const selectedProvider = providers.find(provider => provider.id === selectedProviderId) ?? providers[0]
-  const filteredVoiceOptions = useMemo(() => filterVoiceOptions(voiceOptions, voiceFilter), [voiceOptions, voiceFilter])
-  const voiceFilterOptions = useMemo(() => getVoiceFilterOptions(voiceOptions), [voiceOptions])
+  const voiceTree = useMemo(() => buildVoiceTree(voiceOptions), [voiceOptions])
 
   useEffect(() => {
     loadConfig().then(setAppConfig).catch(() => setAppConfig({ apiBaseUrl: '' }))
@@ -55,7 +53,6 @@ function App() {
     setIsConfigOpen(false)
     setSaveStatus('')
     setFormValues({})
-    setVoiceFilter({ locale: '', gender: '' })
     clearTestResult()
   }, [selectedProvider?.id])
 
@@ -69,7 +66,8 @@ function App() {
       .then(options => {
         if (cancelled) return
         setVoiceOptions(options)
-        setSpeechForm(current => current.voice || !options[0] ? current : { ...current, voice: options[0].value })
+        const defaultVoice = getDefaultVoiceValue(options)
+        setSpeechForm(current => current.voice || !defaultVoice ? current : { ...current, voice: defaultVoice })
       })
       .catch(() => {
         if (!cancelled) setVoiceOptions([])
@@ -78,14 +76,6 @@ function App() {
       cancelled = true
     }
   }, [selectedProvider?.id, apiBaseUrl])
-
-  useEffect(() => {
-    if (!voiceOptions.length) return
-    setSpeechForm(current => {
-      if (filteredVoiceOptions.some(option => option.value === current.voice)) return current
-      return { ...current, voice: filteredVoiceOptions[0]?.value ?? '' }
-    })
-  }, [filteredVoiceOptions, voiceOptions.length])
 
   async function loadProviders() {
     const response = await fetch(apiUrl('/api/providers', apiBaseUrl))
@@ -477,10 +467,8 @@ function App() {
                         onFormChange={setSpeechForm}
                         supportsStreaming={Boolean(selectedProvider.capabilities?.ttsStreaming)}
                         supportsVoiceId={supportsVoiceId(selectedProvider)}
-                        voiceFilter={voiceFilter}
-                        voiceFilterOptions={voiceFilterOptions}
-                        voiceOptions={filteredVoiceOptions}
-                        onVoiceFilterChange={setVoiceFilter}
+                        voiceOptions={voiceOptions}
+                        voiceTree={voiceTree}
                       />
                     )}
                     <div className="flex items-center gap-3">
@@ -590,12 +578,10 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
 function SpeechTestForm({
   form,
   onFormChange,
-  onVoiceFilterChange,
   supportsStreaming,
   supportsVoiceId,
-  voiceFilter,
-  voiceFilterOptions,
   voiceOptions,
+  voiceTree,
 }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -607,48 +593,15 @@ function SpeechTestForm({
           onChange={event => onFormChange({ ...form, input: event.target.value })}
         />
       </label>
-      {voiceFilterOptions.hasMetadata ? (
-        <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
-          <label className="grid gap-1.5 text-sm font-semibold">
-            Voice language
-            <select
-              className="input"
-              value={voiceFilter.locale}
-              onChange={event => onVoiceFilterChange({ ...voiceFilter, locale: event.target.value })}
-            >
-              <option value="">All languages</option>
-              {voiceFilterOptions.locales.map(locale => (
-                <option key={locale} value={locale}>{locale}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1.5 text-sm font-semibold">
-            Voice gender
-            <select
-              className="input"
-              value={voiceFilter.gender}
-              onChange={event => onVoiceFilterChange({ ...voiceFilter, gender: event.target.value })}
-            >
-              <option value="">All genders</option>
-              {voiceFilterOptions.genders.map(gender => (
-                <option key={gender} value={gender}>{gender}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Voice
         {voiceOptions.length ? (
-          <select
-            className="input"
-            value={form.voice || voiceOptions[0].value}
-            onChange={event => onFormChange({ ...form, voice: event.target.value })}
-          >
-            {voiceOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <VoiceCascader
+            value={form.voice || getDefaultVoiceValue(voiceOptions)}
+            voiceOptions={voiceOptions}
+            voiceTree={voiceTree}
+            onChange={voice => onFormChange({ ...form, voice })}
+          />
         ) : (
           <input
             className="input"
@@ -706,6 +659,90 @@ function SpeechTestForm({
           onChange={event => onFormChange({ ...form, speed: event.target.value })}
         />
       </label>
+    </div>
+  )
+}
+
+function VoiceCascader({ onChange, value, voiceOptions, voiceTree }) {
+  const selectedVoice = voiceOptions.find(option => option.value === value) ?? voiceOptions[0]
+  const [open, setOpen] = useState(false)
+  const [activeLocale, setActiveLocale] = useState('')
+  const [activeGender, setActiveGender] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    const locale = voiceTree.find(item => item.locale === selectedVoice?.locale)?.locale ?? voiceTree[0]?.locale ?? ''
+    const localeGroup = voiceTree.find(item => item.locale === locale)
+    const gender = localeGroup?.genders.find(item => item.gender === selectedVoice?.gender)?.gender ?? localeGroup?.genders[0]?.gender ?? ''
+    setActiveLocale(locale)
+    setActiveGender(gender)
+  }, [open, selectedVoice?.value, voiceTree])
+
+  const localeGroup = voiceTree.find(item => item.locale === activeLocale) ?? voiceTree[0]
+  const genderGroup = localeGroup?.genders.find(item => item.gender === activeGender) ?? localeGroup?.genders[0]
+
+  return (
+    <div
+      className="voice-cascader"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+      }}
+    >
+      <button
+        className="input voice-cascader-trigger"
+        type="button"
+        onClick={() => setOpen(current => !current)}
+      >
+        <span className="truncate">{selectedVoice?.label ?? 'Select voice'}</span>
+        <span className="text-slate-400">▾</span>
+      </button>
+
+      {open ? (
+        <div className="voice-cascader-panel">
+          <div className="voice-cascader-column">
+            {voiceTree.map(group => (
+              <button
+                className={`voice-cascader-option ${group.locale === localeGroup?.locale ? 'voice-cascader-option-active' : ''}`}
+                key={group.locale}
+                type="button"
+                onClick={() => {
+                  setActiveLocale(group.locale)
+                  setActiveGender(group.genders[0]?.gender ?? '')
+                }}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+          <div className="voice-cascader-column">
+            {(localeGroup?.genders ?? []).map(group => (
+              <button
+                className={`voice-cascader-option ${group.gender === genderGroup?.gender ? 'voice-cascader-option-active' : ''}`}
+                key={group.gender}
+                type="button"
+                onClick={() => setActiveGender(group.gender)}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
+          <div className="voice-cascader-column voice-cascader-voices">
+            {(genderGroup?.options ?? []).map(option => (
+              <button
+                className={`voice-cascader-option ${option.value === selectedVoice?.value ? 'voice-cascader-option-active' : ''}`}
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+              >
+                {option.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1193,6 +1230,7 @@ function formatBytes(value) {
 function formatVoiceOption(voice) {
   return {
     value: voice.id,
+    name: voice.name || voice.id,
     locale: voice.locale || voice.language || '',
     gender: voice.gender || '',
     label: [
@@ -1203,30 +1241,55 @@ function formatVoiceOption(voice) {
   }
 }
 
-function filterVoiceOptions(options, filter) {
-  return options.filter(option => {
-    const localeMatches = !filter.locale || normalizeFilterValue(option.locale) === normalizeFilterValue(filter.locale)
-    const genderMatches = !filter.gender || normalizeFilterValue(option.gender) === normalizeFilterValue(filter.gender)
-    return localeMatches && genderMatches
-  })
-}
-
-function getVoiceFilterOptions(options) {
-  const locales = uniqueSorted(options.map(option => option.locale).filter(Boolean))
-  const genders = uniqueSorted(options.map(option => option.gender).filter(Boolean))
-  return {
-    locales,
-    genders,
-    hasMetadata: locales.length > 0 || genders.length > 0,
+function buildVoiceTree(options) {
+  const localeGroups = new Map()
+  for (const option of options) {
+    const locale = option.locale || ''
+    const gender = option.gender || ''
+    if (!localeGroups.has(locale)) {
+      localeGroups.set(locale, {
+        locale,
+        label: option.locale || 'Unknown language',
+        genderGroups: new Map(),
+      })
+    }
+    const localeGroup = localeGroups.get(locale)
+    if (!localeGroup.genderGroups.has(gender)) {
+      localeGroup.genderGroups.set(gender, {
+        gender,
+        label: option.gender || 'Unknown gender',
+        options: [],
+      })
+    }
+    localeGroup.genderGroups.get(gender).options.push(option)
   }
+  return [...localeGroups.values()]
+    .sort((left, right) => compareLocaleLabels(left.label, right.label))
+    .map(group => ({
+      locale: group.locale,
+      label: group.label,
+      genders: [...group.genderGroups.values()]
+        .sort((left, right) => left.label.localeCompare(right.label))
+        .map(genderGroup => ({
+          ...genderGroup,
+          options: genderGroup.options.sort((a, b) => a.name.localeCompare(b.name)),
+        })),
+    }))
 }
 
-function uniqueSorted(values) {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b))
+function getDefaultVoiceValue(options) {
+  return options.find(option => isChineseLocale(option.locale))?.value ?? options[0]?.value ?? ''
 }
 
-function normalizeFilterValue(value) {
-  return String(value || '').trim().toLowerCase()
+function compareLocaleLabels(left, right) {
+  const leftChinese = isChineseLocale(left)
+  const rightChinese = isChineseLocale(right)
+  if (leftChinese !== rightChinese) return leftChinese ? -1 : 1
+  return left.localeCompare(right)
+}
+
+function isChineseLocale(locale) {
+  return /^zh(?:[-_]|$)/i.test(String(locale || '').trim())
 }
 
 function getProviderField(provider, key) {

@@ -146,7 +146,19 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
         headers: { 'content-type': 'application/json' },
       })
     }
-    return new Response(JSON.stringify({
+    const requestUrl = new URL(String(url))
+    const isSecondPage = requestUrl.searchParams.get('starting_after') === 'cartesia-page-2'
+    return new Response(JSON.stringify(isSecondPage ? {
+      data: [{
+        id: 'cartesia-voice-zh',
+        name: 'Chinese Narrator',
+        language: 'zh',
+        country: 'CN',
+        gender: 'feminine',
+      }],
+      has_more: false,
+      next_page: null,
+    } : {
       data: [{
         id: 'cartesia-voice-2',
         name: 'Skylar',
@@ -154,6 +166,8 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
         country: 'US',
         gender: 'feminine',
       }],
+      has_more: true,
+      next_page: 'cartesia-page-2',
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -183,10 +197,18 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
   assert.equal(clone.voice.voiceId, 'cartesia-clone-1')
   assert.equal(clone.voice.providerVoiceId, 'cartesia-clone-1')
   assert.equal(captures[1].url, 'https://api.cartesia.ai/voices?limit=100')
+  assert.equal(captures[2].url, 'https://api.cartesia.ai/voices?limit=100&starting_after=cartesia-page-2')
   assert.deepEqual(voices[0], {
     id: 'cartesia-voice-2',
     name: 'Skylar',
     locale: 'en-US',
+    gender: 'feminine',
+    provider: 'cartesia',
+  })
+  assert.deepEqual(voices[1], {
+    id: 'cartesia-voice-zh',
+    name: 'Chinese Narrator',
+    locale: 'zh-CN',
     gender: 'feminine',
     provider: 'cartesia',
   })

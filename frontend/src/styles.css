@@ -50,6 +50,34 @@
     @apply flex items-center justify-between gap-3 border-t border-slate-200 px-3 py-2;
   }
 
+  .voice-cascader {
+    @apply relative;
+  }
+
+  .voice-cascader-trigger {
+    @apply flex items-center justify-between gap-3 text-left;
+  }
+
+  .voice-cascader-panel {
+    @apply absolute z-20 mt-1 grid w-[min(32rem,calc(100vw-2rem))] grid-cols-[8rem_8rem_minmax(0,1fr)] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg;
+  }
+
+  .voice-cascader-column {
+    @apply max-h-72 overflow-auto border-r border-slate-200 p-1 last:border-r-0;
+  }
+
+  .voice-cascader-voices {
+    @apply min-w-0;
+  }
+
+  .voice-cascader-option {
+    @apply block w-full rounded px-2 py-1.5 text-left text-sm font-normal text-slate-700 hover:bg-blue-50 hover:text-blue-700;
+  }
+
+  .voice-cascader-option-active {
+    @apply bg-blue-50 text-blue-700;
+  }
+
   .provider-card {
     @apply w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-slate-900 hover:border-blue-300;
   }

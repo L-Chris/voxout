@@ -34,6 +34,8 @@ interface CartesiaVoicePayload {
 
 interface CartesiaVoiceListPayload {
   data?: CartesiaVoicePayload[]
+  has_more?: boolean
+  next_page?: string | null
 }
 
 interface CartesiaTranscriptPayload {
@@ -68,15 +70,8 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     const apiKey = getSecretString(context, 'apiKey')
     if (!apiKey) return [getDefaultVoice(this.id, context)]
 
-    const url = new URL(`${getBaseUrl(context)}/voices`)
-    url.searchParams.set('limit', '100')
-    const response = await fetchWithTimeout(url, {
-      headers: getHeaders(context, apiKey),
-    }, context)
-    if (!response.ok) return [getDefaultVoice(this.id, context)]
-
-    const payload = await readJsonResponse<CartesiaVoiceListPayload>(response)
-    const voices = (payload.data ?? [])
+    const voicePayloads = await listCartesiaVoices(context, apiKey)
+    const voices = voicePayloads
       .map(voice => normalizeVoice(voice, this.id))
       .filter((voice): voice is TtsVoice => !!voice)
     return voices.length ? voices : [getDefaultVoice(this.id, context)]
@@ -207,6 +202,26 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
       })),
     }, context)
   }
+}
+
+async function listCartesiaVoices(context: ProviderContext, apiKey: string): Promise<CartesiaVoicePayload[]> {
+  const voices: CartesiaVoicePayload[] = []
+  let startingAfter: string | undefined
+  for (let page = 0; page < 20; page += 1) {
+    const url = new URL(`${getBaseUrl(context)}/voices`)
+    url.searchParams.set('limit', '100')
+    if (startingAfter) url.searchParams.set('starting_after', startingAfter)
+    const response = await fetchWithTimeout(url, {
+      headers: getHeaders(context, apiKey),
+    }, context)
+    if (!response.ok) return voices
+
+    const payload = await readJsonResponse<CartesiaVoiceListPayload>(response)
+    voices.push(...(payload.data ?? []))
+    if (!payload.has_more || !payload.next_page) break
+    startingAfter = payload.next_page
+  }
+  return voices
 }
 
 function getApiKey(context: ProviderContext): string {
