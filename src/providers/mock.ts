@@ -5,6 +5,7 @@ const SAMPLE_RATE = 24_000
 export class MockTtsProvider implements TtsProvider {
   readonly id = 'mock'
   readonly name = 'Mock WAV Provider'
+  readonly capabilities = { tts: true }
 
   async listVoices(): Promise<TtsVoice[]> {
     return [

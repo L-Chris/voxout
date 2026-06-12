@@ -1,5 +1,3 @@
-export type TtsJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'partial'
-
 export interface TtsVoice {
   id: string
   name: string
@@ -10,8 +8,44 @@ export interface TtsVoice {
 }
 
 export interface TtsProviderCapabilities {
+  tts?: boolean
+  asr?: boolean
   voiceDesign?: boolean
   soundEffects?: boolean
+}
+
+export type ProviderCapabilities = TtsProviderCapabilities
+
+export type JsonPrimitive = string | number | boolean | null
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
+export interface JsonObject {
+  [key: string]: JsonValue
+}
+
+export interface ProviderContext {
+  enabled?: boolean
+  config?: JsonObject
+  secrets?: JsonObject
+}
+
+export interface ProviderFieldDefinition {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'number' | 'boolean' | 'url'
+  secret?: boolean
+  placeholder?: string
+  description?: string
+}
+
+export interface ProviderDefinition {
+  id: string
+  name: string
+  capabilities?: ProviderCapabilities
+  fields?: ProviderFieldDefinition[]
+  enabled: boolean
+  configured: boolean
+  config: JsonObject
+  secrets: JsonObject
 }
 
 export interface TtsSegment {
@@ -56,51 +90,69 @@ export interface SynthesizeResult {
   cacheHit: boolean
 }
 
-export interface TtsJobRequest {
-  provider?: string
-  voice?: string
-  lang?: string
-  outputFormat?: string
-  rate?: string
-  pitch?: string
-  volume?: string
-  voicePrompt?: string
-  stylePrompt?: string
-  concurrency?: number
-  segments: TtsSegment[]
-}
-
-export interface TtsJob {
-  id: string
-  status: TtsJobStatus
-  provider: string
-  total: number
-  completed: number
-  failed: number
-  createdAt: string
-  updatedAt: string
-  error?: string
-  results: SynthesizeResult[]
-  failures?: TtsJobFailure[]
-}
-
-export interface TtsJobFailure {
-  index: number
-  segmentId: string
-  speaker?: string
-  voice?: string
-  textPreview: string
-  error: string
-}
-
 export interface TtsProvider {
   readonly id: string
   readonly name: string
-  readonly capabilities?: TtsProviderCapabilities
-  listVoices(): Promise<TtsVoice[]>
-  synthesize(request: SynthesizeRequest): Promise<{
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  listVoices(context?: ProviderContext): Promise<TtsVoice[]>
+  synthesize(request: SynthesizeRequest, context?: ProviderContext): Promise<{
     audio: Buffer
     mimeType: string
     durationMs: number
   }>
+}
+
+export interface TranscribeRequest {
+  provider?: string
+  url?: string
+  bvid?: string
+  format?: 'txt' | 'srt' | 'raw'
+}
+
+export interface TranscribeSegment {
+  from: number
+  to: number
+  content: string
+}
+
+export interface TranscribeResult {
+  provider: string
+  format: string
+  text?: string
+  segments?: TranscribeSegment[]
+  raw?: unknown
+}
+
+export interface AsrProvider {
+  readonly id: string
+  readonly name: string
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  transcribe(request: TranscribeRequest, context?: ProviderContext): Promise<TranscribeResult>
+}
+
+export interface ProviderRuntimeConfig {
+  enabled: boolean
+  config: JsonObject
+  secrets: JsonObject
+}
+
+export interface ProviderConfigInput {
+  enabled?: boolean
+  config?: JsonObject
+  secrets?: JsonObject
+}
+
+export interface ProviderConfigRecord extends ProviderRuntimeConfig {
+  providerId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface InvokeRequest {
+  provider?: string
+  operation?: 'synthesize' | 'transcribe'
+  capability?: 'tts' | 'asr'
+  input?: unknown
 }

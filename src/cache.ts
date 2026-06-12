@@ -6,7 +6,7 @@ import type { SynthesizeRequest, SynthesizeResult } from './types.js'
 export class AudioCache {
   constructor(
     private readonly audioDir: string,
-    private readonly publicBasePath = '/v1/tts/audio',
+    private readonly publicBasePath = '/audio',
   ) {}
 
   async getOrCreate(
@@ -71,7 +71,7 @@ function getAudioExtension(request: SynthesizeRequest): 'mp3' | 'wav' {
   if (provider === 'edge') return 'mp3'
   if (provider === 'elevenlabs') return 'mp3'
   if (provider === 'mimo') {
-    const outputFormat = normalizeAudioFormat(request.outputFormat ?? process.env.MIMO_TTS_FORMAT)
+    const outputFormat = normalizeAudioFormat(request.outputFormat)
     return outputFormat === 'mp3' ? 'mp3' : 'wav'
   }
   if (request.outputFormat?.includes('mp3')) return 'mp3'

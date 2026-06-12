@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ProviderConfig {
+  id         String   @id @default(cuid())
+  providerId String   @unique
+  enabled    Boolean  @default(true)
+  config     Json?
+  secrets    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([enabled])
+}

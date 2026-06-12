@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { MimoTtsProvider } from '../dist/providers/mimo.js'
-import { listProviders } from '../dist/providers/registry.js'
+import { listProviderDefinitions } from '../dist/providers/registry.js'
 
 const originalFetch = globalThis.fetch
-const originalEnv = { ...process.env }
-
 afterEach(() => {
   globalThis.fetch = originalFetch
-  process.env = { ...originalEnv }
 })
 
 test('Mimo provider sends preset voice synthesis requests', async () => {
@@ -79,21 +76,12 @@ test('Mimo provider exposes voice design capability metadata', async () => {
   assert.ok(voices.length > 0)
   assert.equal(voices[0].capabilities.voiceDesign, true)
 
-  const providers = listProviders()
+  const providers = listProviderDefinitions()
   const mimo = providers.find(item => item.id === 'mimo')
   assert.equal(mimo.capabilities.voiceDesign, true)
 })
 
 async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = false }) {
-  process.env.MIMO_API_KEY = 'test-key'
-  delete process.env.MIMO_BASE_URL
-  delete process.env.MIMO_TTS_MODEL
-  delete process.env.MIMO_VOICE_DESIGN_MODEL
-  delete process.env.MIMO_VOICE_CLONE_MODEL
-  delete process.env.MIMO_VOICE_SAMPLE_TEXT
-  delete process.env.MIMO_TTS_FORMAT
-  delete process.env.MIMO_OPTIMIZE_TEXT_PREVIEW
-
   const captures = []
   globalThis.fetch = async (url, init) => {
     captures.push({
@@ -117,7 +105,10 @@ async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = 
   }
 
   const provider = new MimoTtsProvider()
-  const result = await provider.synthesize(providerRequest)
+  const result = await provider.synthesize(providerRequest, {
+    config: {},
+    secrets: { apiKey: 'test-key' },
+  })
   assert.equal(result.audio.length, 256)
   assert.equal(result.mimeType, providerRequest.outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav')
   return returnAllCaptures ? captures : captures[0]

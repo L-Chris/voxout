@@ -1,4 +1,4 @@
-import type { SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
+import type { ProviderContext, SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
 
 const DEFAULT_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const DEFAULT_TTS_MODEL = 'mimo-v2.5-tts'
@@ -25,7 +25,15 @@ interface MimoCompletionResponse {
 export class MimoTtsProvider implements TtsProvider {
   readonly id = 'mimo'
   readonly name = 'Xiaomi MiMo TTS'
-  readonly capabilities = { voiceDesign: true }
+  readonly capabilities = { tts: true, voiceDesign: true }
+  readonly fields = [
+    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL },
+    { key: 'voiceDesignModel', label: 'Voice Design Model', type: 'text' as const, placeholder: DEFAULT_VOICE_DESIGN_MODEL },
+    { key: 'voiceCloneModel', label: 'Voice Clone Model', type: 'text' as const, placeholder: DEFAULT_VOICE_CLONE_MODEL },
+    { key: 'format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_FORMAT },
+  ]
   private readonly designedVoiceSamples = new Map<string, Promise<string>>()
 
   async listVoices(): Promise<TtsVoice[]> {
@@ -35,28 +43,28 @@ export class MimoTtsProvider implements TtsProvider {
     }))
   }
 
-  async synthesize(request: SynthesizeRequest) {
-    const apiKey = process.env.MIMO_API_KEY
-    if (!apiKey) throw new Error('MIMO_API_KEY is required for the mimo TTS provider.')
+  async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    const apiKey = getSecretString(context, 'apiKey')
+    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
 
     const text = request.segment.text.trim()
     const voicePrompt = normalizePrompt(request.segment.voicePrompt ?? request.voicePrompt)
     const stylePrompt = normalizePrompt(request.segment.stylePrompt ?? request.stylePrompt ?? request.segment.emotion)
-    const format = normalizeAudioFormat(request.outputFormat ?? process.env.MIMO_TTS_FORMAT ?? DEFAULT_FORMAT)
+    const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? DEFAULT_FORMAT)
     const voice = voicePrompt
-      ? await this.getDesignedVoiceSample(apiKey, voicePrompt)
+      ? await this.getDesignedVoiceSample(apiKey, voicePrompt, context)
       : request.segment.voice ?? request.voice ?? DEFAULT_VOICE
     const body = {
       model: voicePrompt
-        ? process.env.MIMO_VOICE_CLONE_MODEL ?? DEFAULT_VOICE_CLONE_MODEL
-        : process.env.MIMO_TTS_MODEL ?? DEFAULT_TTS_MODEL,
+        ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
+        : getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
       messages: buildMessages(text, undefined, stylePrompt),
       audio: {
         format,
         voice,
       },
     }
-    const response = await postMimoCompletion(apiKey, body)
+    const response = await postMimoCompletion(apiKey, body, context)
     const audioData = response.choices?.[0]?.message?.audio?.data
     if (!audioData) throw new Error('MiMo TTS response did not include audio data.')
     const audio = Buffer.from(stripDataUrlPrefix(audioData), 'base64')
@@ -68,18 +76,18 @@ export class MimoTtsProvider implements TtsProvider {
     }
   }
 
-  private getDesignedVoiceSample(apiKey: string, voicePrompt: string): Promise<string> {
-    const sampleText = normalizePrompt(process.env.MIMO_VOICE_SAMPLE_TEXT) ?? DEFAULT_VOICE_SAMPLE_TEXT
+  private getDesignedVoiceSample(apiKey: string, voicePrompt: string, context: ProviderContext): Promise<string> {
+    const sampleText = normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
     const sampleKey = JSON.stringify({
-      baseUrl: process.env.MIMO_BASE_URL ?? DEFAULT_BASE_URL,
-      model: process.env.MIMO_VOICE_DESIGN_MODEL ?? DEFAULT_VOICE_DESIGN_MODEL,
-      optimize: getBooleanEnv('MIMO_OPTIMIZE_TEXT_PREVIEW', true),
+      baseUrl: getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL,
+      model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
+      optimize: getBooleanConfig(context, 'optimizeTextPreview', true),
       voicePrompt,
       sampleText,
     })
     const cached = this.designedVoiceSamples.get(sampleKey)
     if (cached) return cached
-    const promise = this.createDesignedVoiceSample(apiKey, voicePrompt, sampleText)
+    const promise = this.createDesignedVoiceSample(apiKey, voicePrompt, sampleText, context)
       .catch(error => {
         this.designedVoiceSamples.delete(sampleKey)
         throw error
@@ -88,15 +96,15 @@ export class MimoTtsProvider implements TtsProvider {
     return promise
   }
 
-  private async createDesignedVoiceSample(apiKey: string, voicePrompt: string, sampleText: string): Promise<string> {
+  private async createDesignedVoiceSample(apiKey: string, voicePrompt: string, sampleText: string, context: ProviderContext): Promise<string> {
     const response = await postMimoCompletion(apiKey, {
-      model: process.env.MIMO_VOICE_DESIGN_MODEL ?? DEFAULT_VOICE_DESIGN_MODEL,
+      model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
       messages: buildMessages(sampleText, voicePrompt),
       audio: {
         format: 'wav',
-        optimize_text_preview: getBooleanEnv('MIMO_OPTIMIZE_TEXT_PREVIEW', true),
+        optimize_text_preview: getBooleanConfig(context, 'optimizeTextPreview', true),
       },
-    })
+    }, context)
     const audioData = response.choices?.[0]?.message?.audio?.data
     if (!audioData) throw new Error('MiMo voice design response did not include audio data.')
     const base64 = stripDataUrlPrefix(audioData)
@@ -129,10 +137,10 @@ function buildMessages(text: string, voicePrompt?: string, stylePrompt?: string)
   return messages
 }
 
-async function postMimoCompletion(apiKey: string, body: unknown): Promise<MimoCompletionResponse> {
-  const baseUrl = trimTrailingSlash(process.env.MIMO_BASE_URL ?? DEFAULT_BASE_URL)
+async function postMimoCompletion(apiKey: string, body: unknown, context: ProviderContext): Promise<MimoCompletionResponse> {
+  const baseUrl = trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
   const url = `${baseUrl}/chat/completions`
-  const timeoutMs = getTimeoutMs()
+  const timeoutMs = getTimeoutMs(context)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -183,14 +191,29 @@ function stripDataUrlPrefix(value: string): string {
   return value.startsWith('data:') && comma >= 0 ? value.slice(comma + 1) : value
 }
 
-function getBooleanEnv(name: string, fallback: boolean): boolean {
-  const value = process.env[name]
-  if (value == null) return fallback
-  return value === '1' || value.toLowerCase() === 'true'
+function getConfigString(context: ProviderContext, key: string): string | undefined {
+  const value = context.config?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
 }
 
-function getTimeoutMs(): number {
-  const value = Number(process.env.MIMO_TTS_TIMEOUT_MS ?? process.env.TTS_SYNTHESIS_TIMEOUT_MS ?? 45000)
+function getSecretString(context: ProviderContext, key: string): string | undefined {
+  const value = context.secrets?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
+}
+
+function getBooleanConfig(context: ProviderContext, key: string, fallback: boolean): boolean {
+  const value = context.config?.[key]
+  if (typeof value === 'boolean') return value
+  return fallback
+}
+
+function getTimeoutMs(context: ProviderContext): number {
+  const configValue = context.config?.timeoutMs
+  const value = typeof configValue === 'number'
+    ? configValue
+    : Number(process.env.TTS_SYNTHESIS_TIMEOUT_MS ?? 45000)
   return Number.isFinite(value) && value > 0 ? value : 45000
 }
 

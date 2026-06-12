@@ -6,6 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY tsconfig.json ./
+COPY prisma ./prisma
 COPY src ./src
 RUN npm run build
 
@@ -18,12 +19,14 @@ ENV PORT=4177
 ENV TTS_AUDIO_DIR=/app/audio
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+RUN npm ci
 
 COPY --from=build /app/dist ./dist
+COPY public ./public
 
 RUN mkdir -p /app/audio
 
 EXPOSE 4177
 
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ]; then npx prisma db push --accept-data-loss; fi; node dist/server.js"]

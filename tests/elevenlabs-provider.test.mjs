@@ -1,25 +1,14 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { ElevenLabsSoundEffectProvider } from '../dist/providers/elevenlabs.js'
-import { listProviders } from '../dist/providers/registry.js'
+import { listProviderDefinitions } from '../dist/providers/registry.js'
 
 const originalFetch = globalThis.fetch
-const originalEnv = { ...process.env }
-
 afterEach(() => {
   globalThis.fetch = originalFetch
-  process.env = { ...originalEnv }
 })
 
 test('ElevenLabs provider sends sound effect generation requests', async () => {
-  process.env.ELEVENLABS_API_KEY = 'test-eleven-key'
-  delete process.env.ELEVENLABS_BASE_URL
-  delete process.env.ELEVENLABS_SOUND_EFFECT_MODEL
-  delete process.env.ELEVENLABS_SOUND_EFFECT_OUTPUT_FORMAT
-  process.env.ELEVENLABS_SOUND_EFFECT_DURATION_SECONDS = '1.5'
-  process.env.ELEVENLABS_SOUND_EFFECT_PROMPT_INFLUENCE = '0.75'
-  process.env.ELEVENLABS_SOUND_EFFECT_LOOP = 'false'
-
   let captured
   globalThis.fetch = async (url, init) => {
     captured = {
@@ -40,6 +29,15 @@ test('ElevenLabs provider sends sound effect generation requests', async () => {
       text: '汪！',
       soundEffectPrompt: 'a short dog bark in a quiet street',
       soundEffectDurationSeconds: 0.8,
+    },
+  }, {
+    config: {
+      durationSeconds: 1.5,
+      promptInfluence: 0.75,
+      loop: false,
+    },
+    secrets: {
+      apiKey: 'test-eleven-key',
     },
   })
 
@@ -62,7 +60,7 @@ test('ElevenLabs provider exposes sound effect capability metadata', async () =>
   assert.equal(provider.capabilities.soundEffects, true)
   assert.equal(voices[0].capabilities.soundEffects, true)
 
-  const providers = listProviders()
+  const providers = listProviderDefinitions()
   const elevenlabs = providers.find(item => item.id === 'elevenlabs')
   assert.equal(elevenlabs.capabilities.soundEffects, true)
 })

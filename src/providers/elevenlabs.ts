@@ -1,4 +1,4 @@
-import type { SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
+import type { ProviderContext, SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
 
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io/v1'
 const DEFAULT_MODEL = 'eleven_text_to_sound_v2'
@@ -7,7 +7,14 @@ const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
 export class ElevenLabsSoundEffectProvider implements TtsProvider {
   readonly id = 'elevenlabs'
   readonly name = 'ElevenLabs Sound Effects'
-  readonly capabilities = { soundEffects: true }
+  readonly capabilities = { tts: true, soundEffects: true }
+  readonly fields = [
+    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'model', label: 'Model', type: 'text' as const, placeholder: DEFAULT_MODEL },
+    { key: 'outputFormat', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT },
+    { key: 'promptInfluence', label: 'Prompt Influence', type: 'number' as const, placeholder: '0.3' },
+  ]
 
   async listVoices(): Promise<TtsVoice[]> {
     return [{
@@ -19,22 +26,22 @@ export class ElevenLabsSoundEffectProvider implements TtsProvider {
     }]
   }
 
-  async synthesize(request: SynthesizeRequest) {
-    const apiKey = process.env.ELEVENLABS_API_KEY
-    if (!apiKey) throw new Error('ELEVENLABS_API_KEY is required for the elevenlabs sound effect provider.')
+  async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    const apiKey = getSecretString(context, 'apiKey')
+    if (!apiKey) throw new Error('elevenlabs apiKey is required in provider settings.')
 
     const text = (request.segment.soundEffectPrompt ?? request.segment.text).trim()
-    const outputFormat = process.env.ELEVENLABS_SOUND_EFFECT_OUTPUT_FORMAT ?? DEFAULT_OUTPUT_FORMAT
-    const url = new URL(`${trimTrailingSlash(process.env.ELEVENLABS_BASE_URL ?? DEFAULT_BASE_URL)}/sound-generation`)
+    const outputFormat = getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
+    const url = new URL(`${trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)}/sound-generation`)
     if (outputFormat) url.searchParams.set('output_format', outputFormat)
 
     const body = compactObject({
       text,
-      model_id: process.env.ELEVENLABS_SOUND_EFFECT_MODEL ?? DEFAULT_MODEL,
+      model_id: getConfigString(context, 'model') ?? DEFAULT_MODEL,
       duration_seconds: normalizeDurationSeconds(request.segment.soundEffectDurationSeconds)
-        ?? normalizeDurationSeconds(getNumberEnv('ELEVENLABS_SOUND_EFFECT_DURATION_SECONDS')),
-      prompt_influence: getNumberEnv('ELEVENLABS_SOUND_EFFECT_PROMPT_INFLUENCE'),
-      loop: getBooleanEnv('ELEVENLABS_SOUND_EFFECT_LOOP'),
+        ?? normalizeDurationSeconds(getConfigNumber(context, 'durationSeconds')),
+      prompt_influence: getConfigNumber(context, 'promptInfluence'),
+      loop: getConfigBoolean(context, 'loop'),
     })
     const response = await fetch(url, {
       method: 'POST',
@@ -67,10 +74,21 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
-function getNumberEnv(name: string): number | undefined {
-  const raw = process.env[name]
-  if (!raw) return undefined
-  const value = Number(raw)
+function getConfigString(context: ProviderContext, key: string): string | undefined {
+  const value = context.config?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
+}
+
+function getSecretString(context: ProviderContext, key: string): string | undefined {
+  const value = context.secrets?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
+}
+
+function getConfigNumber(context: ProviderContext, key: string): number | undefined {
+  const raw = context.config?.[key]
+  const value = typeof raw === 'number' ? raw : Number(raw)
   return Number.isFinite(value) ? value : undefined
 }
 
@@ -79,10 +97,8 @@ function normalizeDurationSeconds(value: number | undefined): number | undefined
   return Math.max(0.5, Math.min(30, Number(value.toFixed(2))))
 }
 
-function getBooleanEnv(name: string): boolean | undefined {
-  const raw = process.env[name]?.trim().toLowerCase()
-  if (!raw) return undefined
-  if (raw === '1' || raw === 'true' || raw === 'yes') return true
-  if (raw === '0' || raw === 'false' || raw === 'no') return false
+function getConfigBoolean(context: ProviderContext, key: string): boolean | undefined {
+  const value = context.config?.[key]
+  if (typeof value === 'boolean') return value
   return undefined
 }

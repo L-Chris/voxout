@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TTS service for rebook with provider-based synthesis.",
+  "description": "Provider gateway for speech synthesis, sound effects, and ASR.",
   "main": "./dist/server.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "prisma generate && tsc -p tsconfig.json",
     "test": "npm run build && node --test tests/*.test.mjs",
     "start": "node dist/server.js",
     "dev": "tsc -w -p tsconfig.json"
@@ -16,9 +16,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "prisma": "^6.19.3",
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "node-edge-tts": "^1.2.10"
   }
 }

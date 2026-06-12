@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EdgeTTS } from 'node-edge-tts'
-import type { SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
+import type { ProviderContext, SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
 
 const DEFAULT_VOICE = 'zh-CN-XiaoyiNeural'
 const DEFAULT_LANG = 'zh-CN'
@@ -23,14 +23,21 @@ interface EdgeVoicePayload {
 export class EdgeTtsProvider implements TtsProvider {
   readonly id = 'edge'
   readonly name = 'Microsoft Edge TTS'
+  readonly capabilities = { tts: true }
+  readonly fields = [
+    { key: 'voicesUrl', label: 'Voice Catalog URL', type: 'url' as const, placeholder: EDGE_VOICES_URL },
+    { key: 'trustedClientToken', label: 'Trusted Client Token', type: 'password' as const, secret: true },
+    { key: 'proxy', label: 'HTTP Proxy', type: 'url' as const, placeholder: 'http://host.docker.internal:7890' },
+    { key: 'timeoutMs', label: 'Synthesis Timeout', type: 'number' as const, placeholder: '30000' },
+  ]
   private voiceCache: { expiresAt: number, voices: TtsVoice[] } | null = null
 
-  async listVoices(): Promise<TtsVoice[]> {
+  async listVoices(context: ProviderContext = {}): Promise<TtsVoice[]> {
     const now = Date.now()
     if (this.voiceCache && this.voiceCache.expiresAt > now) return this.voiceCache.voices
 
-    const voices = await this.fetchVoices().catch(() => FALLBACK_EDGE_VOICES)
-    const cacheMs = Math.max(0, Number(process.env.EDGE_TTS_VOICES_CACHE_MS ?? DEFAULT_VOICE_CACHE_MS))
+    const voices = await this.fetchVoices(context).catch(() => FALLBACK_EDGE_VOICES)
+    const cacheMs = Math.max(0, getConfigNumber(context, 'voicesCacheMs') ?? DEFAULT_VOICE_CACHE_MS)
     if (cacheMs > 0) {
       this.voiceCache = {
         expiresAt: now + cacheMs,
@@ -40,12 +47,12 @@ export class EdgeTtsProvider implements TtsProvider {
     return voices
   }
 
-  private async fetchVoices(): Promise<TtsVoice[]> {
-    const url = new URL(process.env.EDGE_TTS_VOICES_URL ?? EDGE_VOICES_URL)
+  private async fetchVoices(context: ProviderContext): Promise<TtsVoice[]> {
+    const url = new URL(getConfigString(context, 'voicesUrl') ?? EDGE_VOICES_URL)
     if (!url.searchParams.has('trustedclienttoken')) {
-      url.searchParams.set('trustedclienttoken', process.env.EDGE_TTS_TRUSTED_CLIENT_TOKEN ?? EDGE_TRUSTED_CLIENT_TOKEN)
+      url.searchParams.set('trustedclienttoken', getSecretString(context, 'trustedClientToken') ?? EDGE_TRUSTED_CLIENT_TOKEN)
     }
-    const timeoutMs = Number(process.env.EDGE_TTS_VOICES_TIMEOUT_MS ?? 10000)
+    const timeoutMs = getConfigNumber(context, 'voicesTimeoutMs') ?? 10000
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -65,7 +72,7 @@ export class EdgeTtsProvider implements TtsProvider {
     }
   }
 
-  async synthesize(request: SynthesizeRequest) {
+  async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     const tempDir = await mkdtemp(join(tmpdir(), 'rebook-edge-tts-'))
     const audioPath = join(tempDir, 'segment.mp3')
     try {
@@ -78,8 +85,8 @@ export class EdgeTtsProvider implements TtsProvider {
         pitch: request.segment.pitch ?? request.pitch ?? 'default',
         rate: request.segment.rate ?? request.rate ?? 'default',
         volume: request.segment.volume ?? request.volume ?? 'default',
-        timeout: Number(process.env.EDGE_TTS_TIMEOUT_MS ?? 30000),
-        proxy: process.env.EDGE_TTS_PROXY,
+        timeout: getConfigNumber(context, 'timeoutMs') ?? 30000,
+        proxy: getConfigString(context, 'proxy'),
       })
 
       await tts.ttsPromise(request.segment.text, audioPath)
@@ -93,6 +100,24 @@ export class EdgeTtsProvider implements TtsProvider {
       await rm(tempDir, { recursive: true, force: true })
     }
   }
+}
+
+function getConfigString(context: ProviderContext, key: string): string | undefined {
+  const value = context.config?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
+}
+
+function getSecretString(context: ProviderContext, key: string): string | undefined {
+  const value = context.secrets?.[key]
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return undefined
+}
+
+function getConfigNumber(context: ProviderContext, key: string): number | undefined {
+  const value = context.config?.[key]
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : undefined
 }
 
 const FALLBACK_EDGE_VOICES: TtsVoice[] = [
