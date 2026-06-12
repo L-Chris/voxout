@@ -4,6 +4,28 @@ import './styles.css'
 
 const hiddenProviderIds = new Set(['mock', 'mock-asr'])
 
+const voiceOptionsByProviderId = {
+  edge: [
+    { value: 'zh-CN-XiaoyiNeural', label: 'Xiaoyi (zh-CN, Female)' },
+    { value: 'zh-CN-YunxiNeural', label: 'Yunxi (zh-CN, Male)' },
+    { value: 'zh-CN-YunjianNeural', label: 'Yunjian (zh-CN, Male)' },
+    { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (zh-CN, Female)' },
+    { value: 'en-US-AriaNeural', label: 'Aria (en-US, Female)' },
+    { value: 'en-US-GuyNeural', label: 'Guy (en-US, Male)' },
+  ],
+  mimo: [
+    { value: 'mimo_default', label: 'MiMo Default (zh-CN)' },
+    { value: '冰糖', label: '冰糖 (zh-CN, Female)' },
+    { value: '茉莉', label: '茉莉 (zh-CN, Female)' },
+    { value: '苏打', label: '苏打 (zh-CN, Male)' },
+    { value: '白桦', label: '白桦 (zh-CN, Male)' },
+    { value: 'Mia', label: 'Mia (en-US, Female)' },
+    { value: 'Chloe', label: 'Chloe (en-US, Female)' },
+    { value: 'Milo', label: 'Milo (en-US, Male)' },
+    { value: 'Dean', label: 'Dean (en-US, Male)' },
+  ],
+}
+
 function App() {
   const [appConfig, setAppConfig] = useState({ apiBaseUrl: '' })
   const [providers, setProviders] = useState([])
@@ -365,6 +387,8 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
 }
 
 function SpeechTestForm({ form, onFormChange, provider }) {
+  const voiceOptions = getVoiceOptions(provider)
+
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -377,12 +401,24 @@ function SpeechTestForm({ form, onFormChange, provider }) {
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
         Voice
-        <input
-          className="input"
-          placeholder={provider.id === 'edge' ? 'zh-CN-XiaoyiNeural' : 'optional'}
-          value={form.voice}
-          onChange={event => onFormChange({ ...form, voice: event.target.value })}
-        />
+        {voiceOptions.length ? (
+          <select
+            className="input"
+            value={form.voice || voiceOptions[0].value}
+            onChange={event => onFormChange({ ...form, voice: event.target.value })}
+          >
+            {voiceOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="input"
+            placeholder="optional"
+            value={form.voice}
+            onChange={event => onFormChange({ ...form, voice: event.target.value })}
+          />
+        )}
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
         Response format
@@ -539,10 +575,18 @@ function getDefaultTestMode(provider) {
 function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
-    voice: provider?.id === 'edge' ? 'zh-CN-XiaoyiNeural' : '',
+    voice: getDefaultVoice(provider),
     responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
     speed: '1',
   }
+}
+
+function getVoiceOptions(provider) {
+  return voiceOptionsByProviderId[provider?.id] ?? []
+}
+
+function getDefaultVoice(provider) {
+  return getVoiceOptions(provider)[0]?.value ?? ''
 }
 
 function defaultTranscriptionForm() {
