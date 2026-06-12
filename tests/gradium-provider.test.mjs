@@ -153,13 +153,24 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
         headers: { 'content-type': 'application/json' },
       })
     }
-    return new Response(JSON.stringify([{
-      uid: 'gradium-voice-2',
-      name: 'Catalog Voice',
-      is_catalog: true,
-      is_pro_clone: false,
-      language: 'en',
-    }]), {
+    const requestUrl = new URL(String(url))
+    const skip = requestUrl.searchParams.get('skip')
+    const voices = skip === '100'
+      ? [{
+          uid: 'gradium-voice-101',
+          name: 'Second Page Voice',
+          is_catalog: true,
+          is_pro_clone: false,
+          language: 'zh',
+        }]
+      : Array.from({ length: 100 }, (_, index) => ({
+          uid: index === 0 ? 'gradium-voice-2' : `gradium-voice-${index + 2}`,
+          name: index === 0 ? 'Catalog Voice' : `Catalog Voice ${index + 2}`,
+          is_catalog: true,
+          is_pro_clone: false,
+          language: 'en',
+        }))
+    return new Response(JSON.stringify(voices), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     })
@@ -189,11 +200,20 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
   assert.equal(cloneCapture.init.body.get('timeout_s'), '12')
   assert.equal(clone.voice.voiceId, 'gradium-clone-1')
   assert.equal(clone.voice.providerVoiceId, 'gradium-clone-1')
-  assert.equal(captures[1].url, 'https://api.gradium.ai/api/voices/?limit=100&include_catalog=true')
+  assert.equal(captures[1].url, 'https://api.gradium.ai/api/voices/?skip=0&limit=100&include_catalog=true')
+  assert.equal(captures[2].url, 'https://api.gradium.ai/api/voices/?skip=100&limit=100&include_catalog=true')
   assert.deepEqual(voices[0], {
     id: 'gradium-voice-2',
     name: 'Catalog Voice',
     locale: 'en',
+    provider: 'gradium',
+    capabilities: { tts: true, ttsStreaming: true, voiceClone: false },
+  })
+  assert.equal(voices.length, 101)
+  assert.deepEqual(voices[100], {
+    id: 'gradium-voice-101',
+    name: 'Second Page Voice',
+    locale: 'zh',
     provider: 'gradium',
     capabilities: { tts: true, ttsStreaming: true, voiceClone: false },
   })

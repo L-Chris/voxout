@@ -74,6 +74,10 @@
     @apply absolute z-20 mt-1 grid w-[min(32rem,calc(100vw-2rem))] grid-cols-[8rem_8rem_minmax(0,1fr)] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg;
   }
 
+  .voice-cascader-panel-no-gender {
+    @apply w-[min(24rem,calc(100vw-2rem))] grid-cols-[8rem_minmax(0,1fr)];
+  }
+
   .voice-cascader-column {
     @apply max-h-72 overflow-auto border-r border-slate-200 p-1 last:border-r-0;
   }

@@ -64,16 +64,8 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     const apiKey = getSecretString(context, 'apiKey')
     if (!apiKey) return [getDefaultVoice(this.id, context)]
 
-    const url = new URL(`${getBaseUrl(context)}/voices/`)
-    url.searchParams.set('limit', '100')
-    url.searchParams.set('include_catalog', 'true')
-    const response = await fetchWithTimeout(url, {
-      headers: { 'x-api-key': apiKey },
-    }, context)
-    if (!response.ok) return [getDefaultVoice(this.id, context)]
-
-    const payload = await readJsonResponse<GradiumVoicePayload[]>(response)
-    const voices = (Array.isArray(payload) ? payload : [])
+    const payload = await listGradiumVoices(context, apiKey)
+    const voices = payload
       .map(voice => normalizeVoice(voice, this.id))
       .filter((voice): voice is TtsVoice => !!voice)
     return voices.length ? voices : [getDefaultVoice(this.id, context)]
@@ -185,6 +177,26 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
       raw: payload,
     }
   }
+}
+
+async function listGradiumVoices(context: ProviderContext, apiKey: string): Promise<GradiumVoicePayload[]> {
+  const voices: GradiumVoicePayload[] = []
+  const limit = 100
+  for (let page = 0; page < 20; page += 1) {
+    const url = new URL(`${getBaseUrl(context)}/voices/`)
+    url.searchParams.set('skip', String(page * limit))
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('include_catalog', 'true')
+    const response = await fetchWithTimeout(url, {
+      headers: { 'x-api-key': apiKey },
+    }, context)
+    if (!response.ok) return voices
+    const payload = await readJsonResponse<GradiumVoicePayload[]>(response)
+    const pageVoices = Array.isArray(payload) ? payload : []
+    voices.push(...pageVoices)
+    if (pageVoices.length < limit) break
+  }
+  return voices
 }
 
 function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderContext, outputFormat: string): ReadableStream<Uint8Array> {
@@ -306,7 +318,7 @@ function normalizeVoice(voice: GradiumVoicePayload, provider: string): TtsVoice 
 
 function getDefaultVoice(provider: string, context: ProviderContext): TtsVoice {
   const id = getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
-  return { id, name: id, provider }
+  return { id, name: 'Gradium Default', provider }
 }
 
 function getApiKey(context: ProviderContext): string {

@@ -680,6 +680,7 @@ function VoiceCascader({ onChange, value, voiceOptions, voiceTree }) {
 
   const localeGroup = voiceTree.find(item => item.locale === activeLocale) ?? voiceTree[0]
   const genderGroup = localeGroup?.genders.find(item => item.gender === activeGender) ?? localeGroup?.genders[0]
+  const showGenderColumn = Boolean(localeGroup?.genders.some(group => group.gender))
 
   return (
     <div
@@ -702,7 +703,7 @@ function VoiceCascader({ onChange, value, voiceOptions, voiceTree }) {
       </button>
 
       {open ? (
-        <div className="voice-cascader-panel">
+        <div className={`voice-cascader-panel ${showGenderColumn ? '' : 'voice-cascader-panel-no-gender'}`}>
           <div className="voice-cascader-column">
             {voiceTree.map(group => (
               <button
@@ -718,18 +719,20 @@ function VoiceCascader({ onChange, value, voiceOptions, voiceTree }) {
               </button>
             ))}
           </div>
-          <div className="voice-cascader-column">
-            {(localeGroup?.genders ?? []).map(group => (
-              <button
-                className={`voice-cascader-option ${group.gender === genderGroup?.gender ? 'voice-cascader-option-active' : ''}`}
-                key={group.gender}
-                type="button"
-                onClick={() => setActiveGender(group.gender)}
-              >
-                {group.label}
-              </button>
-            ))}
-          </div>
+          {showGenderColumn ? (
+            <div className="voice-cascader-column">
+              {(localeGroup?.genders ?? []).map(group => (
+                <button
+                  className={`voice-cascader-option ${group.gender === genderGroup?.gender ? 'voice-cascader-option-active' : ''}`}
+                  key={group.gender}
+                  type="button"
+                  onClick={() => setActiveGender(group.gender)}
+                >
+                  {group.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="voice-cascader-column voice-cascader-voices">
             {(genderGroup?.options ?? []).map(option => (
               <button
@@ -1261,7 +1264,7 @@ function buildVoiceTree(options) {
     if (!localeGroup.genderGroups.has(gender)) {
       localeGroup.genderGroups.set(gender, {
         gender,
-        label: option.gender || 'Unknown gender',
+        label: option.gender,
         options: [],
       })
     }
