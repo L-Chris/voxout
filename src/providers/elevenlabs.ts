@@ -18,6 +18,16 @@ import type {
   VoiceDesignRequest,
   VoiceDesignResult,
 } from '../types.js'
+import {
+  compactObject,
+  getConfigBoolean,
+  getConfigNumber,
+  getConfigString,
+  getPayloadError,
+  getSecretString,
+  readJsonResponse,
+  trimTrailingSlash,
+} from './provider-utils.js'
 
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io/v1'
 const DEFAULT_TTS_MODEL = 'eleven_multilingual_v2'
@@ -340,10 +350,6 @@ async function postJsonAudio(url: URL, body: Record<string, unknown>, apiKey: st
   }
 }
 
-function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as Partial<T>
-}
-
 function getApiKey(context: ProviderContext): string {
   const apiKey = getSecretString(context, 'apiKey')
   if (!apiKey) throw new Error('elevenlabs apiKey is required in provider settings.')
@@ -356,34 +362,6 @@ function getBaseUrl(context: ProviderContext): string {
 
 function getApiRoot(context: ProviderContext): string {
   return getBaseUrl(context).replace(/\/v1$/i, '')
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getConfigNumber(context: ProviderContext, key: string): number | undefined {
-  const raw = context.config?.[key]
-  const value = typeof raw === 'number' ? raw : Number(raw)
-  return Number.isFinite(value) ? value : undefined
-}
-
-function getConfigBoolean(context: ProviderContext, key: string): boolean | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'boolean') return value
-  return undefined
 }
 
 function normalizeDurationSeconds(value: number | undefined): number | undefined {
@@ -465,22 +443,4 @@ function normalizeWords(words: ElevenLabsTranscriptPayload['words']) {
       to: Number(word.end ?? word.start ?? 0),
       content: String(word.text ?? ''),
     }))
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text()
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    return { error: text } as T
-  }
-}
-
-function getPayloadError(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== 'object') return undefined
-  const error = (payload as { error?: unknown }).error
-  if (typeof error === 'string') return error
-  const detail = (payload as { detail?: unknown }).detail
-  if (typeof detail === 'string') return detail
-  return undefined
 }

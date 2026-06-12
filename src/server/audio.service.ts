@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Service } from 'typedi'
-import { ProviderConfigStore } from '../config-store.js'
 import {
   getAsrProvider,
   getAudioIsolationProvider,
@@ -12,11 +11,17 @@ import {
   getTtsProvider,
   getVoiceCloneProvider,
   getVoiceDesignProvider,
-  isInternalProviderId,
 } from '../providers/registry.js'
 import { getProviderTimeoutMs, withTimeout } from '../timeout.js'
 import { readMultipartForm, sendBinary, sendJson, sendStream, sendText } from './http.js'
+import {
+  assertPublicProviderAccess,
+  configStore,
+  ensureEnabled,
+  getRuntimeConfig,
+} from './provider-runtime.js'
 import { sendAudio as sendStaticAudio } from './static-audio.js'
+import { formatVoiceRecord } from './voice-records.js'
 import type {
   ProviderRuntimeConfig,
   AudioIsolationRequest,
@@ -34,7 +39,6 @@ import type {
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url))
 const audioDir = process.env.TTS_AUDIO_DIR ?? join(rootDir, 'audio')
-const configStore = new ProviderConfigStore()
 const OPENAI_SPEECH_MODELS = new Set(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
 const OPENAI_TRANSCRIPTION_MODELS = new Set([
   'whisper-1',
@@ -271,28 +275,6 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   return sendJson(res, { text })
 }
 
-function canExposeProvider(providerId: string): boolean {
-  return allowInternalProviders() || !isInternalProviderId(providerId)
-}
-
-function assertPublicProviderAccess(providerId: string): void {
-  if (!canExposeProvider(providerId)) {
-    throw new Error(`Unknown provider: ${providerId}`)
-  }
-}
-
-function allowInternalProviders(): boolean {
-  return process.env.NODE_ENV === 'test' || process.env.VOXOUT_EXPOSE_INTERNAL_PROVIDERS === '1'
-}
-
-async function getRuntimeConfig(providerId: string): Promise<ProviderRuntimeConfig> {
-  return configStore.getConfig(providerId)
-}
-
-function ensureEnabled(providerId: string, context: ProviderRuntimeConfig): void {
-  if (!context.enabled) throw new Error(`Provider is disabled: ${providerId}`)
-}
-
 function normalizeOpenAiSpeechInput(providerId: string, input: {
   model?: string
   input: string
@@ -405,36 +387,9 @@ async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeR
   request.voice = resolvedVoice
 }
 
-function formatVoiceRecord(voice: VoiceRecord) {
-  return {
-    id: voice.id,
-    voice_id: voice.voice_id,
-    name: voice.name,
-    description: voice.description,
-    language: voice.language,
-    preview_mime_type: voice.preview_mime_type,
-    preview_audio: voice.preview_audio,
-    metadata: voice.metadata,
-    provider_links: voice.provider_links.map(link => ({
-      id: link.id,
-      provider: link.provider_id,
-      provider_account_id: link.provider_account_id,
-      provider_voice_id: link.provider_voice_id,
-      provider_voice_key: link.provider_voice_key,
-      preview_mime_type: link.preview_mime_type,
-      preview_audio: link.preview_audio,
-      metadata: link.metadata,
-      created_at: link.created_at,
-      updated_at: link.updated_at,
-    })),
-    created_at: voice.created_at,
-    updated_at: voice.updated_at,
-  }
-}
-
 async function persistProviderVoice(
   providerId: string,
-  context: ProviderRuntimeConfig,
+  context: Awaited<ReturnType<typeof getRuntimeConfig>>,
   voice: VoicePreview,
   extraMetadata: Record<string, string | number | boolean | null> = {},
 ): Promise<VoiceRecord> {

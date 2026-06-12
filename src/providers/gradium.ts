@@ -1,5 +1,6 @@
 import { Blob } from 'node:buffer'
 import WebSocket from 'ws'
+import { getProviderTimeoutMs } from '../timeout.js'
 import type {
   AsrProvider,
   ProviderContext,
@@ -12,7 +13,15 @@ import type {
   VoiceCloneRequest,
   VoiceCloneResult,
 } from '../types.js'
-import { getProviderTimeoutMs } from '../timeout.js'
+import {
+  compactObject,
+  fetchWithProviderTimeout,
+  getConfigNumber,
+  getConfigString,
+  getSecretString,
+  readJsonResponse,
+  trimTrailingSlash,
+} from './provider-utils.js'
 
 const DEFAULT_BASE_URL = 'https://api.gradium.ai/api'
 const DEFAULT_WS_URL = 'wss://api.gradium.ai/api'
@@ -74,7 +83,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     const apiKey = getApiKey(context)
     const outputFormat = normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT)
-    const response = await fetchWithTimeout(`${getBaseUrl(context)}/post/speech/tts`, {
+    const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/post/speech/tts`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -120,7 +129,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     const language = normalizeLanguage(request.language)
     if (language) url.searchParams.set('json_config', JSON.stringify({ language }))
 
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchWithProviderTimeout(url, {
       method: 'POST',
       headers: {
         'content-type': audio.mimeType,
@@ -152,7 +161,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     form.set('start_s', '0')
     form.set('timeout_s', String(getConfigNumber(context, 'cloneTimeoutSeconds') ?? 10))
 
-    const response = await fetchWithTimeout(`${getBaseUrl(context)}/voices/`, {
+    const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/`, {
       method: 'POST',
       headers: { 'x-api-key': apiKey },
       body: form,
@@ -188,7 +197,7 @@ async function listGradiumVoices(context: ProviderContext, apiKey: string): Prom
     url.searchParams.set('skip', String(page * limit))
     url.searchParams.set('limit', String(limit))
     url.searchParams.set('include_catalog', 'true')
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchWithProviderTimeout(url, {
       headers: { 'x-api-key': apiKey },
     }, context)
     if (!response.ok) return voices
@@ -401,52 +410,6 @@ function getFileNameFromUrl(value: string, mimeType: string): string {
   }
 }
 
-async function fetchWithTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), getProviderTimeoutMs(context))
-  try {
-    return await fetch(input, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getConfigNumber(context: ProviderContext, key: string): number | undefined {
-  const raw = context.config?.[key]
-  const value = typeof raw === 'number' ? raw : Number(raw)
-  return Number.isFinite(value) ? value : undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
-
 function clearStreamTimer(timer: ReturnType<typeof setTimeout> | undefined): void {
   if (timer) clearTimeout(timer)
-}
-
-function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as Partial<T>
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text()
-  if (!text.trim()) return {} as T
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    return { error: text } as T
-  }
 }

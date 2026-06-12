@@ -11,6 +11,14 @@ import type {
   VoiceCloneRequest,
   VoiceCloneResult,
 } from '../types.js'
+import {
+  compactObject,
+  getConfigString,
+  getPayloadError,
+  getSecretString,
+  readJsonResponse,
+  trimTrailingSlash,
+} from './provider-utils.js'
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts'
@@ -138,7 +146,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
       headers: { authorization: `Bearer ${apiKey}` },
       body: form,
     })
-    const payload = await readJsonResponse<OpenAiVoicePayload>(response)
+    const payload = await readJsonResponse<OpenAiVoicePayload>(response, 'errorMessageObject')
     if (!response.ok) {
       throw new Error(getPayloadError(payload) || `OpenAI voice clone request failed: ${response.status}`)
     }
@@ -187,7 +195,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         text: text.trim(),
       }
     }
-    const payload = await readJsonResponse<OpenAiTranscriptionPayload>(response)
+    const payload = await readJsonResponse<OpenAiTranscriptionPayload>(response, 'errorMessageObject')
     if (!response.ok) {
       throw new Error(getPayloadError(payload) || `OpenAI transcription request failed: ${response.status}`)
     }
@@ -231,22 +239,6 @@ function getApiKey(context: ProviderContext): string {
 
 function getBaseUrl(context: ProviderContext): string {
   return trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
 }
 
 function normalizeResponseFormat(value: string): 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm' {
@@ -343,27 +335,4 @@ function getFileNameFromUrl(value: string, mimeType: string): string {
   } catch {
     return getAudioFileName(mimeType)
   }
-}
-
-function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as Partial<T>
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text()
-  if (!text.trim()) return {} as T
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    return { error: { message: text.slice(0, 500) } } as T
-  }
-}
-
-function getPayloadError(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== 'object') return undefined
-  const value = payload as { error?: { message?: unknown }, message?: unknown, detail?: unknown }
-  if (typeof value.error?.message === 'string') return value.error.message
-  if (typeof value.message === 'string') return value.message
-  if (typeof value.detail === 'string') return value.detail
-  return undefined
 }

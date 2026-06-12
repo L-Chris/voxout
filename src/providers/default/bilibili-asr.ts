@@ -1,4 +1,5 @@
 import type { AsrProvider, TranscribeRequest, TranscribeResult } from '../../types.js'
+import { getPayloadError, readJsonResponse } from '../provider-utils.js'
 
 const API_BASE_URL = 'https://member.bilibili.com/x/bcut/rubick-interface'
 const API_CREATE_TASK = `${API_BASE_URL}/task`
@@ -102,7 +103,7 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 async function readBcutResponse<T>(response: Response): Promise<T> {
-  const payload = await readJson(response) as BcutApiResponse<T>
+  const payload = await readJsonResponse<BcutApiResponse<T>>(response)
   if (!response.ok) throw new Error(getPayloadError(payload) || `Bilibili ASR request failed: ${response.status}`)
   if (payload.code) throw new Error(payload.message || `Bilibili ASR request failed: ${payload.code}`)
   if (!payload.data) throw new Error('Bilibili ASR response did not include data.')
@@ -161,23 +162,6 @@ function normalizeResult(provider: string, format: string, subtitle: unknown): T
     text,
     raw: subtitle,
   }
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text()
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return { error: text }
-  }
-}
-
-function getPayloadError(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== 'object') return undefined
-  const error = (payload as { error?: unknown }).error
-  if (typeof error === 'string') return error
-  const message = (payload as { message?: unknown }).message
-  return typeof message === 'string' ? message : undefined
 }
 
 function normalizeFormat(format: string | undefined): 'txt' | 'srt' | 'raw' {

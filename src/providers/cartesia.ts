@@ -11,7 +11,15 @@ import type {
   VoiceCloneRequest,
   VoiceCloneResult,
 } from '../types.js'
-import { getProviderTimeoutMs } from '../timeout.js'
+import {
+  compactObject,
+  fetchWithProviderTimeout,
+  getConfigString,
+  getPayloadError,
+  getSecretString,
+  readJsonResponse,
+  trimTrailingSlash,
+} from './provider-utils.js'
 
 const DEFAULT_BASE_URL = 'https://api.cartesia.ai'
 const DEFAULT_API_VERSION = '2026-03-01'
@@ -121,7 +129,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     const language = normalizeLanguage(request.language)
     if (language) form.set('language', language)
 
-    const response = await fetchWithTimeout(`${getBaseUrl(context)}/stt`, {
+    const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/stt`, {
       method: 'POST',
       headers: getHeaders(context, apiKey),
       body: form,
@@ -152,7 +160,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     const baseVoiceId = getConfigString(context, 'baseVoiceId')
     if (baseVoiceId) form.set('base_voice_id', baseVoiceId)
 
-    const response = await fetchWithTimeout(`${getBaseUrl(context)}/voices/clone`, {
+    const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/clone`, {
       method: 'POST',
       headers: getHeaders(context, apiKey),
       body: form,
@@ -180,7 +188,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
 
   private createSpeech(request: SynthesizeRequest, context: ProviderContext, path: '/tts/bytes' | '/tts/sse'): Promise<Response> {
     const apiKey = getApiKey(context)
-    return fetchWithTimeout(`${getBaseUrl(context)}${path}`, {
+    return fetchWithProviderTimeout(`${getBaseUrl(context)}${path}`, {
       method: 'POST',
       headers: {
         ...getHeaders(context, apiKey),
@@ -211,7 +219,7 @@ async function listCartesiaVoices(context: ProviderContext, apiKey: string): Pro
     const url = new URL(`${getBaseUrl(context)}/voices`)
     url.searchParams.set('limit', '100')
     if (startingAfter) url.searchParams.set('starting_after', startingAfter)
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchWithProviderTimeout(url, {
       headers: getHeaders(context, apiKey),
     }, context)
     if (!response.ok) return voices
@@ -375,53 +383,4 @@ function flushCartesiaSseBuffer(buffer: string, controller: TransformStreamDefau
     boundary = buffer.indexOf('\n\n')
   }
   return buffer
-}
-
-async function fetchWithTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), getProviderTimeoutMs(context))
-  try {
-    return await fetch(input, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
-
-function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as Partial<T>
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text()
-  if (!text.trim()) return {} as T
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    return { error: text } as T
-  }
-}
-
-function getPayloadError(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== 'object') return undefined
-  const value = payload as { error?: unknown, message?: unknown, detail?: unknown }
-  if (typeof value.error === 'string') return value.error
-  if (typeof value.message === 'string') return value.message
-  if (typeof value.detail === 'string') return value.detail
-  return undefined
 }

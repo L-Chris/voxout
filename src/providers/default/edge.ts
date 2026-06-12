@@ -5,6 +5,11 @@ import { join } from 'node:path'
 import { EdgeTTS } from 'node-edge-tts'
 import { DEFAULT_PROVIDER_TIMEOUT_MS } from '../../timeout.js'
 import type { ProviderContext, SynthesizeRequest, TtsProvider, TtsVoice } from '../../types.js'
+import {
+  getConfigString,
+  getPositiveConfigNumber as getConfigNumber,
+  getSecretString,
+} from '../provider-utils.js'
 
 const DEFAULT_VOICE = 'zh-CN-XiaoyiNeural'
 const DEFAULT_LANG = 'zh-CN'
@@ -243,24 +248,6 @@ function escapeXml(value: string): string {
     if (char === '"') return '&quot;'
     return '&apos;'
   })
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getConfigNumber(context: ProviderContext, key: string): number | undefined {
-  const value = context.config?.[key]
-  const numberValue = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : undefined
 }
 
 const FALLBACK_EDGE_VOICES = [

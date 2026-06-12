@@ -16,6 +16,12 @@ import type {
 import { getProviderTimeoutMs } from '../timeout.js'
 import { randomUUID } from 'node:crypto'
 import { TextDecoder } from 'node:util'
+import {
+  getConfigBooleanWithFallback as getBooleanConfig,
+  getConfigString,
+  getSecretString,
+  trimTrailingSlash,
+} from './provider-utils.js'
 
 const DEFAULT_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const DEFAULT_TTS_MODEL = 'mimo-v2.5-tts'
@@ -366,28 +372,6 @@ function normalizeAudioDataUrl(value: string, mimeType = 'audio/wav'): string {
 
 function getDataUrlMimeType(value: string): string | undefined {
   return /^data:([^;,]+)/.exec(value)?.[1]
-}
-
-function getConfigString(context: ProviderContext, key: string): string | undefined {
-  const value = context.config?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getSecretString(context: ProviderContext, key: string): string | undefined {
-  const value = context.secrets?.[key]
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  return undefined
-}
-
-function getBooleanConfig(context: ProviderContext, key: string, fallback: boolean): boolean {
-  const value = context.config?.[key]
-  if (typeof value === 'boolean') return value
-  return fallback
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
 }
 
 async function resolveAudioDataUrl(request: TranscribeRequest, context: ProviderContext): Promise<string> {
