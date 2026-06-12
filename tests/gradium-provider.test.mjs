@@ -25,12 +25,10 @@ test('Gradium provider sends text-to-speech requests', async () => {
 
   const provider = new GradiumProvider()
   const result = await provider.synthesize({
-    voiceId: 'gradium-voice-1',
+    voice: 'gradium-voice-1',
     outputFormat: 'pcm_16000',
-    segment: {
-      id: 'tts',
-      text: 'Hello from Gradium.',
-    },
+    id: 'tts',
+    text: 'Hello from Gradium.',
   }, {
     config: {},
     secrets: { apiKey: 'test-gradium-key' },
@@ -70,12 +68,10 @@ test('Gradium provider streams text-to-speech audio over WebSocket', async () =>
   try {
     const provider = new GradiumProvider()
     const result = await provider.streamSynthesize({
-      voiceId: 'gradium-voice-1',
+      voice: 'gradium-voice-1',
       outputFormat: 'pcm',
-      segment: {
-        id: 'tts-stream',
-        text: 'Stream from Gradium.',
-      },
+      id: 'tts-stream',
+      text: 'Stream from Gradium.',
     }, {
       config: {
         wsUrl: `ws://127.0.0.1:${address.port}/api`,

@@ -26,10 +26,8 @@ test('ElevenLabs provider sends text-to-speech requests', async () => {
   const result = await provider.synthesize({
     voice: 'voice-123',
     outputFormat: 'mp3_44100_192',
-    segment: {
-      id: 'tts',
-      text: 'Hello from ElevenLabs.',
-    },
+    id: 'tts',
+    text: 'Hello from ElevenLabs.',
   }, {
     config: {
       ttsModel: 'eleven_multilingual_v2',
@@ -68,10 +66,8 @@ test('ElevenLabs provider streams text-to-speech requests', async () => {
     voice: 'voice-123',
     outputFormat: 'mp3_44100_192',
     streamFormat: 'audio',
-    segment: {
-      id: 'tts',
-      text: 'Hello from ElevenLabs.',
-    },
+    id: 'tts',
+    text: 'Hello from ElevenLabs.',
   }, {
     config: {
       ttsModel: 'eleven_multilingual_v2',

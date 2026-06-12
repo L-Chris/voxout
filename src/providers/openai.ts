@@ -105,7 +105,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     streamFormat?: 'audio' | 'sse',
   ): Promise<Response> {
     const apiKey = getApiKey(context)
-    const text = request.segment.text.trim()
+    const text = request.text.trim()
     const response = await fetch(`${getBaseUrl(context)}/audio/speech`, {
       method: 'POST',
       headers: {
@@ -115,11 +115,11 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
       body: JSON.stringify(compactObject({
         model: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
         input: text,
-        voice: request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoice') ?? DEFAULT_VOICE,
+        voice: request.voice ?? getConfigString(context, 'defaultVoice') ?? DEFAULT_VOICE,
         response_format: responseFormat,
         speed: normalizeSpeed(request.speed),
         stream_format: streamFormat,
-        instructions: normalizeInstructions(request.instructions ?? request.segment.stylePrompt ?? request.stylePrompt),
+        instructions: normalizeInstructions(request.instructions),
       })),
     })
     return response

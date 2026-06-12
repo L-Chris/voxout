@@ -25,13 +25,11 @@ test('OpenAI provider sends text-to-speech requests', async () => {
   const provider = new OpenAiProvider()
   const result = await provider.synthesize({
     model: 'tts-1-hd',
-    voiceId: 'voice_custom_1',
+    voice: 'voice_custom_1',
     outputFormat: 'mp3',
     instructions: 'Speak with a warm narration style.',
-    segment: {
-      id: 'tts',
-      text: 'Hello from OpenAI.',
-    },
+    id: 'tts',
+    text: 'Hello from OpenAI.',
   }, {
     config: { ttsModel: 'gpt-4o-mini-tts' },
     secrets: { apiKey: 'test-openai-key' },
@@ -69,11 +67,9 @@ test('OpenAI provider streams text-to-speech requests', async () => {
     model: 'gpt-4o-mini-tts',
     outputFormat: 'mp3',
     streamFormat: 'sse',
-    segment: {
-      id: 'tts',
-      text: 'Hello from OpenAI.',
-      stylePrompt: 'Sound calm.',
-    },
+    id: 'tts',
+    text: 'Hello from OpenAI.',
+    instructions: 'Sound calm.',
   }, {
     config: { ttsModel: 'gpt-4o-mini-tts' },
     secrets: { apiKey: 'test-openai-key' },

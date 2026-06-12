@@ -80,23 +80,23 @@ export class EdgeTtsProvider implements TtsProvider {
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     const tempDir = await mkdtemp(join(tmpdir(), 'rebook-edge-tts-'))
-    const audioPath = join(tempDir, 'segment.mp3')
+    const audioPath = join(tempDir, 'speech.mp3')
     try {
-      const voice = request.segment.voice ?? request.voice ?? DEFAULT_VOICE
+      const voice = request.voice ?? DEFAULT_VOICE
       const outputFormat = normalizeEdgeOutputFormat(request.outputFormat)
       const tts = new EdgeTTS({
         voice,
         lang: request.lang ?? inferLangFromVoice(voice),
         outputFormat,
         saveSubtitles: false,
-        pitch: request.segment.pitch ?? request.pitch ?? 'default',
-        rate: request.segment.rate ?? normalizeEdgeRate(request.speed),
-        volume: request.segment.volume ?? request.volume ?? 'default',
+        pitch: request.pitch ?? 'default',
+        rate: normalizeEdgeRate(request.speed),
+        volume: request.volume ?? 'default',
         timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         proxy: getConfigString(context, 'proxy'),
       })
 
-      await tts.ttsPromise(request.segment.text, audioPath)
+      await tts.ttsPromise(request.text, audioPath)
       const audio = await readFile(audioPath)
       return {
         audio,
@@ -125,16 +125,16 @@ export class EdgeTtsProvider implements TtsProvider {
 }
 
 async function createEdgeSpeechStream(request: SynthesizeRequest, context: ProviderContext): Promise<ReadableStream<Uint8Array>> {
-  const voice = request.segment.voice ?? request.voice ?? DEFAULT_VOICE
+  const voice = request.voice ?? DEFAULT_VOICE
   const outputFormat = normalizeEdgeOutputFormat(request.outputFormat)
   const tts = new EdgeTTS({
     voice,
     lang: request.lang ?? inferLangFromVoice(voice),
     outputFormat,
     saveSubtitles: false,
-    pitch: request.segment.pitch ?? request.pitch ?? 'default',
-    rate: request.segment.rate ?? normalizeEdgeRate(request.speed),
-    volume: request.segment.volume ?? request.volume ?? 'default',
+    pitch: request.pitch ?? 'default',
+    rate: normalizeEdgeRate(request.speed),
+    volume: request.volume ?? 'default',
     timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
     proxy: getConfigString(context, 'proxy'),
   })
@@ -184,7 +184,7 @@ async function createEdgeSpeechStream(request: SynthesizeRequest, context: Provi
       ws.on('close', () => close())
 
       const requestId = randomBytes(16).toString('hex')
-      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${buildSsml(request.segment.text, voice, request.lang ?? inferLangFromVoice(voice), request.segment.rate ?? normalizeEdgeRate(request.speed), request.segment.pitch ?? request.pitch ?? 'default', request.segment.volume ?? request.volume ?? 'default')}`)
+      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${buildSsml(request.text, voice, request.lang ?? inferLangFromVoice(voice), normalizeEdgeRate(request.speed), request.pitch ?? 'default', request.volume ?? 'default')}`)
     },
     cancel() {
       cancelStream?.()

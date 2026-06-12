@@ -188,10 +188,10 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
       },
       body: JSON.stringify(compactObject({
         model_id: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
-        transcript: request.segment.text.trim(),
+        transcript: request.text.trim(),
         voice: {
           mode: 'id',
-          id: request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID,
+          id: request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID,
         },
         output_format: normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT),
         language: normalizeLanguage(request.lang),

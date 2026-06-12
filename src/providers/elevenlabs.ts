@@ -101,8 +101,8 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     const apiKey = getApiKey(context)
-    const text = request.segment.text.trim()
-    const voiceId = request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+    const text = request.text.trim()
+    const voiceId = request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
     const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
     const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}`)
     url.searchParams.set('output_format', outputFormat)
@@ -118,8 +118,8 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     if (request.streamFormat === 'sse') throw new Error('ElevenLabs TTS streaming supports stream_format "audio" only.')
     const apiKey = getApiKey(context)
-    const text = request.segment.text.trim()
-    const voiceId = request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+    const text = request.text.trim()
+    const voiceId = request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
     const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
     const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}/stream`)
     url.searchParams.set('output_format', outputFormat)

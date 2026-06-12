@@ -31,9 +31,9 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
   }
 
   async synthesize(request: SynthesizeRequest) {
-    const text = request.segment.text.trim()
+    const text = request.text.trim()
     const durationMs = Math.min(5000, Math.max(700, text.length * 80))
-    const audio = createToneWav(durationMs, getFrequency(request.segment.voice ?? request.voice))
+    const audio = createToneWav(durationMs, getFrequency(request.voice))
     return { audio, mimeType: 'audio/wav', durationMs }
   }
 

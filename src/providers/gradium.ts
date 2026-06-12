@@ -81,7 +81,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
         'x-api-key': apiKey,
       },
       body: JSON.stringify({
-        text: request.segment.text.trim(),
+        text: request.text.trim(),
         voice_id: getVoiceId(request, context),
         model_name: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_MODEL,
         output_format: outputFormat,
@@ -225,7 +225,7 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
           output_format: outputFormat,
           close_ws_on_eos: true,
         })))
-        ws.send(JSON.stringify({ type: 'text', text: request.segment.text.trim() }))
+        ws.send(JSON.stringify({ type: 'text', text: request.text.trim() }))
         ws.send(JSON.stringify({ type: 'end_of_stream' }))
       })
 
@@ -303,7 +303,7 @@ function parseGradiumTranscription(value: string): { text: string, raw: unknown[
 }
 
 function getVoiceId(request: SynthesizeRequest, context: ProviderContext): string {
-  return request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+  return request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
 }
 
 function normalizeVoice(voice: GradiumVoicePayload, provider: string): TtsVoice | null {

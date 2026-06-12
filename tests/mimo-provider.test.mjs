@@ -12,10 +12,8 @@ test('Mimo provider sends preset voice synthesis requests', async () => {
   const captured = await synthesizeWithMockedFetch({
     providerRequest: {
       voice: '冰糖',
-      segment: {
-        id: 'preset',
-        text: '你好，rebook。',
-      },
+      id: 'preset',
+      text: '你好，rebook。',
     },
   })
 
@@ -60,10 +58,8 @@ test('Mimo provider streams preset voice synthesis audio chunks', async () => {
     voice: 'Chloe',
     outputFormat: 'pcm',
     streamFormat: 'audio',
-    segment: {
-      id: 'preset-stream',
-      text: '你好，voxout。',
-    },
+    id: 'preset-stream',
+    text: '你好，voxout。',
   }, {
     config: {},
     secrets: { apiKey: 'test-key' },
@@ -81,43 +77,6 @@ test('Mimo provider streams preset voice synthesis audio chunks', async () => {
     format: 'pcm16',
     voice: 'Chloe',
   })
-})
-
-test('Mimo provider creates a designed voice sample then voice-clones target speech', async () => {
-  const captures = await synthesizeWithMockedFetch({
-    providerRequest: {
-      outputFormat: 'mp3',
-      segment: {
-        id: 'design',
-        text: '别动。',
-        voicePrompt: '年轻男性，冷静克制，嗓音清亮。',
-        stylePrompt: '低声，紧张。',
-      },
-    },
-    returnAllCaptures: true,
-  })
-
-  assert.equal(captures.length, 2)
-  assert.equal(captures[0].body.model, 'mimo-v2.5-tts-voicedesign')
-  assert.deepEqual(captures[0].body.messages, [
-    {
-      role: 'user',
-      content: '年轻男性，冷静克制，嗓音清亮。',
-    },
-    { role: 'assistant', content: '你好，我会用这个声音为角色说话。' },
-  ])
-  assert.deepEqual(captures[0].body.audio, {
-    format: 'wav',
-    optimize_text_preview: true,
-  })
-
-  assert.equal(captures[1].body.model, 'mimo-v2.5-tts-voiceclone')
-  assert.deepEqual(captures[1].body.messages, [
-    { role: 'user', content: '低声，紧张。' },
-    { role: 'assistant', content: '别动。' },
-  ])
-  assert.equal(captures[1].body.audio.format, 'mp3')
-  assert.match(captures[1].body.audio.voice, /^data:audio\/wav;base64,/)
 })
 
 test('Mimo provider designs a reusable voice preview', async () => {
@@ -159,14 +118,12 @@ test('Mimo provider designs a reusable voice preview', async () => {
   assert.match(result.voices[0].previewAudioData, /^data:audio\/wav;base64,/)
 })
 
-test('Mimo provider uses voice_id data URLs with the voice clone model', async () => {
+test('Mimo provider uses voice data URLs with the voice clone model', async () => {
   const captured = await synthesizeWithMockedFetch({
     providerRequest: {
-      voiceId: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
-      segment: {
-        id: 'voice-id',
-        text: '用保存的声音说话。',
-      },
+      voice: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
+      id: 'voice-id',
+      text: '用保存的声音说话。',
     },
   })
 
@@ -278,7 +235,7 @@ async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = 
         message: {
           audio: {
             data: Buffer.alloc(256, 1).toString('base64'),
-            transcript: providerRequest.segment.text,
+            transcript: providerRequest.text,
           },
         },
       }],

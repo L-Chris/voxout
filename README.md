@@ -37,9 +37,6 @@ model, `input` is the text, `voice` is the voice name or id, and
 Use voxout's `provider` extension to choose a backend such as `default`,
 `openai`, `cartesia`, `mimo`, `gradium`, or `elevenlabs`. The legacy
 provider-as-`model` form is still accepted for compatibility.
-The speech endpoint also accepts `voice_id` for providers that support stored
-voice records, currently `openai`, `cartesia`, `elevenlabs`, `gradium`, and
-`mimo`.
 `/v1/audio/transcriptions` follows the OpenAI multipart shape: `model` is the
 ASR model, `file` is the uploaded audio, and `response_format`, `language`, and
 `prompt` are optional. Use the `provider` extension to choose a non-OpenAI ASR

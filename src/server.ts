@@ -182,22 +182,16 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
   if (streamFormat && speechFormat.conversion) {
     throw new Error(`response_format "${speechFormat.responseFormat}" requires buffered conversion and is not supported with stream_format`)
   }
-  const voice = normalizeSpeechVoice(body.voice)
-  const request = normalizeSynthesizeInput(provider.id, {
+  const request = normalizeOpenAiSpeechInput(provider.id, {
     model: target.model,
-    text: input,
-    voice: voice.voice,
-    voiceId: typeof body.voice_id === 'string'
-      ? body.voice_id
-      : typeof body.voiceId === 'string'
-        ? body.voiceId
-        : voice.voiceId,
+    input,
+    voice: body.voice,
     outputFormat: speechFormat.providerFormat,
     streamFormat,
     speed: typeof body.speed === 'number' ? body.speed : undefined,
     instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
   })
-  await resolveVoiceIdForSynthesis(provider.id, request)
+  await resolveVoiceForSynthesis(provider.id, request)
   const timeoutMs = getProviderTimeoutMs(context)
   if (streamFormat) {
     if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
@@ -458,47 +452,26 @@ function assertKnownProvider(providerId: string): void {
   }
 }
 
-function normalizeSynthesizeInput(providerId: string, input: unknown): SynthesizeRequest {
-  const value = input && typeof input === 'object' ? input as Partial<SynthesizeRequest> & Record<string, unknown> : {}
-  if (value.segment && typeof value.segment === 'object') {
-    return {
-      ...value,
-      provider: providerId,
-      segment: {
-        ...value.segment,
-        id: String((value.segment as { id?: unknown }).id ?? randomUUID()),
-        text: String((value.segment as { text?: unknown }).text ?? ''),
-        provider: providerId,
-      },
-    } as SynthesizeRequest
-  }
-  const text = typeof value.text === 'string' ? value.text : ''
-  if (!text.trim()) throw new Error('input.text is required for synthesize')
+function normalizeOpenAiSpeechInput(providerId: string, input: {
+  model?: string
+  input: string
+  voice?: unknown
+  outputFormat?: string
+  streamFormat?: 'audio' | 'sse'
+  speed?: number
+  instructions?: string
+}): SynthesizeRequest {
+  const voice = typeof input.voice === 'string' ? input.voice : undefined
   return {
     provider: providerId,
-    model: typeof value.model === 'string' ? value.model : undefined,
-    voice: typeof value.voice === 'string' ? value.voice : undefined,
-    voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
-    lang: typeof value.lang === 'string' ? value.lang : undefined,
-    outputFormat: typeof value.outputFormat === 'string' ? value.outputFormat : undefined,
-    streamFormat: value.streamFormat === 'audio' || value.streamFormat === 'sse' ? value.streamFormat : undefined,
-    speed: typeof value.speed === 'number' ? value.speed : undefined,
-    pitch: typeof value.pitch === 'string' ? value.pitch : undefined,
-    volume: typeof value.volume === 'string' ? value.volume : undefined,
-    voicePrompt: typeof value.voicePrompt === 'string' ? value.voicePrompt : undefined,
-    stylePrompt: typeof value.stylePrompt === 'string' ? value.stylePrompt : undefined,
-    instructions: typeof value.instructions === 'string' ? value.instructions : undefined,
-    segment: {
-      id: typeof value.id === 'string' ? value.id : randomUUID(),
-      text,
-      provider: providerId,
-      voice: typeof value.voice === 'string' ? value.voice : undefined,
-      voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
-      soundEffectPrompt: typeof value.soundEffectPrompt === 'string' ? value.soundEffectPrompt : undefined,
-      soundEffectDurationSeconds: typeof value.soundEffectDurationSeconds === 'number' ? value.soundEffectDurationSeconds : undefined,
-      voicePrompt: typeof value.voicePrompt === 'string' ? value.voicePrompt : undefined,
-      stylePrompt: typeof value.stylePrompt === 'string' ? value.stylePrompt : undefined,
-    },
+    model: input.model,
+    id: randomUUID(),
+    text: input.input,
+    voice,
+    outputFormat: input.outputFormat,
+    streamFormat: input.streamFormat,
+    speed: input.speed,
+    instructions: input.instructions,
   }
 }
 
@@ -638,21 +611,20 @@ async function resolveVoiceCloneUrl(
   }
 }
 
-async function resolveVoiceIdForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
-  const voiceId = request.voiceId ?? request.segment.voiceId
-  if (!voiceId) return
-  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium') {
-    throw new Error(`voice_id is not supported for provider ${providerId}`)
-  }
-  const voice = await configStore.getVoice(providerId, voiceId)
+async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
+  const voice = request.voice
   if (!voice) return
-  const link = voice.links.find(item => item.providerId === providerId)
+  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium') {
+    return
+  }
+  const voiceRecord = await configStore.getVoice(providerId, voice)
+  if (!voiceRecord) return
+  const link = voiceRecord.links.find(item => item.providerId === providerId)
   if (!link) return
   const resolvedVoice = providerId === 'mimo'
-    ? link.previewAudio ?? voice.previewAudio ?? link.providerVoiceId ?? link.providerVoiceKey
+    ? link.previewAudio ?? voiceRecord.previewAudio ?? link.providerVoiceId ?? link.providerVoiceKey
     : link.providerVoiceId ?? link.providerVoiceKey
-  request.voiceId = resolvedVoice
-  request.segment.voiceId = resolvedVoice
+  request.voice = resolvedVoice
 }
 
 function mergeVoices(providerVoices: Array<{ id: string, name: string, locale?: string, gender?: string, provider: string }>, storedVoices: VoiceRecord[]) {
@@ -934,16 +906,6 @@ function hasVoiceCloneProvider(id: string): boolean {
   } catch {
     return false
   }
-}
-
-function normalizeSpeechVoice(value: unknown): { voice?: string, voiceId?: string } {
-  if (typeof value === 'string') return { voice: value }
-  if (!value || typeof value !== 'object') return {}
-  const record = value as Record<string, unknown>
-  if (typeof record.voice_id === 'string') return { voiceId: record.voice_id }
-  if (typeof record.voiceId === 'string') return { voiceId: record.voiceId }
-  if (typeof record.id === 'string') return { voiceId: record.id }
-  return {}
 }
 
 function normalizeSpeechMimeType(responseFormat: string | undefined, providerMimeType: string): string {

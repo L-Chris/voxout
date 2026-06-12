@@ -52,42 +52,19 @@ export interface ProviderDefinition {
   secrets: JsonObject
 }
 
-export interface TtsSegment {
-  id: string
-  bookId?: string
-  chapterId?: string
-  startOffset?: number
-  endOffset?: number
-  speaker?: string
-  text: string
-  provider?: string
-  soundEffectPrompt?: string
-  soundEffectDurationSeconds?: number
-  voice?: string
-  voiceId?: string
-  rate?: string
-  pitch?: string
-  volume?: string
-  emotion?: string
-  voicePrompt?: string
-  stylePrompt?: string
-}
-
 export interface SynthesizeRequest {
   provider?: string
   model?: string
+  id?: string
+  text: string
   voice?: string
-  voiceId?: string
   lang?: string
   outputFormat?: string
   streamFormat?: 'audio' | 'sse'
   speed?: number
   pitch?: string
   volume?: string
-  voicePrompt?: string
-  stylePrompt?: string
   instructions?: string
-  segment: TtsSegment
 }
 
 export interface TtsProvider {

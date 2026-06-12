@@ -310,22 +310,6 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   assert.ok(voicesPayload.voices.some(voice => voice.voice_id === payload.id))
 })
 
-test('POST /v1/audio/speech rejects unsupported voice_id providers', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: 'default',
-      input: 'hello',
-      voice_id: 'not-supported',
-    }),
-  })
-  const payload = await response.json()
-
-  assert.equal(response.status, 400)
-  assert.match(payload.error, /voice_id is not supported/)
-})
-
 test('POST /v1/audio/transcriptions accepts multipart file uploads', async () => {
   const form = new FormData()
   form.set('provider', 'mock-asr')

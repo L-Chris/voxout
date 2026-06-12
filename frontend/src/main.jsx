@@ -190,7 +190,6 @@ function App() {
         model: speechForm.model || undefined,
         input: speechForm.input,
         voice: speechForm.voice || undefined,
-        voice_id: speechForm.voiceId || undefined,
         response_format: speechForm.responseFormat,
         stream_format: speechForm.streamFormat || undefined,
         speed: Number(speechForm.speed) || undefined,
@@ -467,7 +466,6 @@ function App() {
                         form={speechForm}
                         onFormChange={setSpeechForm}
                         supportsStreaming={Boolean(selectedProvider.capabilities?.ttsStreaming)}
-                        supportsVoiceId={supportsVoiceId(selectedProvider)}
                         voiceOptions={voiceOptions}
                         voiceTree={voiceTree}
                       />
@@ -580,7 +578,6 @@ function SpeechTestForm({
   form,
   onFormChange,
   supportsStreaming,
-  supportsVoiceId,
   voiceOptions,
   voiceTree,
 }) {
@@ -612,17 +609,6 @@ function SpeechTestForm({
           />
         )}
       </label>
-      {supportsVoiceId ? (
-        <label className="grid gap-1.5 text-sm font-semibold">
-          Voice ID
-          <input
-            className="input"
-            placeholder="optional"
-            value={form.voiceId}
-            onChange={event => onFormChange({ ...form, voiceId: event.target.value })}
-          />
-        </label>
-      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Response format
         <select
@@ -1150,15 +1136,10 @@ function getTestModeLabel(mode) {
   return 'Design'
 }
 
-function supportsVoiceId(provider) {
-  return ['openai', 'elevenlabs', 'mimo', 'cartesia', 'gradium'].includes(provider?.id)
-}
-
 function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
     voice: '',
-    voiceId: '',
     responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
     streamFormat: '',
     speed: '1',

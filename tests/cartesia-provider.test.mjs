@@ -24,14 +24,12 @@ test('Cartesia provider sends text-to-speech requests', async () => {
 
   const provider = new CartesiaProvider()
   const result = await provider.synthesize({
-    voiceId: 'cartesia-voice-1',
+    voice: 'cartesia-voice-1',
     outputFormat: 'mp3',
     lang: 'en-US',
     speed: 1.1,
-    segment: {
-      id: 'tts',
-      text: 'Hello from Cartesia.',
-    },
+    id: 'tts',
+    text: 'Hello from Cartesia.',
   }, {
     config: { ttsModel: 'sonic-3.5' },
     secrets: { apiKey: 'test-cartesia-key' },
@@ -71,10 +69,8 @@ test('Cartesia provider decodes SSE text-to-speech audio streams', async () => {
   const result = await provider.streamSynthesize({
     outputFormat: 'wav',
     streamFormat: 'audio',
-    segment: {
-      id: 'tts-stream',
-      text: 'Stream from Cartesia.',
-    },
+    id: 'tts-stream',
+    text: 'Stream from Cartesia.',
   }, {
     config: {},
     secrets: { apiKey: 'test-cartesia-key' },

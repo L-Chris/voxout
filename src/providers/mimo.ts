@@ -151,17 +151,17 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
 
     const sampleText = normalizePrompt(request.text) ?? normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
-    const voicePrompt = normalizePrompt(request.voiceDescription)
-    if (!voicePrompt) throw new Error('voiceDescription is required')
-    const sample = await this.createDesignedVoiceSample(apiKey, voicePrompt, sampleText, context)
+    const voiceDescription = normalizePrompt(request.voiceDescription)
+    if (!voiceDescription) throw new Error('voiceDescription is required')
+    const sample = await this.createDesignedVoiceSample(apiKey, voiceDescription, sampleText, context)
     const voiceId = `mimo_${randomUUID()}`
     return {
       provider: this.id,
       text: sampleText,
       voices: [{
         voiceId,
-        name: request.name ?? voicePrompt.slice(0, 48),
-        description: voicePrompt,
+        name: request.name ?? voiceDescription.slice(0, 48),
+        description: voiceDescription,
         language: 'zh-CN',
         previewAudioData: sample,
         previewMimeType: 'audio/wav',
@@ -192,18 +192,18 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     }
   }
 
-  private getDesignedVoiceSample(apiKey: string, voicePrompt: string, context: ProviderContext): Promise<string> {
+  private getDesignedVoiceSample(apiKey: string, voiceDescription: string, context: ProviderContext): Promise<string> {
     const sampleText = normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
     const sampleKey = JSON.stringify({
       baseUrl: getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL,
       model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
       optimize: getBooleanConfig(context, 'optimizeTextPreview', true),
-      voicePrompt,
+      voiceDescription,
       sampleText,
     })
     const cached = this.designedVoiceSamples.get(sampleKey)
     if (cached) return cached
-    const promise = this.createDesignedVoiceSample(apiKey, voicePrompt, sampleText, context)
+    const promise = this.createDesignedVoiceSample(apiKey, voiceDescription, sampleText, context)
       .catch(error => {
         this.designedVoiceSamples.delete(sampleKey)
         throw error
@@ -212,10 +212,10 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     return promise
   }
 
-  private async createDesignedVoiceSample(apiKey: string, voicePrompt: string, sampleText: string, context: ProviderContext): Promise<string> {
+  private async createDesignedVoiceSample(apiKey: string, voiceDescription: string, sampleText: string, context: ProviderContext): Promise<string> {
     const response = await postMimoCompletion(apiKey, {
       model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
-      messages: buildMessages(sampleText, voicePrompt),
+      messages: buildMessages(sampleText, voiceDescription),
       audio: {
         format: 'wav',
         optimize_text_preview: getBooleanConfig(context, 'optimizeTextPreview', true),
@@ -230,24 +230,20 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
   }
 
   private async buildSynthesisBody(apiKey: string, request: SynthesizeRequest, context: ProviderContext, streaming = false) {
-    const text = request.segment.text.trim()
-    const voicePrompt = normalizePrompt(request.segment.voicePrompt ?? request.voicePrompt)
-    const stylePrompt = normalizePrompt(request.segment.stylePrompt ?? request.stylePrompt ?? request.segment.emotion)
+    const text = request.text.trim()
+    const instructions = normalizePrompt(request.instructions)
     const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? (streaming ? 'pcm16' : DEFAULT_FORMAT))
-    const requestVoiceId = request.segment.voiceId ?? request.voiceId
-    const designedVoice = voicePrompt
-      ? await this.getDesignedVoiceSample(apiKey, voicePrompt, context)
-      : requestVoiceId?.startsWith('data:')
-        ? requestVoiceId
-        : undefined
-    const voice = designedVoice ?? requestVoiceId ?? request.segment.voice ?? request.voice ?? DEFAULT_VOICE
+    const designedVoice = request.voice?.startsWith('data:')
+      ? request.voice
+      : undefined
+    const voice = designedVoice ?? request.voice ?? DEFAULT_VOICE
     return {
       format,
       body: {
         model: designedVoice
           ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
           : request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
-        messages: buildMessages(text, undefined, stylePrompt),
+        messages: buildMessages(text, undefined, instructions),
         audio: {
           format,
           voice,
@@ -269,11 +265,11 @@ const MIMO_PRESET_VOICES: TtsVoice[] = [
   { id: 'Dean', name: 'Dean', locale: 'en-US', gender: 'Male', provider: 'mimo' },
 ]
 
-function buildMessages(text: string, voicePrompt?: string, stylePrompt?: string) {
+function buildMessages(text: string, voiceDescription?: string, instructions?: string) {
   const messages: Array<{ role: 'user' | 'assistant', content: string }> = []
   const userPrompt = [
-    voicePrompt,
-    stylePrompt && voicePrompt ? `Performance style: ${stylePrompt}` : stylePrompt,
+    voiceDescription,
+    instructions && voiceDescription ? `Performance style: ${instructions}` : instructions,
   ].filter(Boolean).join('\n')
   if (userPrompt) messages.push({ role: 'user', content: userPrompt })
   messages.push({ role: 'assistant', content: text })
