@@ -185,16 +185,10 @@ function App() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto grid max-w-7xl gap-5 px-5 py-7 lg:px-8">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <header>
           <div>
             <h1 className="text-3xl font-bold tracking-normal">voxout</h1>
-            <p className="mt-1 text-slate-500">Provider configuration and OpenAI-compatible audio console</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-500">
-              {apiBaseUrl ? `API: ${apiBaseUrl}` : 'API: same origin'}
-            </span>
-            <button className="btn-primary" type="button" onClick={loadProviders}>Refresh</button>
+            <p className="mt-1 text-slate-500">Provider configuration and audio testing</p>
           </div>
         </header>
 
@@ -257,7 +251,6 @@ function App() {
                 <div className="mt-8 border-t border-slate-200 pt-5">
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="text-lg font-bold">Test API</h2>
-                    <span className="text-sm text-slate-500">OpenAI-compatible `/v1/audio/*` endpoints</span>
                   </div>
                   <div className="mb-4 flex gap-2">
                     {['tts', 'asr'].map(mode => (
