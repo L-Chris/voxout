@@ -30,6 +30,9 @@ The OpenAI-style `model` field maps to a voxout provider id such as `default`,
 `openai`, `mimo`, or `elevenlabs`.
 `/v1/audio/speech` also accepts `voice_id` for providers that support stored
 voice records, currently `openai`, `elevenlabs`, and `mimo`.
+For streaming TTS, pass OpenAI-compatible `stream_format` with `audio` or
+`sse`. Streaming support is currently exposed by `openai`, `mimo`, and
+`elevenlabs`; `elevenlabs` supports raw audio streaming only.
 
 Stored voices are provider-neutral records. Platform-specific voice ids and
 account bindings are kept in `VoiceProviderLink`, so one voxout `voice_id` can
@@ -57,6 +60,15 @@ curl -X POST http://127.0.0.1:4177/v1/audio/speech \
   -H 'content-type: application/json' \
   --output speech.mp3 \
   --data '{"model":"default","input":"你好，voxout。","voice":"zh-CN-XiaoyiNeural","response_format":"mp3"}'
+```
+
+Streaming speech:
+
+```bash
+curl -N -X POST http://127.0.0.1:4177/v1/audio/speech \
+  -H 'content-type: application/json' \
+  --output speech.pcm \
+  --data '{"model":"mimo","input":"你好，voxout。","voice":"Chloe","response_format":"pcm","stream_format":"audio"}'
 ```
 
 Sound effect generation:

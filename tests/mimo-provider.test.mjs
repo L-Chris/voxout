@@ -32,6 +32,57 @@ test('Mimo provider sends preset voice synthesis requests', async () => {
   })
 })
 
+test('Mimo provider streams preset voice synthesis audio chunks', async () => {
+  let captured
+  const audioChunk = Buffer.alloc(256, 2)
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url,
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response(`data: ${JSON.stringify({
+      choices: [{
+        delta: {
+          audio: {
+            data: audioChunk.toString('base64'),
+          },
+        },
+      }],
+    })}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  const provider = new MimoTtsProvider()
+  const result = await provider.streamSynthesize({
+    voice: 'Chloe',
+    outputFormat: 'pcm',
+    streamFormat: 'audio',
+    segment: {
+      id: 'preset-stream',
+      text: '你好，voxout。',
+    },
+  }, {
+    config: {},
+    secrets: { apiKey: 'test-key' },
+  })
+
+  const streamedAudio = await readStreamBuffer(result.stream)
+  assert.equal(result.mimeType, 'audio/pcm')
+  assert.equal(streamedAudio.length, 256)
+  assert.equal(streamedAudio[0], 2)
+  assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
+  assert.equal(captured.headers['api-key'], 'test-key')
+  assert.equal(captured.body.stream, true)
+  assert.equal(captured.body.model, 'mimo-v2.5-tts')
+  assert.deepEqual(captured.body.audio, {
+    format: 'pcm16',
+    voice: 'Chloe',
+  })
+})
+
 test('Mimo provider creates a designed voice sample then voice-clones target speech', async () => {
   const captures = await synthesizeWithMockedFetch({
     providerRequest: {
@@ -244,4 +295,15 @@ async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = 
   assert.equal(result.audio.length, 256)
   assert.equal(result.mimeType, providerRequest.outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav')
   return returnAllCaptures ? captures : captures[0]
+}
+
+async function readStreamBuffer(stream) {
+  const reader = stream.getReader()
+  const chunks = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks)
 }

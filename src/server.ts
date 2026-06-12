@@ -3,6 +3,7 @@ import { mkdir, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { join, normalize } from 'node:path'
+import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { ProviderConfigStore } from './config-store.js'
 import { loadDotEnv } from './env.js'
@@ -167,15 +168,27 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
   const responseFormat = typeof body.response_format === 'string' ? body.response_format : undefined
+  const streamFormat = normalizeSpeechStreamFormat(body.stream_format)
   const request = normalizeSynthesizeInput(provider.id, {
     text: input,
     voice: typeof body.voice === 'string' ? body.voice : undefined,
     voiceId: typeof body.voice_id === 'string' ? body.voice_id : typeof body.voiceId === 'string' ? body.voiceId : undefined,
     outputFormat: responseFormat,
+    streamFormat,
     speed: typeof body.speed === 'number' ? body.speed : undefined,
   })
   await resolveVoiceIdForSynthesis(provider.id, request)
   const timeoutMs = getProviderTimeoutMs(context)
+  if (streamFormat) {
+    if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
+    const result = await withTimeout(
+      provider.streamSynthesize(request, context),
+      timeoutMs,
+      `Speech stream creation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    )
+    sendStream(res, result.stream, streamFormat === 'sse' ? result.mimeType : normalizeSpeechMimeType(responseFormat, result.mimeType))
+    return
+  }
   const result = await withTimeout(
     provider.synthesize(request, context),
     timeoutMs,
@@ -436,6 +449,7 @@ function normalizeSynthesizeInput(providerId: string, input: unknown): Synthesiz
     voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
     lang: typeof value.lang === 'string' ? value.lang : undefined,
     outputFormat: typeof value.outputFormat === 'string' ? value.outputFormat : undefined,
+    streamFormat: value.streamFormat === 'audio' || value.streamFormat === 'sse' ? value.streamFormat : undefined,
     rate: typeof value.rate === 'string' ? value.rate : typeof value.speed === 'number' ? String(value.speed) : undefined,
     pitch: typeof value.pitch === 'string' ? value.pitch : undefined,
     volume: typeof value.volume === 'string' ? value.volume : undefined,
@@ -721,6 +735,14 @@ function sendBinary(res: ServerResponse, value: Buffer, contentType: string): vo
   res.end(value)
 }
 
+function sendStream(res: ServerResponse, stream: ReadableStream<Uint8Array>, contentType: string): void {
+  res.writeHead(200, {
+    'content-type': contentType,
+    'cache-control': 'no-cache',
+  })
+  Readable.fromWeb(stream).on('error', error => res.destroy(error)).pipe(res)
+}
+
 async function sendAudio(res: ServerResponse, fileName: string, headOnly = false): Promise<void> {
   if (!/^[a-f0-9]{64}\.(?:wav|mp3)$/.test(fileName)) {
     sendJson(res, { error: 'Invalid audio file name' }, 400, headOnly)
@@ -812,8 +834,15 @@ function getOpenAiModelProvider(model: unknown, provider: unknown): string {
 function normalizeSpeechMimeType(responseFormat: string | undefined, providerMimeType: string): string {
   const format = responseFormat?.toLowerCase()
   if (format === 'mp3') return 'audio/mpeg'
-  if (format === 'wav' || format === 'pcm') return 'audio/wav'
+  if (format === 'wav') return 'audio/wav'
+  if (format === 'pcm') return 'audio/pcm'
   return providerMimeType
+}
+
+function normalizeSpeechStreamFormat(value: unknown): 'audio' | 'sse' | undefined {
+  if (value == null || value === '') return undefined
+  if (value === 'audio' || value === 'sse') return value
+  throw new Error('stream_format must be "audio" or "sse"')
 }
 
 function normalizeTranscriptionResponseFormat(value: string | undefined): 'json' | 'text' | 'srt' | 'verbose_json' {

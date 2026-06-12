@@ -49,6 +49,48 @@ test('ElevenLabs provider sends text-to-speech requests', async () => {
   })
 })
 
+test('ElevenLabs provider streams text-to-speech requests', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url: String(url),
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response(Buffer.alloc(256, 1), {
+      status: 200,
+      headers: { 'content-type': 'audio/mpeg' },
+    })
+  }
+
+  const provider = new ElevenLabsProvider()
+  const result = await provider.streamSynthesize({
+    voice: 'voice-123',
+    outputFormat: 'mp3_44100_192',
+    streamFormat: 'audio',
+    segment: {
+      id: 'tts',
+      text: 'Hello from ElevenLabs.',
+    },
+  }, {
+    config: {
+      ttsModel: 'eleven_multilingual_v2',
+    },
+    secrets: {
+      apiKey: 'test-eleven-key',
+    },
+  })
+
+  assert.equal(result.mimeType, 'audio/mpeg')
+  assert.equal((await readStreamBuffer(result.stream)).length, 256)
+  assert.equal(captured.url, 'https://api.elevenlabs.io/v1/text-to-speech/voice-123/stream?output_format=mp3_44100_192')
+  assert.equal(captured.headers['xi-api-key'], 'test-eleven-key')
+  assert.deepEqual(captured.body, {
+    text: 'Hello from ElevenLabs.',
+    model_id: 'eleven_multilingual_v2',
+  })
+})
+
 test('ElevenLabs provider sends speech-to-text requests', async () => {
   let captured
   globalThis.fetch = async (url, init) => {
@@ -270,3 +312,14 @@ test('ElevenLabs provider exposes TTS, ASR, and sound effect metadata', async ()
   assert.equal(elevenlabs.capabilities.soundEffects, true)
   assert.equal(elevenlabs.capabilities.voiceClone, true)
 })
+
+async function readStreamBuffer(stream) {
+  const reader = stream.getReader()
+  const chunks = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks)
+}

@@ -68,7 +68,7 @@ interface ElevenLabsClonePayload {
 export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'elevenlabs'
   readonly name = 'ElevenLabs'
-  readonly capabilities = { tts: true, asr: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
@@ -113,6 +113,38 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
       language_code: normalizeLanguageCode(request.lang),
     }, apiKey)
     return response
+  }
+
+  async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    if (request.streamFormat === 'sse') throw new Error('ElevenLabs TTS streaming supports stream_format "audio" only.')
+    const apiKey = getApiKey(context)
+    const text = request.segment.text.trim()
+    const voiceId = request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
+    const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}/stream`)
+    url.searchParams.set('output_format', outputFormat)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify(compactObject({
+        text,
+        model_id: getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+        language_code: normalizeLanguageCode(request.lang),
+      })),
+    })
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      throw new Error(detail || `ElevenLabs text-to-speech stream request failed: ${response.status}`)
+    }
+    if (!response.body) throw new Error('ElevenLabs text-to-speech stream response was empty.')
+    return {
+      stream: response.body,
+      mimeType: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
+    }
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {

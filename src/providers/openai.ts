@@ -48,7 +48,7 @@ interface OpenAiTranscriptionPayload {
 export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
   readonly id = 'openai'
   readonly name = 'OpenAI'
-  readonly capabilities = { tts: true, asr: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceClone: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
@@ -66,9 +66,46 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   }
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    const responseFormat = normalizeResponseFormat(request.outputFormat ?? getConfigString(context, 'responseFormat') ?? DEFAULT_RESPONSE_FORMAT)
+    const response = await this.createSpeech(request, context, responseFormat)
+    const audio = Buffer.from(await response.arrayBuffer())
+    if (!response.ok) {
+      const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      throw new Error(detail || `OpenAI speech request failed: ${response.status}`)
+    }
+    if (audio.length < 128) throw new Error('OpenAI speech response audio was empty.')
+    return {
+      audio,
+      mimeType: getMimeType(responseFormat, response.headers.get('content-type') ?? undefined),
+      durationMs: 0,
+    }
+  }
+
+  async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    const responseFormat = normalizeResponseFormat(request.outputFormat ?? getConfigString(context, 'responseFormat') ?? DEFAULT_RESPONSE_FORMAT)
+    const streamFormat = request.streamFormat ?? 'audio'
+    const response = await this.createSpeech(request, context, responseFormat, streamFormat)
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      throw new Error(detail || `OpenAI speech stream request failed: ${response.status}`)
+    }
+    if (!response.body) throw new Error('OpenAI speech stream response was empty.')
+    return {
+      stream: response.body,
+      mimeType: streamFormat === 'sse'
+        ? response.headers.get('content-type')?.split(';')[0] || 'text/event-stream'
+        : getMimeType(responseFormat, response.headers.get('content-type') ?? undefined),
+    }
+  }
+
+  private async createSpeech(
+    request: SynthesizeRequest,
+    context: ProviderContext,
+    responseFormat: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm',
+    streamFormat?: 'audio' | 'sse',
+  ): Promise<Response> {
     const apiKey = getApiKey(context)
     const text = request.segment.text.trim()
-    const responseFormat = normalizeResponseFormat(request.outputFormat ?? getConfigString(context, 'responseFormat') ?? DEFAULT_RESPONSE_FORMAT)
     const response = await fetch(`${getBaseUrl(context)}/audio/speech`, {
       method: 'POST',
       headers: {
@@ -81,19 +118,10 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         voice: request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoice') ?? DEFAULT_VOICE,
         response_format: responseFormat,
         speed: normalizeSpeed(request.rate),
+        stream_format: streamFormat,
       })),
     })
-    const audio = Buffer.from(await response.arrayBuffer())
-    if (!response.ok) {
-      const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
-      throw new Error(detail || `OpenAI speech request failed: ${response.status}`)
-    }
-    if (audio.length < 128) throw new Error('OpenAI speech response audio was empty.')
-    return {
-      audio,
-      mimeType: getMimeType(responseFormat, response.headers.get('content-type') ?? undefined),
-      durationMs: 0,
-    }
+    return response
   }
 
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {

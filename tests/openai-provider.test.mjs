@@ -47,6 +47,46 @@ test('OpenAI provider sends text-to-speech requests', async () => {
   })
 })
 
+test('OpenAI provider streams text-to-speech requests', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url: String(url),
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response('data: {"type":"audio.delta"}\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  const provider = new OpenAiProvider()
+  const result = await provider.streamSynthesize({
+    outputFormat: 'mp3',
+    streamFormat: 'sse',
+    segment: {
+      id: 'tts',
+      text: 'Hello from OpenAI.',
+    },
+  }, {
+    config: { ttsModel: 'gpt-4o-mini-tts' },
+    secrets: { apiKey: 'test-openai-key' },
+  })
+
+  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(await readStreamText(result.stream), 'data: {"type":"audio.delta"}\n\n')
+  assert.equal(captured.url, 'https://api.openai.com/v1/audio/speech')
+  assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
+  assert.deepEqual(captured.body, {
+    model: 'gpt-4o-mini-tts',
+    input: 'Hello from OpenAI.',
+    voice: 'alloy',
+    response_format: 'mp3',
+    stream_format: 'sse',
+  })
+})
+
 test('OpenAI provider sends voice clone requests', async () => {
   let captured
   globalThis.fetch = async (url, init) => {
@@ -148,3 +188,14 @@ test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   assert.ok(openai.fields.find(field => field.key === 'ttsModel').options.includes('gpt-4o-mini-tts'))
   assert.ok(openai.fields.find(field => field.key === 'asrModel').options.includes('gpt-4o-transcribe'))
 })
+
+async function readStreamText(stream) {
+  const reader = stream.getReader()
+  const chunks = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}

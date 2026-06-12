@@ -108,6 +108,46 @@ test('POST /v1/audio/speech returns generated audio bytes', async () => {
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
 })
 
+test('POST /v1/audio/speech streams generated audio bytes', async () => {
+  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello from openai compatible speech',
+      voice: 'mock-narrator',
+      response_format: 'wav',
+      stream_format: 'audio',
+    }),
+  })
+  const audio = Buffer.from(await response.arrayBuffer())
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^audio\/wav/)
+  assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
+  assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
+})
+
+test('POST /v1/audio/speech streams SSE events', async () => {
+  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello from openai compatible speech',
+      voice: 'mock-narrator',
+      response_format: 'wav',
+      stream_format: 'sse',
+    }),
+  })
+  const text = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^text\/event-stream/)
+  assert.match(text, /audio\.delta/)
+  assert.match(text, /\[DONE\]/)
+})
+
 test('POST /v1/audio/effect returns generated audio bytes', async () => {
   const response = await fetch(`${baseUrl}/v1/audio/effect`, {
     method: 'POST',

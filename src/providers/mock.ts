@@ -21,7 +21,7 @@ const SAMPLE_RATE = 24_000
 export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'mock'
   readonly name = 'Mock WAV Provider'
-  readonly capabilities = { tts: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
 
   async listVoices(): Promise<TtsVoice[]> {
     return [
@@ -35,6 +35,24 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
     const durationMs = Math.min(5000, Math.max(700, text.length * 80))
     const audio = createToneWav(durationMs, getFrequency(request.segment.voice ?? request.voice))
     return { audio, mimeType: 'audio/wav', durationMs }
+  }
+
+  async streamSynthesize(request: SynthesizeRequest) {
+    const result = await this.synthesize(request)
+    if (request.streamFormat === 'sse') {
+      const payload = {
+        type: 'audio.delta',
+        audio: result.audio.toString('base64'),
+      }
+      return {
+        stream: createStreamFromBuffer(Buffer.from(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`)),
+        mimeType: 'text/event-stream',
+      }
+    }
+    return {
+      stream: createStreamFromBuffer(result.audio),
+      mimeType: result.mimeType,
+    }
   }
 
   async createSoundEffect(request: SoundEffectRequest) {
@@ -132,4 +150,13 @@ function createToneWav(durationMs: number, frequency: number): Buffer {
   }
 
   return buffer
+}
+
+function createStreamFromBuffer(buffer: Buffer): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(buffer)
+      controller.close()
+    },
+  })
 }

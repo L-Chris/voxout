@@ -9,6 +9,7 @@ export interface TtsVoice {
 
 export interface TtsProviderCapabilities {
   tts?: boolean
+  ttsStreaming?: boolean
   asr?: boolean
   voiceDesign?: boolean
   voiceClone?: boolean
@@ -78,6 +79,7 @@ export interface SynthesizeRequest {
   voiceId?: string
   lang?: string
   outputFormat?: string
+  streamFormat?: 'audio' | 'sse'
   rate?: string
   pitch?: string
   volume?: string
@@ -96,6 +98,10 @@ export interface TtsProvider {
     audio: Buffer
     mimeType: string
     durationMs: number
+  }>
+  streamSynthesize?(request: SynthesizeRequest, context?: ProviderContext): Promise<{
+    stream: ReadableStream<Uint8Array>
+    mimeType: string
   }>
 }
 

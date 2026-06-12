@@ -189,10 +189,21 @@ function App() {
         voice: speechForm.voice || undefined,
         voice_id: speechForm.voiceId || undefined,
         response_format: speechForm.responseFormat,
+        stream_format: speechForm.streamFormat || undefined,
         speed: Number(speechForm.speed) || undefined,
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
+    if (speechForm.streamFormat === 'sse') {
+      const text = await response.text()
+      setTestResult({
+        kind: 'json',
+        content: text,
+        mimeType: response.headers.get('content-type') || 'text/event-stream',
+        endpoint: 'POST /v1/audio/speech',
+      })
+      return
+    }
     const blob = await response.blob()
     const objectUrl = URL.createObjectURL(blob)
     setTestResult({
@@ -452,6 +463,7 @@ function App() {
                       <SpeechTestForm
                         form={speechForm}
                         onFormChange={setSpeechForm}
+                        supportsStreaming={Boolean(selectedProvider.capabilities?.ttsStreaming)}
                         supportsVoiceId={supportsVoiceId(selectedProvider)}
                         voiceOptions={voiceOptions}
                       />
@@ -560,7 +572,7 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
   )
 }
 
-function SpeechTestForm({ form, onFormChange, supportsVoiceId, voiceOptions }) {
+function SpeechTestForm({ form, onFormChange, supportsStreaming, supportsVoiceId, voiceOptions }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -614,6 +626,20 @@ function SpeechTestForm({ form, onFormChange, supportsVoiceId, voiceOptions }) {
           <option value="mp3">mp3</option>
         </select>
       </label>
+      {supportsStreaming ? (
+        <label className="grid gap-1.5 text-sm font-semibold">
+          Stream format
+          <select
+            className="input"
+            value={form.streamFormat}
+            onChange={event => onFormChange({ ...form, streamFormat: event.target.value })}
+          >
+            <option value="">off</option>
+            <option value="audio">audio</option>
+            <option value="sse">sse</option>
+          </select>
+        </label>
+      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Speed
         <input
@@ -1035,6 +1061,7 @@ function defaultSpeechForm(provider) {
     voice: '',
     voiceId: '',
     responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
+    streamFormat: '',
     speed: '1',
   }
 }

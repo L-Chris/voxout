@@ -15,6 +15,7 @@ import type {
 } from '../types.js'
 import { getProviderTimeoutMs } from '../timeout.js'
 import { randomUUID } from 'node:crypto'
+import { TextDecoder } from 'node:util'
 
 const DEFAULT_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const DEFAULT_TTS_MODEL = 'mimo-v2.5-tts'
@@ -42,10 +43,20 @@ interface MimoCompletionResponse {
   }
 }
 
+interface MimoCompletionChunk {
+  choices?: Array<{
+    delta?: {
+      audio?: {
+        data?: string
+      }
+    }
+  }>
+}
+
 export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'mimo'
   readonly name = 'Xiaomi MiMo'
-  readonly capabilities = { tts: true, asr: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceDesign: true, voiceClone: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
@@ -68,27 +79,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const apiKey = getSecretString(context, 'apiKey')
     if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
 
-    const text = request.segment.text.trim()
-    const voicePrompt = normalizePrompt(request.segment.voicePrompt ?? request.voicePrompt)
-    const stylePrompt = normalizePrompt(request.segment.stylePrompt ?? request.stylePrompt ?? request.segment.emotion)
-    const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? DEFAULT_FORMAT)
-    const requestVoiceId = request.segment.voiceId ?? request.voiceId
-    const designedVoice = voicePrompt
-      ? await this.getDesignedVoiceSample(apiKey, voicePrompt, context)
-      : requestVoiceId?.startsWith('data:')
-        ? requestVoiceId
-        : undefined
-    const voice = designedVoice ?? requestVoiceId ?? request.segment.voice ?? request.voice ?? DEFAULT_VOICE
-    const body = {
-      model: designedVoice
-        ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
-        : getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
-      messages: buildMessages(text, undefined, stylePrompt),
-      audio: {
-        format,
-        voice,
-      },
-    }
+    const { body, format } = await this.buildSynthesisBody(apiKey, request, context)
     const response = await postMimoCompletion(apiKey, body, context)
     const audioData = response.choices?.[0]?.message?.audio?.data
     if (!audioData) throw new Error('MiMo TTS response did not include audio data.')
@@ -98,6 +89,26 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
       audio,
       mimeType: getMimeType(format),
       durationMs: 0,
+    }
+  }
+
+  async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
+    const apiKey = getSecretString(context, 'apiKey')
+    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+
+    const streamFormat = request.streamFormat ?? 'audio'
+    const { body, format } = await this.buildSynthesisBody(apiKey, request, context, true)
+    const response = await postMimoCompletionStream(apiKey, { ...body, stream: true }, context)
+    if (!response.body) throw new Error('MiMo TTS stream response was empty.')
+    if (streamFormat === 'sse') {
+      return {
+        stream: response.body,
+        mimeType: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
+      }
+    }
+    return {
+      stream: decodeMimoAudioSseStream(response.body),
+      mimeType: getMimeType(format),
     }
   }
 
@@ -217,6 +228,33 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     if (audio.length < 128) throw new Error('MiMo voice design response audio was empty.')
     return `data:audio/wav;base64,${base64}`
   }
+
+  private async buildSynthesisBody(apiKey: string, request: SynthesizeRequest, context: ProviderContext, streaming = false) {
+    const text = request.segment.text.trim()
+    const voicePrompt = normalizePrompt(request.segment.voicePrompt ?? request.voicePrompt)
+    const stylePrompt = normalizePrompt(request.segment.stylePrompt ?? request.stylePrompt ?? request.segment.emotion)
+    const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? (streaming ? 'pcm16' : DEFAULT_FORMAT))
+    const requestVoiceId = request.segment.voiceId ?? request.voiceId
+    const designedVoice = voicePrompt
+      ? await this.getDesignedVoiceSample(apiKey, voicePrompt, context)
+      : requestVoiceId?.startsWith('data:')
+        ? requestVoiceId
+        : undefined
+    const voice = designedVoice ?? requestVoiceId ?? request.segment.voice ?? request.voice ?? DEFAULT_VOICE
+    return {
+      format,
+      body: {
+        model: designedVoice
+          ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
+          : getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+        messages: buildMessages(text, undefined, stylePrompt),
+        audio: {
+          format,
+          voice,
+        },
+      },
+    }
+  }
 }
 
 const MIMO_PRESET_VOICES: TtsVoice[] = [
@@ -276,18 +314,47 @@ async function postMimoCompletion(apiKey: string, body: unknown, context: Provid
   }
 }
 
+async function postMimoCompletionStream(apiKey: string, body: unknown, context: ProviderContext): Promise<Response> {
+  const baseUrl = trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
+  const timeoutMs = getProviderTimeoutMs(context)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'api-key': apiKey,
+        'authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text.slice(0, 500) || `MiMo stream request failed: ${response.status}`)
+  }
+  return response
+}
+
 function normalizePrompt(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
 }
 
-function normalizeAudioFormat(value: string): 'mp3' | 'wav' {
+function normalizeAudioFormat(value: string): 'mp3' | 'wav' | 'pcm16' {
   const normalized = value.toLowerCase()
   if (normalized.includes('mp3')) return 'mp3'
+  if (normalized === 'pcm' || normalized === 'pcm16' || normalized.includes('pcm16')) return 'pcm16'
   return 'wav'
 }
 
-function getMimeType(format: 'mp3' | 'wav'): string {
+function getMimeType(format: 'mp3' | 'wav' | 'pcm16'): string {
+  if (format === 'pcm16') return 'audio/pcm'
   return format === 'mp3' ? 'audio/mpeg' : 'audio/wav'
 }
 
@@ -345,4 +412,56 @@ async function resolveAudioDataUrl(request: TranscribeRequest, context: Provider
 function normalizeMimeType(value?: string): string {
   const mimeType = value?.split(';')[0]?.trim()
   return mimeType || 'audio/mpeg'
+}
+
+function decodeMimoAudioSseStream(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  let buffer = ''
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = stream.getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          buffer = emitMimoAudioEvents(buffer, controller)
+        }
+        buffer += decoder.decode()
+        emitMimoAudioEvents(`${buffer}\n\n`, controller)
+        controller.close()
+      } catch (error) {
+        controller.error(error)
+      } finally {
+        reader.releaseLock()
+      }
+    },
+  })
+}
+
+function emitMimoAudioEvents(buffer: string, controller: ReadableStreamDefaultController<Uint8Array>): string {
+  const parts = buffer.split(/\r?\n\r?\n/)
+  const remainder = parts.pop() ?? ''
+  for (const part of parts) {
+    const data = part
+      .split(/\r?\n/)
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n')
+      .trim()
+    if (!data || data === '[DONE]') continue
+    const chunk = parseMimoAudioChunk(data)
+    if (chunk.length) controller.enqueue(chunk)
+  }
+  return remainder
+}
+
+function parseMimoAudioChunk(data: string): Buffer {
+  try {
+    const payload = JSON.parse(data) as MimoCompletionChunk
+    const audioData = payload.choices?.[0]?.delta?.audio?.data
+    return audioData ? Buffer.from(stripDataUrlPrefix(audioData), 'base64') : Buffer.alloc(0)
+  } catch {
+    return Buffer.alloc(0)
+  }
 }
