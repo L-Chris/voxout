@@ -4,7 +4,16 @@ import { BilibiliAsrProvider } from './bilibili-asr.js'
 import { MimoTtsProvider } from './mimo.js'
 import { MockAsrProvider } from './mock-asr.js'
 import { MockTtsProvider } from './mock.js'
-import type { AsrProvider, ProviderDefinition, ProviderFieldDefinition, ProviderRuntimeConfig, SoundEffectProvider, TtsProvider } from '../types.js'
+import type {
+  AsrProvider,
+  AudioIsolationProvider,
+  ProviderDefinition,
+  ProviderFieldDefinition,
+  ProviderRuntimeConfig,
+  SoundEffectProvider,
+  TtsProvider,
+  VoiceDesignProvider,
+} from '../types.js'
 
 const COMMON_PROVIDER_FIELDS: ProviderFieldDefinition[] = [
   { key: 'timeoutMs', label: 'Timeout (ms)', type: 'number', placeholder: '45000' },
@@ -14,6 +23,8 @@ const INTERNAL_PROVIDER_IDS = new Set(['mock', 'mock-asr'])
 const ttsProviders = new Map<string, TtsProvider>()
 const asrProviders = new Map<string, AsrProvider>()
 const soundEffectProviders = new Map<string, SoundEffectProvider>()
+const audioIsolationProviders = new Map<string, AudioIsolationProvider>()
+const voiceDesignProviders = new Map<string, VoiceDesignProvider>()
 
 export function registerTtsProvider(provider: TtsProvider): void {
   ttsProviders.set(provider.id, provider)
@@ -25,6 +36,14 @@ export function registerAsrProvider(provider: AsrProvider): void {
 
 export function registerSoundEffectProvider(provider: SoundEffectProvider): void {
   soundEffectProviders.set(provider.id, provider)
+}
+
+export function registerAudioIsolationProvider(provider: AudioIsolationProvider): void {
+  audioIsolationProviders.set(provider.id, provider)
+}
+
+export function registerVoiceDesignProvider(provider: VoiceDesignProvider): void {
+  voiceDesignProviders.set(provider.id, provider)
 }
 
 export function getTtsProvider(id = 'mock'): TtsProvider {
@@ -51,12 +70,36 @@ export function getSoundEffectProvider(id = 'mock'): SoundEffectProvider {
   return provider
 }
 
-export function getProvider(id: string): TtsProvider | AsrProvider | SoundEffectProvider {
-  const provider = ttsProviders.get(id) ?? asrProviders.get(id) ?? soundEffectProviders.get(id)
+export function getAudioIsolationProvider(id: string): AudioIsolationProvider {
+  const provider = audioIsolationProviders.get(id)
+  if (!provider) {
+    throw new Error(`Unknown audio isolation provider: ${id}`)
+  }
+  return provider
+}
+
+export function getVoiceDesignProvider(id: string): VoiceDesignProvider {
+  const provider = voiceDesignProviders.get(id)
+  if (!provider) {
+    throw new Error(`Unknown voice design provider: ${id}`)
+  }
+  return provider
+}
+
+export function getProvider(id: string): TtsProvider | AsrProvider | SoundEffectProvider | AudioIsolationProvider | VoiceDesignProvider {
+  const provider = ttsProviders.get(id)
+    ?? asrProviders.get(id)
+    ?? soundEffectProviders.get(id)
+    ?? audioIsolationProviders.get(id)
+    ?? voiceDesignProviders.get(id)
   if (!provider) {
     throw new Error(`Unknown provider: ${id}`)
   }
   return provider
+}
+
+export function isInternalProviderId(id: string): boolean {
+  return INTERNAL_PROVIDER_IDS.has(id)
 }
 
 export function listTtsProviders(): TtsProvider[] {
@@ -71,12 +114,26 @@ export function listSoundEffectProviders(): SoundEffectProvider[] {
   return [...soundEffectProviders.values()]
 }
 
+export function listAudioIsolationProviders(): AudioIsolationProvider[] {
+  return [...audioIsolationProviders.values()]
+}
+
+export function listVoiceDesignProviders(): VoiceDesignProvider[] {
+  return [...voiceDesignProviders.values()]
+}
+
 export function listProviderDefinitions(
   configs = new Map<string, ProviderRuntimeConfig>(),
   options: { includeInternal?: boolean } = {},
 ): ProviderDefinition[] {
   const providers = [...new Map(
-    [...ttsProviders.values(), ...asrProviders.values(), ...soundEffectProviders.values()].map(provider => [provider.id, provider]),
+    [
+      ...ttsProviders.values(),
+      ...asrProviders.values(),
+      ...soundEffectProviders.values(),
+      ...audioIsolationProviders.values(),
+      ...voiceDesignProviders.values(),
+    ].map(provider => [provider.id, provider]),
   ).values()].filter(provider => options.includeInternal || !INTERNAL_PROVIDER_IDS.has(provider.id))
   return providers.map(provider => {
     const config = configs.get(provider.id) ?? { enabled: true, config: {}, secrets: {} }
@@ -115,6 +172,8 @@ function hasConfiguredSecrets(secrets: ProviderRuntimeConfig['secrets']): boolea
 const mockProvider = new MockTtsProvider()
 registerTtsProvider(mockProvider)
 registerSoundEffectProvider(mockProvider)
+registerAudioIsolationProvider(mockProvider)
+registerVoiceDesignProvider(mockProvider)
 registerTtsProvider(new EdgeTtsProvider())
 const mimoProvider = new MimoTtsProvider()
 registerTtsProvider(mimoProvider)
@@ -122,6 +181,9 @@ const elevenLabsProvider = new ElevenLabsProvider()
 registerTtsProvider(elevenLabsProvider)
 registerAsrProvider(elevenLabsProvider)
 registerSoundEffectProvider(elevenLabsProvider)
+registerAudioIsolationProvider(elevenLabsProvider)
+registerVoiceDesignProvider(elevenLabsProvider)
 registerAsrProvider(new MockAsrProvider())
 registerAsrProvider(mimoProvider)
+registerVoiceDesignProvider(mimoProvider)
 registerAsrProvider(new BilibiliAsrProvider())

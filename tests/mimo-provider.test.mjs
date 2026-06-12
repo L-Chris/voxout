@@ -69,6 +69,60 @@ test('Mimo provider creates a designed voice sample then voice-clones target spe
   assert.match(captures[1].body.audio.voice, /^data:audio\/wav;base64,/)
 })
 
+test('Mimo provider designs a reusable voice preview', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url,
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          audio: {
+            data: Buffer.alloc(256, 1).toString('base64'),
+            transcript: '你好，我会用这个声音为角色说话。',
+          },
+        },
+      }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  const provider = new MimoTtsProvider()
+  const result = await provider.designVoice({
+    voiceDescription: '年轻男性，冷静克制，嗓音清亮。',
+    name: '冷静男声',
+  }, {
+    config: {},
+    secrets: { apiKey: 'test-key' },
+  })
+
+  assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
+  assert.equal(captured.body.model, 'mimo-v2.5-tts-voicedesign')
+  assert.equal(result.voices[0].name, '冷静男声')
+  assert.match(result.voices[0].voiceId, /^mimo_/)
+  assert.match(result.voices[0].previewAudioData, /^data:audio\/wav;base64,/)
+})
+
+test('Mimo provider uses voice_id data URLs with the voice clone model', async () => {
+  const captured = await synthesizeWithMockedFetch({
+    providerRequest: {
+      voiceId: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
+      segment: {
+        id: 'voice-id',
+        text: '用保存的声音说话。',
+      },
+    },
+  })
+
+  assert.equal(captured.body.model, 'mimo-v2.5-tts-voiceclone')
+  assert.match(captured.body.audio.voice, /^data:audio\/wav;base64,/)
+})
+
 test('Mimo provider exposes voice design capability metadata', async () => {
   const provider = new MimoTtsProvider()
   const voices = await provider.listVoices()

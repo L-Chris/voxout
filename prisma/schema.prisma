@@ -18,3 +18,21 @@ model ProviderConfig {
 
   @@index([enabled])
 }
+
+model Voice {
+  id              String   @id @default(cuid())
+  providerId      String
+  voiceId         String
+  providerVoiceId String?
+  name            String
+  description     String?  @db.Text
+  language        String?
+  previewMimeType String?
+  previewAudio    String?  @db.LongText
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([providerId, voiceId])
+  @@index([providerId])
+}

@@ -1,8 +1,9 @@
 import { PrismaClient } from '@prisma/client'
-import type { JsonObject, ProviderConfigInput, ProviderConfigRecord, ProviderRuntimeConfig } from './types.js'
+import type { JsonObject, ProviderConfigInput, ProviderConfigRecord, ProviderRuntimeConfig, VoiceInput, VoiceRecord } from './types.js'
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient
+  voices?: VoiceRecord[]
 }
 
 export class ProviderConfigStore {
@@ -80,6 +81,79 @@ export class ProviderConfigStore {
       updatedAt: record.updatedAt.toISOString(),
     }
   }
+
+  async listVoices(providerId?: string): Promise<VoiceRecord[]> {
+    if (!this.prisma) {
+      const voices = globalForPrisma.voices ?? []
+      return providerId ? voices.filter(voice => voice.providerId === providerId) : voices
+    }
+    const records = await this.prisma.voice.findMany({
+      where: providerId ? { providerId } : undefined,
+      orderBy: [{ providerId: 'asc' }, { name: 'asc' }],
+    })
+    return records.map(toVoiceRecord)
+  }
+
+  async getVoice(providerId: string, voiceId: string): Promise<VoiceRecord | null> {
+    if (!this.prisma) {
+      return (globalForPrisma.voices ?? []).find(voice => voice.providerId === providerId && voice.voiceId === voiceId) ?? null
+    }
+    const record = await this.prisma.voice.findUnique({
+      where: { providerId_voiceId: { providerId, voiceId } },
+    })
+    return record ? toVoiceRecord(record) : null
+  }
+
+  async upsertVoice(input: VoiceInput): Promise<VoiceRecord> {
+    const metadata = sanitizeObject(input.metadata)
+    if (!this.prisma) {
+      const voices = globalForPrisma.voices ?? []
+      const index = voices.findIndex(voice => voice.providerId === input.providerId && voice.voiceId === input.voiceId)
+      const now = new Date().toISOString()
+      const record: VoiceRecord = {
+        id: index >= 0 ? voices[index].id : `${input.providerId}:${input.voiceId}`,
+        providerId: input.providerId,
+        voiceId: input.voiceId,
+        providerVoiceId: input.providerVoiceId,
+        name: input.name,
+        description: input.description,
+        language: input.language,
+        previewMimeType: input.previewMimeType,
+        previewAudio: input.previewAudio,
+        metadata,
+        createdAt: index >= 0 ? voices[index].createdAt : now,
+        updatedAt: now,
+      }
+      if (index >= 0) voices[index] = record
+      else voices.push(record)
+      globalForPrisma.voices = voices
+      return record
+    }
+    const record = await this.prisma.voice.upsert({
+      where: { providerId_voiceId: { providerId: input.providerId, voiceId: input.voiceId } },
+      create: {
+        providerId: input.providerId,
+        voiceId: input.voiceId,
+        providerVoiceId: input.providerVoiceId,
+        name: input.name,
+        description: input.description,
+        language: input.language,
+        previewMimeType: input.previewMimeType,
+        previewAudio: input.previewAudio,
+        metadata,
+      },
+      update: {
+        providerVoiceId: input.providerVoiceId,
+        name: input.name,
+        description: input.description,
+        language: input.language,
+        previewMimeType: input.previewMimeType,
+        previewAudio: input.previewAudio,
+        metadata,
+      },
+    })
+    return toVoiceRecord(record)
+  }
 }
 
 function sanitizeObject(value: unknown): JsonObject {
@@ -92,4 +166,34 @@ function sanitizeObject(value: unknown): JsonObject {
 
 function toJsonObject(value: unknown): JsonObject {
   return sanitizeObject(value)
+}
+
+function toVoiceRecord(record: {
+  id: string
+  providerId: string
+  voiceId: string
+  providerVoiceId: string | null
+  name: string
+  description: string | null
+  language: string | null
+  previewMimeType: string | null
+  previewAudio: string | null
+  metadata: unknown
+  createdAt: Date
+  updatedAt: Date
+}): VoiceRecord {
+  return {
+    id: record.id,
+    providerId: record.providerId,
+    voiceId: record.voiceId,
+    providerVoiceId: record.providerVoiceId ?? undefined,
+    name: record.name,
+    description: record.description ?? undefined,
+    language: record.language ?? undefined,
+    previewMimeType: record.previewMimeType ?? undefined,
+    previewAudio: record.previewAudio ?? undefined,
+    metadata: toJsonObject(record.metadata),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  }
 }

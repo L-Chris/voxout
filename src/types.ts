@@ -12,6 +12,7 @@ export interface TtsProviderCapabilities {
   asr?: boolean
   voiceDesign?: boolean
   soundEffects?: boolean
+  isolation?: boolean
 }
 
 export type ProviderCapabilities = TtsProviderCapabilities
@@ -60,6 +61,7 @@ export interface TtsSegment {
   soundEffectPrompt?: string
   soundEffectDurationSeconds?: number
   voice?: string
+  voiceId?: string
   rate?: string
   pitch?: string
   volume?: string
@@ -71,6 +73,7 @@ export interface TtsSegment {
 export interface SynthesizeRequest {
   provider?: string
   voice?: string
+  voiceId?: string
   lang?: string
   outputFormat?: string
   rate?: string
@@ -79,15 +82,6 @@ export interface SynthesizeRequest {
   voicePrompt?: string
   stylePrompt?: string
   segment: TtsSegment
-}
-
-export interface SynthesizeResult {
-  segmentId: string
-  audioUrl: string
-  fileName: string
-  mimeType: string
-  durationMs: number
-  cacheHit: boolean
 }
 
 export interface TtsProvider {
@@ -136,6 +130,49 @@ export interface SoundEffectRequest {
   loop?: boolean
 }
 
+export interface AudioIsolationRequest {
+  provider?: string
+  audioData: string
+  mimeType?: string
+  fileFormat?: 'pcm_s16le_16' | 'other'
+  previewBase64?: string
+}
+
+export interface VoiceDesignRequest {
+  provider?: string
+  voiceDescription: string
+  name?: string
+  text?: string
+  outputFormat?: string
+  model?: string
+  autoGenerateText?: boolean
+  loudness?: number
+  seed?: number
+  guidanceScale?: number
+  quality?: number
+  referenceAudioData?: string
+  promptStrength?: number
+}
+
+export interface VoicePreview {
+  voiceId: string
+  providerVoiceId?: string
+  name: string
+  description?: string
+  language?: string
+  previewAudioData?: string
+  previewMimeType?: string
+  durationSeconds?: number
+  metadata?: JsonObject
+}
+
+export interface VoiceDesignResult {
+  provider: string
+  text?: string
+  voices: VoicePreview[]
+  raw?: unknown
+}
+
 export interface AudioGenerationResult {
   audio: Buffer
   mimeType: string
@@ -158,6 +195,22 @@ export interface SoundEffectProvider {
   createSoundEffect(request: SoundEffectRequest, context?: ProviderContext): Promise<AudioGenerationResult>
 }
 
+export interface AudioIsolationProvider {
+  readonly id: string
+  readonly name: string
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  isolateAudio(request: AudioIsolationRequest, context?: ProviderContext): Promise<AudioGenerationResult>
+}
+
+export interface VoiceDesignProvider {
+  readonly id: string
+  readonly name: string
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  designVoice(request: VoiceDesignRequest, context?: ProviderContext): Promise<VoiceDesignResult>
+}
+
 export interface ProviderRuntimeConfig {
   enabled: boolean
   config: JsonObject
@@ -174,4 +227,31 @@ export interface ProviderConfigRecord extends ProviderRuntimeConfig {
   providerId: string
   createdAt?: string
   updatedAt?: string
+}
+
+export interface VoiceRecord {
+  id: string
+  providerId: string
+  voiceId: string
+  providerVoiceId?: string
+  name: string
+  description?: string
+  language?: string
+  previewMimeType?: string
+  previewAudio?: string
+  metadata: JsonObject
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface VoiceInput {
+  providerId: string
+  voiceId: string
+  providerVoiceId?: string
+  name: string
+  description?: string
+  language?: string
+  previewMimeType?: string
+  previewAudio?: string
+  metadata?: JsonObject
 }

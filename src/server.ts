@@ -6,15 +6,32 @@ import { join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ProviderConfigStore } from './config-store.js'
 import { loadDotEnv } from './env.js'
-import { getAsrProvider, getSoundEffectProvider, getTtsProvider, listAsrProviders, listProviderDefinitions, listSoundEffectProviders, listTtsProviders } from './providers/registry.js'
+import {
+  getAsrProvider,
+  getAudioIsolationProvider,
+  getSoundEffectProvider,
+  getTtsProvider,
+  getVoiceDesignProvider,
+  isInternalProviderId,
+  listAsrProviders,
+  listAudioIsolationProviders,
+  listProviderDefinitions,
+  listSoundEffectProviders,
+  listTtsProviders,
+  listVoiceDesignProviders,
+} from './providers/registry.js'
 import { sendPublicFile } from './public.js'
 import { getProviderTimeoutMs, withTimeout } from './timeout.js'
 import type {
   ProviderConfigInput,
   ProviderRuntimeConfig,
+  AudioIsolationRequest,
   SoundEffectRequest,
   SynthesizeRequest,
   TranscribeRequest,
+  VoiceDesignRequest,
+  VoicePreview,
+  VoiceRecord,
 } from './types.js'
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url))
@@ -60,12 +77,21 @@ const server = createServer(async (req, res) => {
       }, 200, isHead)
     }
 
+    if (isGetLike && url.pathname === '/api/voices') {
+      const providerId = url.searchParams.get('provider') ?? undefined
+      if (providerId) assertPublicProviderAccess(providerId)
+      const voices = (await configStore.listVoices(providerId))
+        .filter(voice => canExposeProvider(voice.providerId))
+      return sendJson(res, { voices: voices.map(formatVoiceRecord) }, 200, isHead)
+    }
+
     const voicesMatch = /^\/api\/providers\/([^/]+)\/voices$/.exec(url.pathname)
     if (isGetLike && voicesMatch) {
       const providerId = decodeURIComponent(voicesMatch[1] ?? '')
+      assertPublicProviderAccess(providerId)
       const provider = getTtsProvider(providerId)
       const context = await getRuntimeConfig(provider.id)
-      const voices = await provider.listVoices(context)
+      const voices = mergeVoices(await provider.listVoices(context), await configStore.listVoices(provider.id))
       return sendJson(res, { voices }, 200, isHead)
     }
 
@@ -77,21 +103,30 @@ const server = createServer(async (req, res) => {
     if (req.method === 'PUT' && configMatch) {
       const providerId = decodeURIComponent(configMatch[1] ?? '')
       assertKnownProvider(providerId)
+      assertPublicProviderAccess(providerId)
       const body = await readJson<ProviderConfigInput>(req)
       const record = await configStore.upsertConfig(providerId, body)
       return sendJson(res, { provider: record })
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/audio/speech') {
-      return createOpenAiSpeech(req, res)
+      return await createOpenAiSpeech(req, res)
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/audio/effect') {
-      return createAudioEffect(req, res)
+      return await createAudioEffect(req, res)
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/audio/isolation') {
+      return await createAudioIsolation(req, res)
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/audio/design') {
+      return await createVoiceDesign(req, res)
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/audio/transcriptions') {
-      return createOpenAiTranscription(req, res)
+      return await createOpenAiTranscription(req, res)
     }
 
     const audioMatch = /^\/audio\/([^/]+)$/.exec(url.pathname)
@@ -117,6 +152,7 @@ server.listen(port, () => {
 async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson<Record<string, unknown>>(req)
   const providerId = getOpenAiModelProvider(body.model, body.provider)
+  assertPublicProviderAccess(providerId)
   const input = typeof body.input === 'string' ? body.input : ''
   if (!input.trim()) throw new Error('input is required')
 
@@ -127,9 +163,11 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
   const request = normalizeSynthesizeInput(provider.id, {
     text: input,
     voice: typeof body.voice === 'string' ? body.voice : undefined,
+    voiceId: typeof body.voice_id === 'string' ? body.voice_id : typeof body.voiceId === 'string' ? body.voiceId : undefined,
     outputFormat: responseFormat,
     speed: typeof body.speed === 'number' ? body.speed : undefined,
   })
+  await resolveVoiceIdForSynthesis(provider.id, request)
   const timeoutMs = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.synthesize(request, context),
@@ -142,6 +180,7 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
 async function createAudioEffect(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson<Record<string, unknown>>(req)
   const providerId = getOpenAiModelProvider(body.model, body.provider)
+  assertPublicProviderAccess(providerId)
   const provider = getSoundEffectProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
@@ -156,9 +195,64 @@ async function createAudioEffect(req: IncomingMessage, res: ServerResponse): Pro
   sendBinary(res, result.audio, result.mimeType)
 }
 
+async function createAudioIsolation(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const form = await readMultipartForm(req)
+  const providerId = getOpenAiModelProvider(form.fields.model, form.fields.provider)
+  assertPublicProviderAccess(providerId)
+  const provider = getAudioIsolationProvider(providerId)
+  const context = await getRuntimeConfig(provider.id)
+  ensureEnabled(provider.id, context)
+
+  const request = await normalizeAudioIsolationInput(provider.id, form)
+  const timeoutMs = getProviderTimeoutMs(context)
+  const result = await withTimeout(
+    provider.isolateAudio(request, context),
+    timeoutMs,
+    `Audio isolation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+  )
+  sendBinary(res, result.audio, result.mimeType)
+}
+
+async function createVoiceDesign(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJson<Record<string, unknown>>(req)
+  const providerId = getOpenAiModelProvider(body.model, body.provider)
+  assertPublicProviderAccess(providerId)
+  const provider = getVoiceDesignProvider(providerId)
+  const context = await getRuntimeConfig(provider.id)
+  ensureEnabled(provider.id, context)
+
+  const request = normalizeVoiceDesignInput(provider.id, body)
+  const timeoutMs = getProviderTimeoutMs(context)
+  const result = await withTimeout(
+    provider.designVoice(request, context),
+    timeoutMs,
+    `Voice design timed out after ${timeoutMs}ms for provider ${provider.id}`,
+  )
+  const voices = []
+  for (const voice of result.voices) {
+    voices.push(await configStore.upsertVoice({
+      providerId: provider.id,
+      voiceId: voice.voiceId,
+      providerVoiceId: voice.providerVoiceId,
+      name: voice.name,
+      description: voice.description,
+      language: voice.language,
+      previewMimeType: voice.previewMimeType,
+      previewAudio: voice.previewAudioData,
+      metadata: voice.metadata,
+    }))
+  }
+  sendJson(res, {
+    provider: provider.id,
+    text: result.text,
+    voices: voices.map(formatVoiceRecord),
+  })
+}
+
 async function createOpenAiTranscription(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const form = await readMultipartForm(req)
   const providerId = getOpenAiModelProvider(form.fields.model, form.fields.provider)
+  assertPublicProviderAccess(providerId)
   const provider = getAsrProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
@@ -215,7 +309,13 @@ function listOpenAiModels(): Array<{
     owned_by: string
     capabilities: Record<string, boolean>
   }>()
-  for (const provider of [...listTtsProviders(), ...listAsrProviders(), ...listSoundEffectProviders()]) {
+  for (const provider of [
+    ...listTtsProviders(),
+    ...listAsrProviders(),
+    ...listSoundEffectProviders(),
+    ...listAudioIsolationProviders(),
+    ...listVoiceDesignProviders(),
+  ].filter(provider => !isInternalProviderId(provider.id))) {
     const existing = models.get(provider.id)
     models.set(provider.id, {
       id: provider.id,
@@ -229,6 +329,20 @@ function listOpenAiModels(): Array<{
     })
   }
   return [...models.values()]
+}
+
+function canExposeProvider(providerId: string): boolean {
+  return allowInternalProviders() || !isInternalProviderId(providerId)
+}
+
+function assertPublicProviderAccess(providerId: string): void {
+  if (!canExposeProvider(providerId)) {
+    throw new Error(`Unknown provider: ${providerId}`)
+  }
+}
+
+function allowInternalProviders(): boolean {
+  return process.env.NODE_ENV === 'test' || process.env.VOXOUT_EXPOSE_INTERNAL_PROVIDERS === '1'
 }
 
 async function getConfigMap(): Promise<Map<string, ProviderRuntimeConfig>> {
@@ -253,7 +367,17 @@ function assertKnownProvider(providerId: string): void {
       getAsrProvider(providerId)
       return
     } catch {
-      getSoundEffectProvider(providerId)
+      try {
+        getSoundEffectProvider(providerId)
+        return
+      } catch {
+        try {
+          getAudioIsolationProvider(providerId)
+          return
+        } catch {
+          getVoiceDesignProvider(providerId)
+        }
+      }
     }
   }
 }
@@ -277,6 +401,7 @@ function normalizeSynthesizeInput(providerId: string, input: unknown): Synthesiz
   return {
     provider: providerId,
     voice: typeof value.voice === 'string' ? value.voice : undefined,
+    voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
     lang: typeof value.lang === 'string' ? value.lang : undefined,
     outputFormat: typeof value.outputFormat === 'string' ? value.outputFormat : undefined,
     rate: typeof value.rate === 'string' ? value.rate : typeof value.speed === 'number' ? String(value.speed) : undefined,
@@ -289,11 +414,40 @@ function normalizeSynthesizeInput(providerId: string, input: unknown): Synthesiz
       text,
       provider: providerId,
       voice: typeof value.voice === 'string' ? value.voice : undefined,
+      voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
       soundEffectPrompt: typeof value.soundEffectPrompt === 'string' ? value.soundEffectPrompt : undefined,
       soundEffectDurationSeconds: typeof value.soundEffectDurationSeconds === 'number' ? value.soundEffectDurationSeconds : undefined,
       voicePrompt: typeof value.voicePrompt === 'string' ? value.voicePrompt : undefined,
       stylePrompt: typeof value.stylePrompt === 'string' ? value.stylePrompt : undefined,
     },
+  }
+}
+
+async function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnType<typeof readMultipartForm>>): Promise<AudioIsolationRequest> {
+  const file = form.files.audio ?? form.files.file
+  const audioSource = form.fields.audioData
+  const url = form.fields.url
+  if (!file && !audioSource && !url) throw new Error('audio file, url, or audioData is required')
+  if (url && !file && !audioSource) {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Failed to download audio for isolation: ${response.status}`)
+    const audio = Buffer.from(await response.arrayBuffer())
+    return {
+      provider: providerId,
+      audioData: `data:${normalizeMimeType(response.headers.get('content-type') ?? undefined)};base64,${audio.toString('base64')}`,
+      mimeType: normalizeMimeType(response.headers.get('content-type') ?? undefined),
+      fileFormat: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
+      previewBase64: form.fields.preview_b64,
+    }
+  }
+  return {
+    provider: providerId,
+    audioData: file
+      ? `data:${normalizeMimeType(file.contentType)};base64,${file.data.toString('base64')}`
+      : audioSource,
+    mimeType: file ? normalizeMimeType(file.contentType) : form.fields.mimeType,
+    fileFormat: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
+    previewBase64: form.fields.preview_b64,
   }
 }
 
@@ -324,6 +478,82 @@ function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEff
         ? value.promptInfluence
         : undefined,
     loop: typeof value.loop === 'boolean' ? value.loop : undefined,
+  }
+}
+
+function normalizeVoiceDesignInput(providerId: string, input: unknown): VoiceDesignRequest {
+  const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const voiceDescription = typeof value.voice_description === 'string'
+    ? value.voice_description
+    : typeof value.voiceDescription === 'string'
+      ? value.voiceDescription
+      : typeof value.input === 'string'
+        ? value.input
+        : ''
+  if (!voiceDescription.trim()) throw new Error('voice_description is required')
+  return {
+    provider: providerId,
+    voiceDescription,
+    name: typeof value.name === 'string' ? value.name : typeof value.voice_name === 'string' ? value.voice_name : undefined,
+    text: typeof value.text === 'string' ? value.text : undefined,
+    outputFormat: typeof value.response_format === 'string'
+      ? value.response_format
+      : typeof value.output_format === 'string'
+        ? value.output_format
+        : undefined,
+    model: typeof value.model_id === 'string' ? value.model_id : undefined,
+    autoGenerateText: typeof value.auto_generate_text === 'boolean' ? value.auto_generate_text : undefined,
+    loudness: typeof value.loudness === 'number' ? value.loudness : undefined,
+    seed: typeof value.seed === 'number' ? value.seed : undefined,
+    guidanceScale: typeof value.guidance_scale === 'number' ? value.guidance_scale : undefined,
+    quality: typeof value.quality === 'number' ? value.quality : undefined,
+    referenceAudioData: typeof value.reference_audio_base64 === 'string' ? value.reference_audio_base64 : undefined,
+    promptStrength: typeof value.prompt_strength === 'number' ? value.prompt_strength : undefined,
+  }
+}
+
+async function resolveVoiceIdForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
+  const voiceId = request.voiceId ?? request.segment.voiceId
+  if (!voiceId) return
+  if (providerId !== 'elevenlabs' && providerId !== 'mimo') {
+    throw new Error(`voice_id is not supported for provider ${providerId}`)
+  }
+  const voice = await configStore.getVoice(providerId, voiceId)
+  if (!voice) return
+  const resolvedVoice = providerId === 'mimo'
+    ? voice.previewAudio ?? voice.providerVoiceId ?? voice.voiceId
+    : voice.providerVoiceId ?? voice.voiceId
+  request.voiceId = resolvedVoice
+  request.segment.voiceId = resolvedVoice
+}
+
+function mergeVoices(providerVoices: Array<{ id: string, name: string, locale?: string, gender?: string, provider: string }>, storedVoices: VoiceRecord[]) {
+  const byId = new Map(providerVoices.map(voice => [voice.id, voice]))
+  for (const voice of storedVoices) {
+    byId.set(voice.voiceId, {
+      id: voice.voiceId,
+      name: voice.name,
+      locale: voice.language,
+      provider: voice.providerId,
+    })
+  }
+  return [...byId.values()]
+}
+
+function formatVoiceRecord(voice: VoiceRecord) {
+  return {
+    id: voice.id,
+    provider: voice.providerId,
+    voice_id: voice.voiceId,
+    provider_voice_id: voice.providerVoiceId,
+    name: voice.name,
+    description: voice.description,
+    language: voice.language,
+    preview_mime_type: voice.previewMimeType,
+    preview_audio: voice.previewAudio,
+    metadata: voice.metadata,
+    created_at: voice.createdAt,
+    updated_at: voice.updatedAt,
   }
 }
 

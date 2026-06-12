@@ -1,11 +1,22 @@
-import type { SoundEffectProvider, SoundEffectRequest, SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
+import type {
+  AudioIsolationProvider,
+  AudioIsolationRequest,
+  SoundEffectProvider,
+  SoundEffectRequest,
+  SynthesizeRequest,
+  TtsProvider,
+  TtsVoice,
+  VoiceDesignProvider,
+  VoiceDesignRequest,
+  VoiceDesignResult,
+} from '../types.js'
 
 const SAMPLE_RATE = 24_000
 
-export class MockTtsProvider implements TtsProvider, SoundEffectProvider {
+export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider {
   readonly id = 'mock'
   readonly name = 'Mock WAV Provider'
-  readonly capabilities = { tts: true, soundEffects: true }
+  readonly capabilities = { tts: true, soundEffects: true, isolation: true, voiceDesign: true }
 
   async listVoices(): Promise<TtsVoice[]> {
     return [
@@ -25,6 +36,28 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider {
     const durationMs = Math.min(30_000, Math.max(500, Math.round((request.durationSeconds ?? 1) * 1000)))
     const audio = createToneWav(durationMs, getFrequency(request.prompt))
     return { audio, mimeType: 'audio/wav', durationMs }
+  }
+
+  async isolateAudio(request: AudioIsolationRequest) {
+    const base64 = request.audioData.includes(',') ? request.audioData.split(',').pop() ?? '' : request.audioData
+    return { audio: Buffer.from(base64, 'base64'), mimeType: request.mimeType ?? 'audio/wav', durationMs: 0 }
+  }
+
+  async designVoice(request: VoiceDesignRequest): Promise<VoiceDesignResult> {
+    const voiceId = `mock-${getFrequency(request.voiceDescription)}`
+    const audio = createToneWav(700, getFrequency(request.voiceDescription)).toString('base64')
+    return {
+      provider: this.id,
+      text: request.text ?? 'mock voice preview',
+      voices: [{
+        voiceId,
+        name: request.name ?? 'Mock Designed Voice',
+        description: request.voiceDescription,
+        previewAudioData: `data:audio/wav;base64,${audio}`,
+        previewMimeType: 'audio/wav',
+        metadata: {},
+      }],
+    }
   }
 }
 

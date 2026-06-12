@@ -56,6 +56,9 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(mimo.owned_by, 'voxout')
   assert.equal(mimo.capabilities.tts, true)
   assert.equal(mimo.capabilities.asr, true)
+  const modelIds = payload.data.map(model => model.id)
+  assert.ok(!modelIds.includes('mock'))
+  assert.ok(!modelIds.includes('mock-asr'))
 })
 
 test('GET /api/providers does not expose internal test providers', async () => {
@@ -113,6 +116,62 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
   assert.match(response.headers.get('content-type'), /^audio\/wav/)
   assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
+})
+
+test('POST /v1/audio/isolation returns processed audio bytes', async () => {
+  const form = new FormData()
+  form.set('model', 'mock')
+  form.set('audio', new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
+
+  const response = await fetch(`${baseUrl}/v1/audio/isolation`, {
+    method: 'POST',
+    body: form,
+  })
+  const audio = Buffer.from(await response.arrayBuffer())
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^audio\/wav/)
+  assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
+})
+
+test('POST /v1/audio/design persists generated voices', async () => {
+  const response = await fetch(`${baseUrl}/v1/audio/design`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'A calm narrator voice with a clean tone.',
+      name: 'Calm Mock',
+    }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.provider, 'mock')
+  assert.equal(payload.voices.length, 1)
+  assert.equal(payload.voices[0].name, 'Calm Mock')
+  assert.match(payload.voices[0].preview_audio, /^data:audio\/wav;base64,/)
+
+  const voicesResponse = await fetch(`${baseUrl}/api/voices?provider=mock`)
+  const voicesPayload = await voicesResponse.json()
+  assert.equal(voicesResponse.status, 200)
+  assert.ok(voicesPayload.voices.some(voice => voice.voice_id === payload.voices[0].voice_id))
+})
+
+test('POST /v1/audio/speech rejects unsupported voice_id providers', async () => {
+  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'edge',
+      input: 'hello',
+      voice_id: 'not-supported',
+    }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(payload.error, /voice_id is not supported/)
 })
 
 test('POST /v1/audio/transcriptions accepts multipart file uploads', async () => {
@@ -178,4 +237,8 @@ async function getFreePort() {
   server.close()
   await once(server, 'close')
   return address.port
+}
+
+function createTinyWav() {
+  return Buffer.from('UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=', 'base64')
 }

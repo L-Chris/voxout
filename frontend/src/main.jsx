@@ -15,6 +15,9 @@ function App() {
   const [voiceOptions, setVoiceOptions] = useState([])
   const [speechForm, setSpeechForm] = useState(defaultSpeechForm())
   const [effectForm, setEffectForm] = useState(defaultEffectForm())
+  const [isolationForm, setIsolationForm] = useState(defaultIsolationForm())
+  const [isolationFile, setIsolationFile] = useState(null)
+  const [designForm, setDesignForm] = useState(defaultDesignForm())
   const [transcriptionForm, setTranscriptionForm] = useState(defaultTranscriptionForm())
   const [transcriptionFile, setTranscriptionFile] = useState(null)
 
@@ -37,6 +40,9 @@ function App() {
     setTestMode(getDefaultTestMode(selectedProvider))
     setSpeechForm(defaultSpeechForm(selectedProvider))
     setEffectForm(defaultEffectForm())
+    setIsolationForm(defaultIsolationForm())
+    setIsolationFile(null)
+    setDesignForm(defaultDesignForm())
     setTranscriptionForm(defaultTranscriptionForm())
     setTranscriptionFile(null)
     setIsConfigOpen(false)
@@ -149,7 +155,11 @@ function App() {
     setTestStatus('Running...')
 
     try {
-      if (testMode === 'effect') {
+      if (testMode === 'design') {
+        await runDesignTest()
+      } else if (testMode === 'isolation') {
+        await runIsolationTest()
+      } else if (testMode === 'effect') {
         await runEffectTest()
       } else if (testMode === 'asr') {
         await runTranscriptionTest()
@@ -171,6 +181,7 @@ function App() {
         model: selectedProvider.id,
         input: speechForm.input,
         voice: speechForm.voice || undefined,
+        voice_id: speechForm.voiceId || undefined,
         response_format: speechForm.responseFormat,
         speed: Number(speechForm.speed) || undefined,
       }),
@@ -242,6 +253,65 @@ function App() {
     })
   }
 
+  async function runIsolationTest() {
+    const form = new FormData()
+    form.set('model', selectedProvider.id)
+    form.set('file_format', isolationForm.fileFormat)
+    if (isolationFile) {
+      form.set('audio', isolationFile)
+    } else if (isolationForm.audioSource.trim()) {
+      appendAudioSource(form, isolationForm.audioSource.trim())
+    } else {
+      throw new Error('Choose an audio file or enter an audio source.')
+    }
+
+    const response = await fetch(apiUrl('/v1/audio/isolation', apiBaseUrl), {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) throw new Error(await readError(response))
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    setTestResult({
+      kind: 'audio',
+      objectUrl,
+      mimeType: response.headers.get('content-type') || blob.type,
+      size: blob.size,
+      endpoint: 'POST /v1/audio/isolation',
+    })
+  }
+
+  async function runDesignTest() {
+    const response = await fetch(apiUrl('/v1/audio/design', apiBaseUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: selectedProvider.id,
+        input: designForm.voiceDescription,
+        name: designForm.name || undefined,
+        text: designForm.text || undefined,
+        response_format: designForm.responseFormat,
+        model_id: designForm.model || undefined,
+        auto_generate_text: designForm.autoGenerateText,
+        guidance_scale: Number(designForm.guidanceScale) || undefined,
+        seed: designForm.seed ? Number(designForm.seed) : undefined,
+      }),
+    })
+    if (!response.ok) throw new Error(await readError(response))
+    const payload = await response.json()
+    setTestResult({
+      kind: 'json',
+      content: JSON.stringify(payload, null, 2),
+      mimeType: 'application/json',
+      endpoint: 'POST /v1/audio/design',
+    })
+    if (selectedProvider?.capabilities?.tts) {
+      loadProviderVoices(selectedProvider.id)
+        .then(options => setVoiceOptions(options))
+        .catch(() => {})
+    }
+  }
+
   const capabilityText = useMemo(() => {
     if (!selectedProvider) return ''
     return Object.entries(selectedProvider.capabilities || {})
@@ -297,7 +367,7 @@ function App() {
                     <h2 className="text-lg font-bold">Test API</h2>
                   </div>
                   <div className="mb-4 flex gap-2">
-                    {['tts', 'asr', 'effect'].map(mode => (
+                    {['tts', 'asr', 'effect', 'isolation', 'design'].map(mode => (
                       <button
                         className={`tab ${testMode === mode ? 'tab-active' : ''}`}
                         disabled={!supportsTestMode(selectedProvider, mode)}
@@ -311,7 +381,16 @@ function App() {
                   </div>
 
                   <form className="grid gap-4" onSubmit={runTest}>
-                    {testMode === 'effect' ? (
+                    {testMode === 'design' ? (
+                      <DesignTestForm form={designForm} onFormChange={setDesignForm} />
+                    ) : testMode === 'isolation' ? (
+                      <IsolationTestForm
+                        file={isolationFile}
+                        form={isolationForm}
+                        onFileChange={setIsolationFile}
+                        onFormChange={setIsolationForm}
+                      />
+                    ) : testMode === 'effect' ? (
                       <EffectTestForm form={effectForm} onFormChange={setEffectForm} />
                     ) : testMode === 'asr' ? (
                       <TranscriptionTestForm
@@ -321,7 +400,12 @@ function App() {
                         onFormChange={setTranscriptionForm}
                       />
                     ) : (
-                      <SpeechTestForm form={speechForm} onFormChange={setSpeechForm} voiceOptions={voiceOptions} />
+                      <SpeechTestForm
+                        form={speechForm}
+                        onFormChange={setSpeechForm}
+                        supportsVoiceId={supportsVoiceId(selectedProvider)}
+                        voiceOptions={voiceOptions}
+                      />
                     )}
                     <div className="flex items-center gap-3">
                       <button className="btn-primary" type="submit">Run test</button>
@@ -418,7 +502,7 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
   )
 }
 
-function SpeechTestForm({ form, onFormChange, voiceOptions }) {
+function SpeechTestForm({ form, onFormChange, supportsVoiceId, voiceOptions }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -450,6 +534,17 @@ function SpeechTestForm({ form, onFormChange, voiceOptions }) {
           />
         )}
       </label>
+      {supportsVoiceId ? (
+        <label className="grid gap-1.5 text-sm font-semibold">
+          Voice ID
+          <input
+            className="input"
+            placeholder="optional"
+            value={form.voiceId}
+            onChange={event => onFormChange({ ...form, voiceId: event.target.value })}
+          />
+        </label>
+      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Response format
         <select
@@ -477,43 +572,41 @@ function SpeechTestForm({ form, onFormChange, voiceOptions }) {
   )
 }
 
+function IsolationTestForm({ file, form, onFileChange, onFormChange }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <AudioSourceControl
+        file={file}
+        form={form}
+        inputId="isolation-audio-source"
+        onFileChange={onFileChange}
+        onFormChange={onFormChange}
+      />
+      <label className="grid gap-1.5 text-sm font-semibold">
+        File format
+        <select
+          className="input"
+          value={form.fileFormat}
+          onChange={event => onFormChange({ ...form, fileFormat: event.target.value })}
+        >
+          <option value="other">other</option>
+          <option value="pcm_s16le_16">pcm_s16le_16</option>
+        </select>
+      </label>
+    </div>
+  )
+}
+
 function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        <label htmlFor="audio-source">Audio source</label>
-        <div className="audio-source-control">
-          <textarea
-            id="audio-source"
-            className="textarea min-h-24 font-mono text-xs"
-            placeholder="https://example.com/audio.m4a, BV1..., data:audio/wav;base64,..."
-            value={form.audioSource}
-            onChange={event => {
-              onFileChange(null)
-              onFormChange({ ...form, audioSource: event.target.value })
-            }}
-          />
-          <div className="audio-source-actions">
-            <span className="truncate text-sm font-normal text-slate-500">
-              {file ? file.name : 'Paste an audio source or choose a file'}
-            </span>
-            <label className="btn-secondary shrink-0 cursor-pointer" htmlFor="audio-file">
-              Choose file
-            </label>
-            <input
-              className="sr-only"
-              id="audio-file"
-              type="file"
-              accept="audio/*,video/mp4,video/webm"
-              onChange={event => {
-                const nextFile = event.target.files?.[0] ?? null
-                onFileChange(nextFile)
-                if (nextFile) onFormChange({ ...form, audioSource: '' })
-              }}
-            />
-          </div>
-        </div>
-      </div>
+      <AudioSourceControl
+        file={file}
+        form={form}
+        inputId="transcription-audio-source"
+        onFileChange={onFileChange}
+        onFormChange={onFormChange}
+      />
       <label className="grid gap-1.5 text-sm font-semibold">
         Language
         <input
@@ -536,6 +629,46 @@ function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
           <option value="srt">srt</option>
         </select>
       </label>
+    </div>
+  )
+}
+
+function AudioSourceControl({ file, form, inputId, onFileChange, onFormChange }) {
+  const fileId = `${inputId}-file`
+  return (
+    <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+      <label htmlFor={inputId}>Audio source</label>
+      <div className="audio-source-control">
+        <textarea
+          id={inputId}
+          className="textarea min-h-24 font-mono text-xs"
+          placeholder="https://example.com/audio.m4a, BV1..., data:audio/wav;base64,..."
+          value={form.audioSource}
+          onChange={event => {
+            onFileChange(null)
+            onFormChange({ ...form, audioSource: event.target.value })
+          }}
+        />
+        <div className="audio-source-actions">
+          <span className="truncate text-sm font-normal text-slate-500">
+            {file ? file.name : 'Paste an audio source or choose a file'}
+          </span>
+          <label className="btn-secondary shrink-0 cursor-pointer" htmlFor={fileId}>
+            Choose file
+          </label>
+          <input
+            className="sr-only"
+            id={fileId}
+            type="file"
+            accept="audio/*,video/mp4,video/webm"
+            onChange={event => {
+              const nextFile = event.target.files?.[0] ?? null
+              onFileChange(nextFile)
+              if (nextFile) onFormChange({ ...form, audioSource: '' })
+            }}
+          />
+        </div>
+      </div>
     </div>
   )
 }
@@ -600,6 +733,89 @@ function EffectTestForm({ form, onFormChange }) {
   )
 }
 
+function DesignTestForm({ form, onFormChange }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+        Voice description
+        <textarea
+          className="textarea min-h-28"
+          value={form.voiceDescription}
+          onChange={event => onFormChange({ ...form, voiceDescription: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Name
+        <input
+          className="input"
+          value={form.name}
+          onChange={event => onFormChange({ ...form, name: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Model
+        <input
+          className="input"
+          placeholder="provider default"
+          value={form.model}
+          onChange={event => onFormChange({ ...form, model: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+        Preview text
+        <textarea
+          className="textarea min-h-20"
+          value={form.text}
+          onChange={event => onFormChange({ ...form, text: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Response format
+        <select
+          className="input"
+          value={form.responseFormat}
+          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+        >
+          <option value="mp3_44100_128">mp3_44100_128</option>
+          <option value="mp3_44100_192">mp3_44100_192</option>
+          <option value="wav">wav</option>
+        </select>
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Guidance scale
+        <input
+          className="input"
+          min="0"
+          max="100"
+          step="0.5"
+          type="number"
+          value={form.guidanceScale}
+          onChange={event => onFormChange({ ...form, guidanceScale: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Seed
+        <input
+          className="input"
+          min="0"
+          step="1"
+          type="number"
+          value={form.seed}
+          onChange={event => onFormChange({ ...form, seed: event.target.value })}
+        />
+      </label>
+      <label className="inline-flex items-center gap-2 self-end text-sm font-semibold">
+        <input
+          type="checkbox"
+          checked={form.autoGenerateText}
+          onChange={event => onFormChange({ ...form, autoGenerateText: event.target.checked })}
+        />
+        Auto text
+      </label>
+    </div>
+  )
+}
+
 function ResultPreview({ result }) {
   if (!result) return null
   if (result.kind === 'error') {
@@ -651,6 +867,8 @@ function supportsTestMode(provider, mode) {
   if (!provider) return false
   if (mode === 'asr') return Boolean(provider.capabilities?.asr)
   if (mode === 'effect') return Boolean(provider.capabilities?.soundEffects)
+  if (mode === 'isolation') return Boolean(provider.capabilities?.isolation)
+  if (mode === 'design') return Boolean(provider.capabilities?.voiceDesign)
   return Boolean(provider.capabilities?.tts)
 }
 
@@ -658,19 +876,28 @@ function getDefaultTestMode(provider) {
   if (provider?.capabilities?.tts) return 'tts'
   if (provider?.capabilities?.asr) return 'asr'
   if (provider?.capabilities?.soundEffects) return 'effect'
+  if (provider?.capabilities?.isolation) return 'isolation'
+  if (provider?.capabilities?.voiceDesign) return 'design'
   return 'tts'
 }
 
 function getTestModeLabel(mode) {
   if (mode === 'tts') return 'Speech'
   if (mode === 'asr') return 'Transcription'
-  return 'Effect'
+  if (mode === 'effect') return 'Effect'
+  if (mode === 'isolation') return 'Isolation'
+  return 'Design'
+}
+
+function supportsVoiceId(provider) {
+  return provider?.id === 'elevenlabs' || provider?.id === 'mimo'
 }
 
 function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
     voice: '',
+    voiceId: '',
     responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
     speed: '1',
   }
@@ -683,6 +910,26 @@ function defaultEffectForm() {
     promptInfluence: '0.3',
     responseFormat: 'mp3_44100_128',
     loop: false,
+  }
+}
+
+function defaultIsolationForm() {
+  return {
+    audioSource: '',
+    fileFormat: 'other',
+  }
+}
+
+function defaultDesignForm() {
+  return {
+    voiceDescription: 'A calm narrator voice with a clean tone and warm delivery.',
+    name: '',
+    text: '',
+    model: '',
+    responseFormat: 'mp3_44100_128',
+    autoGenerateText: true,
+    guidanceScale: '',
+    seed: '',
   }
 }
 

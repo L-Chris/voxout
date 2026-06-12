@@ -21,15 +21,21 @@ OpenAI-compatible audio API:
 - `GET /v1/models`
 - `POST /v1/audio/speech`
 - `POST /v1/audio/effect`
+- `POST /v1/audio/isolation`
+- `POST /v1/audio/design`
 - `POST /v1/audio/transcriptions`
 
 The OpenAI-style `model` field maps to a voxout provider id such as `edge`,
 `mimo`, `elevenlabs`, or `bilibili-asr`.
+`/v1/audio/speech` also accepts `voice_id` for providers that support stored
+voice records, currently `elevenlabs` and `mimo`.
 
 Provider management API:
 
 - `GET /health`
 - `GET /api/providers`
+- `GET /api/providers/:providerId/voices`
+- `GET /api/voices?provider=:providerId`
 - `PUT /api/providers/:providerId/config`
 - `GET /audio/:file`
 
@@ -53,6 +59,23 @@ curl -X POST http://127.0.0.1:4177/v1/audio/effect \
   -H 'content-type: application/json' \
   --output effect.mp3 \
   --data '{"model":"elevenlabs","input":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3_44100_128"}'
+```
+
+Voice isolation:
+
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/isolation \
+  --output isolated.mp3 \
+  -F model=elevenlabs \
+  -F audio=@sample.wav
+```
+
+Voice design:
+
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/design \
+  -H 'content-type: application/json' \
+  --data '{"model":"elevenlabs","input":"A calm narrator voice with a clean tone.","name":"Calm Narrator","auto_generate_text":true}'
 ```
 
 Transcription from a local file:

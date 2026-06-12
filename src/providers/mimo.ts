@@ -6,8 +6,12 @@ import type {
   TranscribeResult,
   TtsProvider,
   TtsVoice,
+  VoiceDesignProvider,
+  VoiceDesignRequest,
+  VoiceDesignResult,
 } from '../types.js'
 import { getProviderTimeoutMs } from '../timeout.js'
+import { randomUUID } from 'node:crypto'
 
 const DEFAULT_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const DEFAULT_TTS_MODEL = 'mimo-v2.5-tts'
@@ -33,7 +37,7 @@ interface MimoCompletionResponse {
   }
 }
 
-export class MimoTtsProvider implements TtsProvider, AsrProvider {
+export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignProvider {
   readonly id = 'mimo'
   readonly name = 'Xiaomi MiMo'
   readonly capabilities = { tts: true, asr: true, voiceDesign: true }
@@ -63,11 +67,15 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider {
     const voicePrompt = normalizePrompt(request.segment.voicePrompt ?? request.voicePrompt)
     const stylePrompt = normalizePrompt(request.segment.stylePrompt ?? request.stylePrompt ?? request.segment.emotion)
     const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? DEFAULT_FORMAT)
-    const voice = voicePrompt
+    const requestVoiceId = request.segment.voiceId ?? request.voiceId
+    const designedVoice = voicePrompt
       ? await this.getDesignedVoiceSample(apiKey, voicePrompt, context)
-      : request.segment.voice ?? request.voice ?? DEFAULT_VOICE
+      : requestVoiceId?.startsWith('data:')
+        ? requestVoiceId
+        : undefined
+    const voice = designedVoice ?? requestVoiceId ?? request.segment.voice ?? request.voice ?? DEFAULT_VOICE
     const body = {
-      model: voicePrompt
+      model: designedVoice
         ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
         : getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
       messages: buildMessages(text, undefined, stylePrompt),
@@ -119,6 +127,32 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider {
       format: request.format ?? 'txt',
       text,
       raw: request.format === 'raw' ? response : undefined,
+    }
+  }
+
+  async designVoice(request: VoiceDesignRequest, context: ProviderContext = {}): Promise<VoiceDesignResult> {
+    const apiKey = getSecretString(context, 'apiKey')
+    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+
+    const sampleText = normalizePrompt(request.text) ?? normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
+    const voicePrompt = normalizePrompt(request.voiceDescription)
+    if (!voicePrompt) throw new Error('voiceDescription is required')
+    const sample = await this.createDesignedVoiceSample(apiKey, voicePrompt, sampleText, context)
+    const voiceId = `mimo_${randomUUID()}`
+    return {
+      provider: this.id,
+      text: sampleText,
+      voices: [{
+        voiceId,
+        name: request.name ?? voicePrompt.slice(0, 48),
+        description: voicePrompt,
+        language: 'zh-CN',
+        previewAudioData: sample,
+        previewMimeType: 'audio/wav',
+        metadata: {
+          model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
+        },
+      }],
     }
   }
 

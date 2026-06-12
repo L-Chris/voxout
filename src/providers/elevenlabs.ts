@@ -1,6 +1,8 @@
 import { Blob } from 'node:buffer'
 import type {
   AsrProvider,
+  AudioIsolationProvider,
+  AudioIsolationRequest,
   ProviderContext,
   SoundEffectProvider,
   SoundEffectRequest,
@@ -9,6 +11,9 @@ import type {
   TranscribeResult,
   TtsProvider,
   TtsVoice,
+  VoiceDesignProvider,
+  VoiceDesignRequest,
+  VoiceDesignResult,
 } from '../types.js'
 
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io/v1'
@@ -34,16 +39,28 @@ interface ElevenLabsTranscriptPayload {
   }>
 }
 
-export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffectProvider {
+interface ElevenLabsDesignPayload {
+  previews?: Array<{
+    audio_base_64?: string
+    generated_voice_id?: string
+    media_type?: string
+    duration_secs?: number
+    language?: string
+  }>
+  text?: string
+}
+
+export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider {
   readonly id = 'elevenlabs'
   readonly name = 'ElevenLabs'
-  readonly capabilities = { tts: true, asr: true, soundEffects: true }
+  readonly capabilities = { tts: true, asr: true, soundEffects: true, isolation: true, voiceDesign: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
     { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL },
     { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL },
     { key: 'soundEffectModel', label: 'Sound Effect Model', type: 'text' as const, placeholder: DEFAULT_SOUND_EFFECT_MODEL },
+    { key: 'voiceDesignModel', label: 'Voice Design Model', type: 'text' as const, placeholder: 'eleven_multilingual_ttv_v2' },
     { key: 'defaultVoiceId', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
     { key: 'outputFormat', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT },
     { key: 'promptInfluence', label: 'Prompt Influence', type: 'number' as const, placeholder: '0.3' },
@@ -70,7 +87,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
     const apiKey = getApiKey(context)
     const text = request.segment.text.trim()
-    const voiceId = request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+    const voiceId = request.segment.voiceId ?? request.voiceId ?? request.segment.voice ?? request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
     const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
     const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}`)
     url.searchParams.set('output_format', outputFormat)
@@ -133,6 +150,88 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
       prompt_influence: normalizePromptInfluence(request.promptInfluence) ?? normalizePromptInfluence(getConfigNumber(context, 'promptInfluence')),
       loop: request.loop ?? getConfigBoolean(context, 'loop'),
     }, apiKey, 'ElevenLabs sound effect')
+  }
+
+  async isolateAudio(request: AudioIsolationRequest, context: ProviderContext = {}) {
+    const apiKey = getApiKey(context)
+    const audio = parseAudioData(request.audioData, request.mimeType)
+    const form = new FormData()
+    form.set('audio', new Blob([audio.data], { type: audio.mimeType }), audio.fileName)
+    form.set('file_format', request.fileFormat ?? 'other')
+    if (request.previewBase64) form.set('preview_b64', request.previewBase64)
+
+    const response = await fetch(`${getBaseUrl(context)}/audio-isolation`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey },
+      body: form,
+    })
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (!response.ok) {
+      const detail = buffer.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      throw new Error(detail || `ElevenLabs audio isolation request failed: ${response.status}`)
+    }
+    return {
+      audio: buffer,
+      mimeType: response.headers.get('content-type')?.split(';')[0] || audio.mimeType,
+      durationMs: 0,
+    }
+  }
+
+  async designVoice(request: VoiceDesignRequest, context: ProviderContext = {}): Promise<VoiceDesignResult> {
+    const apiKey = getApiKey(context)
+    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
+    const url = new URL(`${getBaseUrl(context)}/text-to-voice/design`)
+    url.searchParams.set('output_format', outputFormat)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify(compactObject({
+        voice_description: request.voiceDescription,
+        model_id: request.model ?? getConfigString(context, 'voiceDesignModel') ?? 'eleven_multilingual_ttv_v2',
+        text: request.text,
+        auto_generate_text: request.autoGenerateText,
+        loudness: request.loudness,
+        seed: request.seed,
+        guidance_scale: request.guidanceScale,
+        quality: request.quality,
+        reference_audio_base64: request.referenceAudioData ? stripDataUrlPrefix(request.referenceAudioData) : undefined,
+        prompt_strength: request.promptStrength,
+      })),
+    })
+    const payload = await readJsonResponse<ElevenLabsDesignPayload>(response)
+    if (!response.ok) {
+      throw new Error(getPayloadError(payload) || `ElevenLabs voice design request failed: ${response.status}`)
+    }
+    const voices = (payload.previews ?? [])
+      .filter(preview => preview.generated_voice_id)
+      .map((preview, index) => {
+        const mediaType = preview.media_type || getMimeTypeFromOutputFormat(outputFormat)
+        return {
+          voiceId: preview.generated_voice_id ?? `elevenlabs-preview-${index + 1}`,
+          providerVoiceId: preview.generated_voice_id,
+          name: request.name ?? `ElevenLabs Voice ${index + 1}`,
+          description: request.voiceDescription,
+          language: preview.language,
+          previewAudioData: preview.audio_base_64
+            ? `data:${mediaType};base64,${stripDataUrlPrefix(preview.audio_base_64)}`
+            : undefined,
+          previewMimeType: mediaType,
+          durationSeconds: preview.duration_secs,
+          metadata: {
+            model: request.model ?? getConfigString(context, 'voiceDesignModel') ?? 'eleven_multilingual_ttv_v2',
+          },
+        }
+      })
+    return {
+      provider: this.id,
+      text: payload.text,
+      voices,
+      raw: payload,
+    }
   }
 }
 
@@ -254,6 +353,18 @@ function parseAudioData(value: string, mimeType?: string): { data: Buffer, mimeT
     mimeType: resolvedMimeType,
     fileName: getAudioFileName(resolvedMimeType),
   }
+}
+
+function stripDataUrlPrefix(value: string): string {
+  const comma = value.indexOf(',')
+  return value.startsWith('data:') && comma >= 0 ? value.slice(comma + 1) : value
+}
+
+function getMimeTypeFromOutputFormat(outputFormat: string): string {
+  const normalized = outputFormat.toLowerCase()
+  if (normalized.startsWith('pcm_')) return 'audio/wav'
+  if (normalized.startsWith('ulaw_')) return 'audio/basic'
+  return 'audio/mpeg'
 }
 
 function getAudioFileName(mimeType: string): string {
