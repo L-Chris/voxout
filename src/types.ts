@@ -112,6 +112,7 @@ export interface TranscribeResult {
 
 export interface SoundEffectRequest {
   provider?: string
+  model?: string
   prompt: string
   outputFormat?: string
   durationSeconds?: number

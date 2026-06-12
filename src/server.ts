@@ -216,7 +216,7 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
 
 async function createAudioEffect(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson<Record<string, unknown>>(req)
-  const providerId = getOpenAiModelProvider(body.model, body.provider)
+  const providerId = getRequiredProvider(body.provider)
   assertPublicProviderAccess(providerId)
   const provider = getSoundEffectProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
@@ -316,7 +316,7 @@ async function createOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   const responseFormat = normalizeTranscriptionResponseFormat(form.fields.response_format)
   const providerResponseFormat = normalizeProviderTranscriptionResponseFormat(provider.id, responseFormat)
   const request: TranscribeRequest = {
-    model: target.model ?? form.fields.model_id ?? form.fields.asr_model ?? form.fields.asrModel,
+    model: target.model,
     url: form.fields.url,
     audioData: form.fields.audioData,
     mimeType: form.fields.mimeType,
@@ -507,30 +507,15 @@ async function normalizeAudioIsolationInput(providerId: string, form: Awaited<Re
 
 function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEffectRequest {
   const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const prompt = typeof value.input === 'string'
-    ? value.input
-    : typeof value.prompt === 'string'
-      ? value.prompt
-      : ''
+  const prompt = typeof value.input === 'string' ? value.input : ''
   if (!prompt.trim()) throw new Error('input is required')
   return {
     provider: providerId,
+    model: typeof value.model === 'string' ? value.model : undefined,
     prompt,
-    outputFormat: typeof value.response_format === 'string'
-      ? value.response_format
-      : typeof value.output_format === 'string'
-        ? value.output_format
-        : undefined,
-    durationSeconds: typeof value.duration_seconds === 'number'
-      ? value.duration_seconds
-      : typeof value.durationSeconds === 'number'
-        ? value.durationSeconds
-        : undefined,
-    promptInfluence: typeof value.prompt_influence === 'number'
-      ? value.prompt_influence
-      : typeof value.promptInfluence === 'number'
-        ? value.promptInfluence
-        : undefined,
+    outputFormat: typeof value.response_format === 'string' ? value.response_format : undefined,
+    durationSeconds: typeof value.duration_seconds === 'number' ? value.duration_seconds : undefined,
+    promptInfluence: typeof value.prompt_influence === 'number' ? value.prompt_influence : undefined,
     loop: typeof value.loop === 'boolean' ? value.loop : undefined,
   }
 }

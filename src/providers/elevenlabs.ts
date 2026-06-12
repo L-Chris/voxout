@@ -192,7 +192,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
 
     return postJsonAudio(url, {
       text: request.prompt.trim(),
-      model_id: getConfigString(context, 'soundEffectModel') ?? getConfigString(context, 'model') ?? DEFAULT_SOUND_EFFECT_MODEL,
+      model_id: request.model ?? getConfigString(context, 'soundEffectModel') ?? getConfigString(context, 'model') ?? DEFAULT_SOUND_EFFECT_MODEL,
       duration_seconds: normalizeDurationSeconds(request.durationSeconds) ?? normalizeDurationSeconds(getConfigNumber(context, 'durationSeconds')),
       prompt_influence: normalizePromptInfluence(request.promptInfluence) ?? normalizePromptInfluence(getConfigNumber(context, 'promptInfluence')),
       loop: request.loop ?? getConfigBoolean(context, 'loop'),

@@ -227,7 +227,8 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: 'mock',
+      provider: 'mock',
+      model: 'mock-effect-model',
       input: 'a short test chime',
       duration_seconds: 0.5,
       response_format: 'wav',
@@ -239,6 +240,30 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
   assert.match(response.headers.get('content-type'), /^audio\/wav/)
   assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
+})
+
+test('POST /v1/audio/effect requires provider and OpenAI-style field names', async () => {
+  const legacyProviderResponse = await fetch(`${baseUrl}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'a short test chime',
+      response_format: 'wav',
+    }),
+  })
+  assert.equal(legacyProviderResponse.status, 400)
+
+  const legacyInputResponse = await fetch(`${baseUrl}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      prompt: 'a short test chime',
+      response_format: 'wav',
+    }),
+  })
+  assert.equal(legacyInputResponse.status, 400)
 })
 
 test('POST /v1/audio/isolation returns processed audio bytes', async () => {
@@ -350,6 +375,24 @@ test('POST /v1/audio/transcriptions accepts multipart file uploads', async () =>
 
   assert.equal(response.status, 200)
   assert.deepEqual(payload, { text: 'Mock transcript for inline audio' })
+})
+
+test('POST /v1/audio/transcriptions ignores legacy model aliases', async () => {
+  for (const field of ['model_id', 'asr_model', 'asrModel']) {
+    const form = new FormData()
+    form.set(field, 'gpt-4o-transcribe')
+    form.set('response_format', 'json')
+    form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+    const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+      method: 'POST',
+      body: form,
+    })
+    const payload = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.match(payload.error, /model is required/)
+  }
 })
 
 test('POST /v1/audio/transcriptions supports text response format', async () => {
