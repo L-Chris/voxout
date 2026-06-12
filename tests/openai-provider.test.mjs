@@ -178,6 +178,8 @@ test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   assert.equal(provider.capabilities.asr, true)
   assert.equal(provider.capabilities.voiceClone, true)
   assert.ok(voices.some(voice => voice.id === 'alloy'))
+  assert.equal(voices.find(voice => voice.id === 'marin').gender, 'Female')
+  assert.equal(voices.find(voice => voice.id === 'cedar').gender, 'Male')
 
   const providers = listProviderDefinitions()
   const openai = providers.find(item => item.id === 'openai')

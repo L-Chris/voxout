@@ -205,16 +205,19 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
 }
 
 const OPENAI_PRESET_VOICES: TtsVoice[] = [
-  { id: 'alloy', name: 'Alloy', locale: 'en-US', provider: 'openai' },
-  { id: 'ash', name: 'Ash', locale: 'en-US', provider: 'openai' },
-  { id: 'ballad', name: 'Ballad', locale: 'en-US', provider: 'openai' },
-  { id: 'coral', name: 'Coral', locale: 'en-US', provider: 'openai' },
-  { id: 'echo', name: 'Echo', locale: 'en-US', provider: 'openai' },
-  { id: 'fable', name: 'Fable', locale: 'en-US', provider: 'openai' },
-  { id: 'nova', name: 'Nova', locale: 'en-US', provider: 'openai' },
-  { id: 'onyx', name: 'Onyx', locale: 'en-US', provider: 'openai' },
-  { id: 'sage', name: 'Sage', locale: 'en-US', provider: 'openai' },
-  { id: 'shimmer', name: 'Shimmer', locale: 'en-US', provider: 'openai' },
+  { id: 'alloy', name: 'Alloy', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'ash', name: 'Ash', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'ballad', name: 'Ballad', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'coral', name: 'Coral', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'echo', name: 'Echo', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'fable', name: 'Fable', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'nova', name: 'Nova', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'onyx', name: 'Onyx', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'sage', name: 'Sage', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'shimmer', name: 'Shimmer', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'verse', name: 'Verse', locale: 'en-US', gender: 'Male', provider: 'openai' },
+  { id: 'marin', name: 'Marin', locale: 'en-US', gender: 'Female', provider: 'openai' },
+  { id: 'cedar', name: 'Cedar', locale: 'en-US', gender: 'Male', provider: 'openai' },
 ]
 
 function getApiKey(context: ProviderContext): string {
