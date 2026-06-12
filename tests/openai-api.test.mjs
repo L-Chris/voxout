@@ -58,6 +58,25 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(mimo.capabilities.asr, true)
 })
 
+test('GET /api/providers does not expose internal test providers', async () => {
+  const response = await fetch(`${baseUrl}/api/providers`)
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  const providerIds = payload.providers.map(provider => provider.id)
+  assert.ok(!providerIds.includes('mock'))
+  assert.ok(!providerIds.includes('mock-asr'))
+})
+
+test('GET /api/providers/:id/voices returns provider voices', async () => {
+  const response = await fetch(`${baseUrl}/api/providers/edge/voices`)
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.ok(payload.voices.length > 0)
+  assert.ok(payload.voices.some(voice => voice.id === 'zh-CN-XiaoyiNeural'))
+})
+
 test('POST /v1/audio/speech returns generated audio bytes', async () => {
   const response = await fetch(`${baseUrl}/v1/audio/speech`, {
     method: 'POST',
@@ -66,6 +85,25 @@ test('POST /v1/audio/speech returns generated audio bytes', async () => {
       model: 'mock',
       input: 'hello from openai compatible speech',
       voice: 'mock-narrator',
+      response_format: 'wav',
+    }),
+  })
+  const audio = Buffer.from(await response.arrayBuffer())
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^audio\/wav/)
+  assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
+  assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
+})
+
+test('POST /v1/audio/effect returns generated audio bytes', async () => {
+  const response = await fetch(`${baseUrl}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'a short test chime',
+      duration_seconds: 0.5,
       response_format: 'wav',
     }),
   })
@@ -108,22 +146,6 @@ test('POST /v1/audio/transcriptions supports text response format', async () => 
   assert.equal(response.status, 200)
   assert.match(response.headers.get('content-type'), /^text\/plain/)
   assert.equal(text, 'Mock transcript for inline audio')
-})
-
-test('legacy POST /api/invoke is not available', async () => {
-  const response = await fetch(`${baseUrl}/api/invoke`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      provider: 'mock',
-      operation: 'synthesize',
-      input: { text: 'legacy request' },
-    }),
-  })
-  const payload = await response.json()
-
-  assert.equal(response.status, 404)
-  assert.equal(payload.error, 'Not found')
 })
 
 function waitForServer(child) {

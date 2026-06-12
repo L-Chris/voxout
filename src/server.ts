@@ -6,12 +6,13 @@ import { join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ProviderConfigStore } from './config-store.js'
 import { loadDotEnv } from './env.js'
-import { getAsrProvider, getTtsProvider, listAsrProviders, listProviderDefinitions, listTtsProviders } from './providers/registry.js'
+import { getAsrProvider, getSoundEffectProvider, getTtsProvider, listAsrProviders, listProviderDefinitions, listSoundEffectProviders, listTtsProviders } from './providers/registry.js'
 import { sendPublicFile } from './public.js'
 import { getProviderTimeoutMs, withTimeout } from './timeout.js'
 import type {
   ProviderConfigInput,
   ProviderRuntimeConfig,
+  SoundEffectRequest,
   SynthesizeRequest,
   TranscribeRequest,
 } from './types.js'
@@ -59,6 +60,15 @@ const server = createServer(async (req, res) => {
       }, 200, isHead)
     }
 
+    const voicesMatch = /^\/api\/providers\/([^/]+)\/voices$/.exec(url.pathname)
+    if (isGetLike && voicesMatch) {
+      const providerId = decodeURIComponent(voicesMatch[1] ?? '')
+      const provider = getTtsProvider(providerId)
+      const context = await getRuntimeConfig(provider.id)
+      const voices = await provider.listVoices(context)
+      return sendJson(res, { voices }, 200, isHead)
+    }
+
     if (isGetLike && url.pathname === '/v1/models') {
       return sendJson(res, { object: 'list', data: listOpenAiModels() }, 200, isHead)
     }
@@ -74,6 +84,10 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/v1/audio/speech') {
       return createOpenAiSpeech(req, res)
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/audio/effect') {
+      return createAudioEffect(req, res)
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/audio/transcriptions') {
@@ -123,6 +137,23 @@ async function createOpenAiSpeech(req: IncomingMessage, res: ServerResponse): Pr
     `Speech generation timed out after ${timeoutMs}ms for provider ${provider.id}`,
   )
   sendBinary(res, result.audio, normalizeSpeechMimeType(responseFormat, result.mimeType))
+}
+
+async function createAudioEffect(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJson<Record<string, unknown>>(req)
+  const providerId = getOpenAiModelProvider(body.model, body.provider)
+  const provider = getSoundEffectProvider(providerId)
+  const context = await getRuntimeConfig(provider.id)
+  ensureEnabled(provider.id, context)
+
+  const request = normalizeSoundEffectInput(provider.id, body)
+  const timeoutMs = getProviderTimeoutMs(context)
+  const result = await withTimeout(
+    provider.createSoundEffect(request, context),
+    timeoutMs,
+    `Sound effect generation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+  )
+  sendBinary(res, result.audio, result.mimeType)
 }
 
 async function createOpenAiTranscription(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -184,7 +215,7 @@ function listOpenAiModels(): Array<{
     owned_by: string
     capabilities: Record<string, boolean>
   }>()
-  for (const provider of [...listTtsProviders(), ...listAsrProviders()]) {
+  for (const provider of [...listTtsProviders(), ...listAsrProviders(), ...listSoundEffectProviders()]) {
     const existing = models.get(provider.id)
     models.set(provider.id, {
       id: provider.id,
@@ -218,7 +249,12 @@ function assertKnownProvider(providerId: string): void {
     getTtsProvider(providerId)
     return
   } catch {
-    getAsrProvider(providerId)
+    try {
+      getAsrProvider(providerId)
+      return
+    } catch {
+      getSoundEffectProvider(providerId)
+    }
   }
 }
 
@@ -258,6 +294,36 @@ function normalizeSynthesizeInput(providerId: string, input: unknown): Synthesiz
       voicePrompt: typeof value.voicePrompt === 'string' ? value.voicePrompt : undefined,
       stylePrompt: typeof value.stylePrompt === 'string' ? value.stylePrompt : undefined,
     },
+  }
+}
+
+function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEffectRequest {
+  const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const prompt = typeof value.input === 'string'
+    ? value.input
+    : typeof value.prompt === 'string'
+      ? value.prompt
+      : ''
+  if (!prompt.trim()) throw new Error('input is required')
+  return {
+    provider: providerId,
+    prompt,
+    outputFormat: typeof value.response_format === 'string'
+      ? value.response_format
+      : typeof value.output_format === 'string'
+        ? value.output_format
+        : undefined,
+    durationSeconds: typeof value.duration_seconds === 'number'
+      ? value.duration_seconds
+      : typeof value.durationSeconds === 'number'
+        ? value.durationSeconds
+        : undefined,
+    promptInfluence: typeof value.prompt_influence === 'number'
+      ? value.prompt_influence
+      : typeof value.promptInfluence === 'number'
+        ? value.promptInfluence
+        : undefined,
+    loop: typeof value.loop === 'boolean' ? value.loop : undefined,
   }
 }
 

@@ -127,12 +127,35 @@ export interface TranscribeResult {
   raw?: unknown
 }
 
+export interface SoundEffectRequest {
+  provider?: string
+  prompt: string
+  outputFormat?: string
+  durationSeconds?: number
+  promptInfluence?: number
+  loop?: boolean
+}
+
+export interface AudioGenerationResult {
+  audio: Buffer
+  mimeType: string
+  durationMs: number
+}
+
 export interface AsrProvider {
   readonly id: string
   readonly name: string
   readonly capabilities?: ProviderCapabilities
   readonly fields?: ProviderFieldDefinition[]
   transcribe(request: TranscribeRequest, context?: ProviderContext): Promise<TranscribeResult>
+}
+
+export interface SoundEffectProvider {
+  readonly id: string
+  readonly name: string
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  createSoundEffect(request: SoundEffectRequest, context?: ProviderContext): Promise<AudioGenerationResult>
 }
 
 export interface ProviderRuntimeConfig {

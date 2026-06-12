@@ -2,30 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 
-const hiddenProviderIds = new Set(['mock', 'mock-asr'])
-
-const voiceOptionsByProviderId = {
-  edge: [
-    { value: 'zh-CN-XiaoyiNeural', label: 'Xiaoyi (zh-CN, Female)' },
-    { value: 'zh-CN-YunxiNeural', label: 'Yunxi (zh-CN, Male)' },
-    { value: 'zh-CN-YunjianNeural', label: 'Yunjian (zh-CN, Male)' },
-    { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (zh-CN, Female)' },
-    { value: 'en-US-AriaNeural', label: 'Aria (en-US, Female)' },
-    { value: 'en-US-GuyNeural', label: 'Guy (en-US, Male)' },
-  ],
-  mimo: [
-    { value: 'mimo_default', label: 'MiMo Default (zh-CN)' },
-    { value: '冰糖', label: '冰糖 (zh-CN, Female)' },
-    { value: '茉莉', label: '茉莉 (zh-CN, Female)' },
-    { value: '苏打', label: '苏打 (zh-CN, Male)' },
-    { value: '白桦', label: '白桦 (zh-CN, Male)' },
-    { value: 'Mia', label: 'Mia (en-US, Female)' },
-    { value: 'Chloe', label: 'Chloe (en-US, Female)' },
-    { value: 'Milo', label: 'Milo (en-US, Male)' },
-    { value: 'Dean', label: 'Dean (en-US, Male)' },
-  ],
-}
-
 function App() {
   const [appConfig, setAppConfig] = useState({ apiBaseUrl: '' })
   const [providers, setProviders] = useState([])
@@ -36,7 +12,9 @@ function App() {
   const [testMode, setTestMode] = useState('tts')
   const [testResult, setTestResult] = useState(null)
   const [formValues, setFormValues] = useState({})
+  const [voiceOptions, setVoiceOptions] = useState([])
   const [speechForm, setSpeechForm] = useState(defaultSpeechForm())
+  const [effectForm, setEffectForm] = useState(defaultEffectForm())
   const [transcriptionForm, setTranscriptionForm] = useState(defaultTranscriptionForm())
   const [transcriptionFile, setTranscriptionFile] = useState(null)
 
@@ -58,6 +36,7 @@ function App() {
     if (!selectedProvider) return
     setTestMode(getDefaultTestMode(selectedProvider))
     setSpeechForm(defaultSpeechForm(selectedProvider))
+    setEffectForm(defaultEffectForm())
     setTranscriptionForm(defaultTranscriptionForm())
     setTranscriptionFile(null)
     setIsConfigOpen(false)
@@ -66,16 +45,43 @@ function App() {
     clearTestResult()
   }, [selectedProvider?.id])
 
+  useEffect(() => {
+    if (!selectedProvider?.capabilities?.tts) {
+      setVoiceOptions([])
+      return
+    }
+    let cancelled = false
+    loadProviderVoices(selectedProvider.id)
+      .then(options => {
+        if (cancelled) return
+        setVoiceOptions(options)
+        setSpeechForm(current => current.voice || !options[0] ? current : { ...current, voice: options[0].value })
+      })
+      .catch(() => {
+        if (!cancelled) setVoiceOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedProvider?.id, apiBaseUrl])
+
   async function loadProviders() {
     const response = await fetch(apiUrl('/api/providers', apiBaseUrl))
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.error || 'Failed to load providers')
-    const visibleProviders = (payload.providers || []).filter(provider => !hiddenProviderIds.has(provider.id))
-    setProviders(visibleProviders)
+    const nextProviders = payload.providers || []
+    setProviders(nextProviders)
     setSelectedProviderId(current => {
-      if (current && visibleProviders.some(provider => provider.id === current)) return current
-      return visibleProviders[0]?.id ?? ''
+      if (current && nextProviders.some(provider => provider.id === current)) return current
+      return nextProviders[0]?.id ?? ''
     })
+  }
+
+  async function loadProviderVoices(providerId) {
+    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(providerId)}/voices`, apiBaseUrl))
+    const payload = await response.json()
+    if (!response.ok) throw new Error(payload.error || 'Failed to load voices')
+    return (payload.voices || []).map(formatVoiceOption)
   }
 
   function selectTestMode(mode) {
@@ -143,7 +149,9 @@ function App() {
     setTestStatus('Running...')
 
     try {
-      if (testMode === 'asr') {
+      if (testMode === 'effect') {
+        await runEffectTest()
+      } else if (testMode === 'asr') {
         await runTranscriptionTest()
       } else {
         await runSpeechTest()
@@ -209,6 +217,31 @@ function App() {
     })
   }
 
+  async function runEffectTest() {
+    const response = await fetch(apiUrl('/v1/audio/effect', apiBaseUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: selectedProvider.id,
+        input: effectForm.input,
+        response_format: effectForm.responseFormat,
+        duration_seconds: Number(effectForm.durationSeconds) || undefined,
+        prompt_influence: Number(effectForm.promptInfluence) || undefined,
+        loop: effectForm.loop,
+      }),
+    })
+    if (!response.ok) throw new Error(await readError(response))
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    setTestResult({
+      kind: 'audio',
+      objectUrl,
+      mimeType: response.headers.get('content-type') || blob.type,
+      size: blob.size,
+      endpoint: 'POST /v1/audio/effect',
+    })
+  }
+
   const capabilityText = useMemo(() => {
     if (!selectedProvider) return ''
     return Object.entries(selectedProvider.capabilities || {})
@@ -264,7 +297,7 @@ function App() {
                     <h2 className="text-lg font-bold">Test API</h2>
                   </div>
                   <div className="mb-4 flex gap-2">
-                    {['tts', 'asr'].map(mode => (
+                    {['tts', 'asr', 'effect'].map(mode => (
                       <button
                         className={`tab ${testMode === mode ? 'tab-active' : ''}`}
                         disabled={!supportsTestMode(selectedProvider, mode)}
@@ -272,13 +305,15 @@ function App() {
                         type="button"
                         onClick={() => selectTestMode(mode)}
                       >
-                        {mode === 'tts' ? 'Speech' : 'Transcription'}
+                        {getTestModeLabel(mode)}
                       </button>
                     ))}
                   </div>
 
                   <form className="grid gap-4" onSubmit={runTest}>
-                    {testMode === 'asr' ? (
+                    {testMode === 'effect' ? (
+                      <EffectTestForm form={effectForm} onFormChange={setEffectForm} />
+                    ) : testMode === 'asr' ? (
                       <TranscriptionTestForm
                         file={transcriptionFile}
                         form={transcriptionForm}
@@ -286,7 +321,7 @@ function App() {
                         onFormChange={setTranscriptionForm}
                       />
                     ) : (
-                      <SpeechTestForm form={speechForm} onFormChange={setSpeechForm} provider={selectedProvider} />
+                      <SpeechTestForm form={speechForm} onFormChange={setSpeechForm} voiceOptions={voiceOptions} />
                     )}
                     <div className="flex items-center gap-3">
                       <button className="btn-primary" type="submit">Run test</button>
@@ -383,9 +418,7 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
   )
 }
 
-function SpeechTestForm({ form, onFormChange, provider }) {
-  const voiceOptions = getVoiceOptions(provider)
-
+function SpeechTestForm({ form, onFormChange, voiceOptions }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -507,6 +540,66 @@ function TranscriptionTestForm({ file, form, onFileChange, onFormChange }) {
   )
 }
 
+function EffectTestForm({ form, onFormChange }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+        Prompt
+        <textarea
+          className="textarea min-h-28"
+          value={form.input}
+          onChange={event => onFormChange({ ...form, input: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Duration seconds
+        <input
+          className="input"
+          min="0.5"
+          max="30"
+          step="0.1"
+          type="number"
+          value={form.durationSeconds}
+          onChange={event => onFormChange({ ...form, durationSeconds: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Prompt influence
+        <input
+          className="input"
+          min="0"
+          max="1"
+          step="0.05"
+          type="number"
+          value={form.promptInfluence}
+          onChange={event => onFormChange({ ...form, promptInfluence: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Response format
+        <select
+          className="input"
+          value={form.responseFormat}
+          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+        >
+          <option value="mp3_44100_128">mp3_44100_128</option>
+          <option value="mp3_44100_192">mp3_44100_192</option>
+          <option value="pcm_44100">pcm_44100</option>
+          <option value="ulaw_8000">ulaw_8000</option>
+        </select>
+      </label>
+      <label className="inline-flex items-center gap-2 self-end text-sm font-semibold">
+        <input
+          type="checkbox"
+          checked={form.loop}
+          onChange={event => onFormChange({ ...form, loop: event.target.checked })}
+        />
+        Loop
+      </label>
+    </div>
+  )
+}
+
 function ResultPreview({ result }) {
   if (!result) return null
   if (result.kind === 'error') {
@@ -557,30 +650,40 @@ function getProviderFormValues(provider) {
 function supportsTestMode(provider, mode) {
   if (!provider) return false
   if (mode === 'asr') return Boolean(provider.capabilities?.asr)
+  if (mode === 'effect') return Boolean(provider.capabilities?.soundEffects)
   return Boolean(provider.capabilities?.tts)
 }
 
 function getDefaultTestMode(provider) {
   if (provider?.capabilities?.tts) return 'tts'
   if (provider?.capabilities?.asr) return 'asr'
+  if (provider?.capabilities?.soundEffects) return 'effect'
   return 'tts'
+}
+
+function getTestModeLabel(mode) {
+  if (mode === 'tts') return 'Speech'
+  if (mode === 'asr') return 'Transcription'
+  return 'Effect'
 }
 
 function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
-    voice: getDefaultVoice(provider),
+    voice: '',
     responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
     speed: '1',
   }
 }
 
-function getVoiceOptions(provider) {
-  return voiceOptionsByProviderId[provider?.id] ?? []
-}
-
-function getDefaultVoice(provider) {
-  return getVoiceOptions(provider)[0]?.value ?? ''
+function defaultEffectForm() {
+  return {
+    input: 'a short cinematic whoosh',
+    durationSeconds: '1.5',
+    promptInfluence: '0.3',
+    responseFormat: 'mp3_44100_128',
+    loop: false,
+  }
 }
 
 function defaultTranscriptionForm() {
@@ -612,6 +715,17 @@ function normalizeApiBaseUrl(value) {
 function formatBytes(value) {
   if (value < 1024) return `${value} B`
   return `${(value / 1024).toFixed(1)} KB`
+}
+
+function formatVoiceOption(voice) {
+  return {
+    value: voice.id,
+    label: [
+      voice.name || voice.id,
+      voice.locale,
+      voice.gender,
+    ].filter(Boolean).join(' · '),
+  }
 }
 
 createRoot(document.querySelector('#root')).render(<App />)

@@ -9,11 +9,9 @@ into the `ProviderConfig` table.
 
 ## Providers
 
-- `mock`: local WAV TTS for development and tests.
 - `edge`: Microsoft Edge online TTS.
 - `mimo`: Xiaomi MiMo TTS with preset voices, voice design, and ASR.
-- `elevenlabs`: ElevenLabs sound-effects generation.
-- `mock-asr`: local ASR stub for development.
+- `elevenlabs`: ElevenLabs TTS, ASR, and sound-effects generation.
 - `bilibili-asr`: ASR through the `bilibili-mcp` Flask API.
 
 ## API
@@ -22,6 +20,7 @@ OpenAI-compatible audio API:
 
 - `GET /v1/models`
 - `POST /v1/audio/speech`
+- `POST /v1/audio/effect`
 - `POST /v1/audio/transcriptions`
 
 The OpenAI-style `model` field maps to a voxout provider id such as `edge`,
@@ -36,7 +35,7 @@ Provider management API:
 
 The old `/v1/tts/*` API has been removed.
 
-## Invoke
+## Examples
 
 Speech generation:
 
@@ -45,6 +44,15 @@ curl -X POST http://127.0.0.1:4177/v1/audio/speech \
   -H 'content-type: application/json' \
   --output speech.mp3 \
   --data '{"model":"edge","input":"你好，voxout。","voice":"zh-CN-XiaoyiNeural","response_format":"mp3"}'
+```
+
+Sound effect generation:
+
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/effect \
+  -H 'content-type: application/json' \
+  --output effect.mp3 \
+  --data '{"model":"elevenlabs","input":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3_44100_128"}'
 ```
 
 Transcription from a local file:

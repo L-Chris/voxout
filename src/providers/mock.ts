@@ -1,11 +1,11 @@
-import type { SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
+import type { SoundEffectProvider, SoundEffectRequest, SynthesizeRequest, TtsProvider, TtsVoice } from '../types.js'
 
 const SAMPLE_RATE = 24_000
 
-export class MockTtsProvider implements TtsProvider {
+export class MockTtsProvider implements TtsProvider, SoundEffectProvider {
   readonly id = 'mock'
   readonly name = 'Mock WAV Provider'
-  readonly capabilities = { tts: true }
+  readonly capabilities = { tts: true, soundEffects: true }
 
   async listVoices(): Promise<TtsVoice[]> {
     return [
@@ -18,6 +18,12 @@ export class MockTtsProvider implements TtsProvider {
     const text = request.segment.text.trim()
     const durationMs = Math.min(5000, Math.max(700, text.length * 80))
     const audio = createToneWav(durationMs, getFrequency(request.segment.voice ?? request.voice))
+    return { audio, mimeType: 'audio/wav', durationMs }
+  }
+
+  async createSoundEffect(request: SoundEffectRequest) {
+    const durationMs = Math.min(30_000, Math.max(500, Math.round((request.durationSeconds ?? 1) * 1000)))
+    const audio = createToneWav(durationMs, getFrequency(request.prompt))
     return { audio, mimeType: 'audio/wav', durationMs }
   }
 }
