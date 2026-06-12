@@ -9,6 +9,7 @@ function App() {
   const [providers, setProviders] = useState([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [testStatus, setTestStatus] = useState('')
   const [testMode, setTestMode] = useState('tts')
   const [testResult, setTestResult] = useState(null)
@@ -33,11 +34,13 @@ function App() {
 
   useEffect(() => {
     if (!selectedProvider) return
-    setFormValues(getProviderFormValues(selectedProvider))
     setTestMode(getDefaultTestMode(selectedProvider))
     setSpeechForm(defaultSpeechForm(selectedProvider))
     setTranscriptionForm(defaultTranscriptionForm())
     setTranscriptionFile(null)
+    setIsConfigOpen(false)
+    setSaveStatus('')
+    setFormValues({})
     clearTestResult()
   }, [selectedProvider?.id])
 
@@ -65,6 +68,18 @@ function App() {
       if (current?.objectUrl) URL.revokeObjectURL(current.objectUrl)
       return null
     })
+  }
+
+  function openConfig() {
+    if (!selectedProvider) return
+    setFormValues(getProviderFormValues(selectedProvider))
+    setSaveStatus('')
+    setIsConfigOpen(true)
+  }
+
+  function closeConfig() {
+    setIsConfigOpen(false)
+    setSaveStatus('')
   }
 
   async function saveSelectedProvider(event) {
@@ -96,6 +111,7 @@ function App() {
     }
     setSaveStatus('Saved')
     await loadProviders()
+    setIsConfigOpen(false)
   }
 
   async function runTest(event) {
@@ -221,34 +237,10 @@ function App() {
                     <h2 className="text-2xl font-bold">{selectedProvider.name}</h2>
                     <div className="text-slate-500">{capabilityText}</div>
                   </div>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(formValues.enabled)}
-                      onChange={event => setFormValues({ ...formValues, enabled: event.target.checked })}
-                    />
-                    Enabled
-                  </label>
+                  <button className="btn-secondary" type="button" onClick={openConfig}>Configure</button>
                 </div>
 
-                <form onSubmit={saveSelectedProvider}>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {(selectedProvider.fields || []).map(field => (
-                      <FieldInput
-                        field={field}
-                        key={field.key}
-                        value={formValues[field.key] ?? ''}
-                        onChange={value => setFormValues({ ...formValues, [field.key]: value })}
-                      />
-                    ))}
-                  </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <button className="btn-primary" type="submit">Save configuration</button>
-                    <span className="text-slate-500">{saveStatus}</span>
-                  </div>
-                </form>
-
-                <div className="mt-8 border-t border-slate-200 pt-5">
+                <div className="border-t border-slate-200 pt-5">
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="text-lg font-bold">Test API</h2>
                   </div>
@@ -285,6 +277,17 @@ function App() {
 
                   <ResultPreview result={testResult} />
                 </div>
+
+                {isConfigOpen ? (
+                  <ConfigDialog
+                    formValues={formValues}
+                    onClose={closeConfig}
+                    onFieldChange={(key, value) => setFormValues({ ...formValues, [key]: value })}
+                    onSubmit={saveSelectedProvider}
+                    provider={selectedProvider}
+                    saveStatus={saveStatus}
+                  />
+                ) : null}
               </>
             ) : (
               <div className="text-slate-500">No providers available.</div>
@@ -312,6 +315,52 @@ function FieldInput({ field, value, onChange }) {
       />
       {field.description ? <small className="font-normal text-slate-500">{field.description}</small> : null}
     </label>
+  )
+}
+
+function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, saveStatus }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6" onMouseDown={onClose}>
+      <div className="modal-panel" onMouseDown={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-xl font-bold">{provider.name}</h2>
+            <div className="text-sm text-slate-500">{provider.id}</div>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close configuration">×</button>
+        </div>
+
+        <form className="grid gap-4 px-5 py-4" onSubmit={onSubmit}>
+          <label className="inline-flex items-center gap-2 font-semibold">
+            <input
+              type="checkbox"
+              checked={Boolean(formValues.enabled)}
+              onChange={event => onFieldChange('enabled', event.target.checked)}
+            />
+            Enabled
+          </label>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {(provider.fields || []).map(field => (
+              <FieldInput
+                field={field}
+                key={field.key}
+                value={formValues[field.key] ?? ''}
+                onChange={value => onFieldChange(field.key, value)}
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-slate-500">{saveStatus}</span>
+            <div className="flex gap-2">
+              <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
+              <button className="btn-primary" type="submit">Save</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
