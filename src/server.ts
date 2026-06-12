@@ -94,7 +94,7 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(port, () => {
-  console.log(`rebook-tts listening on http://127.0.0.1:${port}`)
+  console.log(`voxout listening on http://127.0.0.1:${port}`)
 })
 
 function setCorsHeaders(res: ServerResponse): void {

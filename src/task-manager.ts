@@ -95,7 +95,7 @@ export class TaskManager {
           error: message,
         }
         job.failures = [...(job.failures ?? []), failure]
-        console.error('[rebook-tts] segment failed', JSON.stringify({
+        console.error('[voxout] segment failed', JSON.stringify({
           jobId: job.id,
           provider: segment.provider ?? job.provider,
           ...failure,
@@ -132,7 +132,7 @@ async function synthesizeWithRetries(
           rateLimitBaseDelayMs,
           maxDelayMs,
         })
-        console.warn('[rebook-tts] segment retry', JSON.stringify({
+        console.warn('[voxout] segment retry', JSON.stringify({
           segmentId: request.segment.id,
           attempt: attempt + 1,
           nextAttempt: attempt + 2,

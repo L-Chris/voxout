@@ -1,4 +1,4 @@
-# rebook-tts
+# voxout
 
 Node.js + TypeScript TTS service for rebook.
 
