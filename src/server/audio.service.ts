@@ -230,6 +230,7 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   if (!file) throw new Error('file is required')
   const responseFormat = normalizeTranscriptionResponseFormat(form.fields.response_format)
   const providerResponseFormat = normalizeProviderTranscriptionResponseFormat(provider.id, responseFormat)
+  const stream = normalizeBoolean(form.fields.stream)
   const request: TranscribeRequest = {
     model: target.model,
     file: {
@@ -240,6 +241,7 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
     language: form.fields.language,
     prompt: form.fields.prompt,
     responseFormat: providerResponseFormat,
+    stream,
     format: providerResponseFormat === 'srt'
       ? 'srt'
       : providerResponseFormat === 'vtt'
@@ -252,6 +254,16 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   }
 
   const timeoutMs = getProviderTimeoutMs(context)
+  if (stream) {
+    if (!provider.streamTranscribe) throw new Error(`Provider does not support streaming transcription: ${provider.id}`)
+    const result = await withTimeout(
+      provider.streamTranscribe(request, context),
+      timeoutMs,
+      `Transcription stream creation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    )
+    return sendStream(res, result.stream, result.mimeType)
+  }
+
   const result = await withTimeout(
     provider.transcribe(request, context),
     timeoutMs,
@@ -603,6 +615,10 @@ function normalizeSpeechStreamFormat(value: unknown): 'audio' | 'sse' | undefine
   if (value == null || value === '') return undefined
   if (value === 'audio' || value === 'sse') return value
   throw new Error('stream_format must be "audio" or "sse"')
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  return value === true || value === 'true' || value === '1'
 }
 
 function normalizeTranscriptionResponseFormat(value: string | undefined): 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json' {

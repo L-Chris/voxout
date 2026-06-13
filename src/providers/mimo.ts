@@ -15,7 +15,7 @@ import type {
 } from '../types.js'
 import { getProviderTimeoutMs } from '../timeout.js'
 import { randomUUID } from 'node:crypto'
-import { TextDecoder } from 'node:util'
+import { TextDecoder, TextEncoder } from 'node:util'
 import {
   getConfigBooleanWithFallback as getBooleanConfig,
   getConfigString,
@@ -52,6 +52,7 @@ interface MimoCompletionResponse {
 interface MimoCompletionChunk {
   choices?: Array<{
     delta?: {
+      content?: string
       audio?: {
         data?: string
       }
@@ -62,7 +63,7 @@ interface MimoCompletionChunk {
 export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'mimo'
   readonly name = 'Xiaomi MiMo'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, asrStreaming: true, voiceDesign: true, voiceClone: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
@@ -122,26 +123,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const apiKey = getSecretString(context, 'apiKey')
     if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
 
-    const audioData = fileToAudioDataUrl(request.file)
-    const response = await postMimoCompletion(apiKey, {
-      model: request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_audio',
-              input_audio: {
-                data: audioData,
-              },
-            },
-          ],
-        },
-      ],
-      asr_options: {
-        language: request.language?.trim() || 'auto',
-      },
-    }, context)
+    const response = await postMimoCompletion(apiKey, buildAsrBody(request, context), context)
     const text = response.choices?.[0]?.message?.content?.trim()
     if (!text) throw new Error('MiMo ASR response did not include transcribed text.')
     return {
@@ -149,6 +131,18 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
       format: request.format ?? 'txt',
       text,
       raw: request.format === 'raw' ? response : undefined,
+    }
+  }
+
+  async streamTranscribe(request: TranscribeRequest, context: ProviderContext = {}) {
+    const apiKey = getSecretString(context, 'apiKey')
+    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+
+    const response = await postMimoCompletionStream(apiKey, { ...buildAsrBody(request, context), stream: true }, context)
+    if (!response.body) throw new Error('MiMo ASR stream response was empty.')
+    return {
+      stream: decodeMimoTranscriptionSseStream(response.body),
+      mimeType: 'text/event-stream',
     }
   }
 
@@ -282,6 +276,28 @@ function buildMessages(text: string, voiceDescription?: string, instructions?: s
   return messages
 }
 
+function buildAsrBody(request: TranscribeRequest, context: ProviderContext) {
+  return {
+    model: request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_audio',
+            input_audio: {
+              data: fileToAudioDataUrl(request.file),
+            },
+          },
+        ],
+      },
+    ],
+    asr_options: {
+      language: request.language?.trim() || 'auto',
+    },
+  }
+}
+
 async function postMimoCompletion(apiKey: string, body: unknown, context: ProviderContext): Promise<MimoCompletionResponse> {
   const baseUrl = trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
   const url = `${baseUrl}/chat/completions`
@@ -408,6 +424,38 @@ function decodeMimoAudioSseStream(stream: ReadableStream<Uint8Array>): ReadableS
   })
 }
 
+function decodeMimoTranscriptionSseStream(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ''
+  let transcript = ''
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = stream.getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const emitted = emitMimoTranscriptionEvents(buffer, controller, encoder, transcript)
+          buffer = emitted.remainder
+          transcript = emitted.transcript
+        }
+        buffer += decoder.decode()
+        const emitted = emitMimoTranscriptionEvents(`${buffer}\n\n`, controller, encoder, transcript)
+        transcript = emitted.transcript
+        enqueueSse(controller, encoder, { type: 'transcript.text.done', text: transcript })
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      } catch (error) {
+        controller.error(error)
+      } finally {
+        reader.releaseLock()
+      }
+    },
+  })
+}
+
 function emitMimoAudioEvents(buffer: string, controller: ReadableStreamDefaultController<Uint8Array>): string {
   const parts = buffer.split(/\r?\n\r?\n/)
   const remainder = parts.pop() ?? ''
@@ -423,6 +471,43 @@ function emitMimoAudioEvents(buffer: string, controller: ReadableStreamDefaultCo
     if (chunk.length) controller.enqueue(chunk)
   }
   return remainder
+}
+
+function emitMimoTranscriptionEvents(
+  buffer: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  transcript: string,
+): { remainder: string, transcript: string } {
+  const parts = buffer.split(/\r?\n\r?\n/)
+  const remainder = parts.pop() ?? ''
+  for (const part of parts) {
+    const data = part
+      .split(/\r?\n/)
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n')
+      .trim()
+    if (!data || data === '[DONE]') continue
+    const delta = parseMimoTextChunk(data)
+    if (!delta) continue
+    transcript += delta
+    enqueueSse(controller, encoder, { type: 'transcript.text.delta', delta })
+  }
+  return { remainder, transcript }
+}
+
+function enqueueSse(controller: ReadableStreamDefaultController<Uint8Array>, encoder: TextEncoder, payload: unknown): void {
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
+}
+
+function parseMimoTextChunk(data: string): string {
+  try {
+    const payload = JSON.parse(data) as MimoCompletionChunk
+    return payload.choices?.[0]?.delta?.content ?? ''
+  } catch {
+    return ''
+  }
 }
 
 function parseMimoAudioChunk(data: string): Buffer {

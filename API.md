@@ -60,8 +60,9 @@
 | `language`，可选 string | ISO-639-1 | `language` | `language_code` | `language`，裁剪地区码 | `json_config={"language":...}`，裁剪地区码 | `asr_options.language`，默认 `auto` | 不支持 | 无 |
 | `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
 | `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json` | 原样传给 OpenAI | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
-| 官方未实现字段 | `chunking_strategy`、`include`、`known_speaker_names`、`known_speaker_references`、`stream`、`temperature`、`timestamp_granularities[]` | 当前不读取 | 当前不读取 | 当前不读取；但固定发送 `timestamp_granularities[]=word` | 当前不读取 | 当前不读取 | 不支持 | 无 |
-| 响应 | `json -> { text }`；`text/srt/vtt` 返回文本；详细格式返回 JSON | 同官方；由 Voxout 包装最终响应 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 同 ElevenLabs | 不支持 | 不直接返回未整理 provider 原始响应，除 verbose/diarized 中的 `raw` |
+| `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
+| 官方未实现字段 | `chunking_strategy`、`include`、`known_speaker_names`、`known_speaker_references`、`temperature`、`timestamp_granularities[]` | 当前不读取 | 当前不读取 | 当前不读取；但固定发送 `timestamp_granularities[]=word` | 当前不读取 | 当前不读取 | 不支持 | 无 |
+| 响应 | `json -> { text }`；`text/srt/vtt` 返回文本；详细格式返回 JSON；`stream=true` 返回 SSE | 同官方；由 Voxout 包装最终响应；stream 直接透传 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 不直接返回未整理 provider 原始响应，除 verbose/diarized 中的 `raw` |
 
 ## POST `/v1/audio/effect`
 
@@ -158,4 +159,4 @@
 |---|---|---|---|---|---|---|---|---|
 | Default provider | 无 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | TTS 实际是 Edge TTS；不再注册 ASR capability。 | 无 |
 | OpenAI `voice` object `{ id }` | 官方支持 | 当前 Voxout 只接受 string voice；如需完全兼容官方 custom voice object，需要改 `normalizeOpenAiSpeechInput` | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
-| OpenAI transcription streaming | 官方 `stream=true` | 当前 Voxout 不读取 `stream`，ASR 不支持 SSE 转写流 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
+| OpenAI transcription streaming | 官方 `stream=true` | OpenAI 直接透传 SSE；MiMo 转成 OpenAI transcript SSE；其他 provider 不支持 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |

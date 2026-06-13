@@ -56,7 +56,7 @@ interface OpenAiTranscriptionPayload {
 export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
   readonly id = 'openai'
   readonly name = 'OpenAI'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceClone: true }
+  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, asrStreaming: true, voiceClone: true }
   readonly fields = [
     { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
     { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
@@ -171,19 +171,10 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
     const apiKey = getApiKey(context)
     const responseFormat = normalizeTranscriptionResponseFormat(request.responseFormat, request.format)
-    const form = new FormData()
-    form.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
-    form.set('file', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
-    form.set('response_format', responseFormat)
-    const language = normalizeLanguage(request.language)
-    if (language) form.set('language', language)
-    const prompt = normalizePrompt(request.prompt)
-    if (prompt) form.set('prompt', prompt)
-
     const response = await fetch(`${getBaseUrl(context)}/audio/transcriptions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}` },
-      body: form,
+      body: createTranscriptionForm(request, context, responseFormat),
     })
     if (responseFormat === 'text' || responseFormat === 'srt' || responseFormat === 'vtt') {
       const text = await response.text()
@@ -212,6 +203,27 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
       raw: request.format === 'raw' ? payload : undefined,
     }
   }
+
+  async streamTranscribe(request: TranscribeRequest, context: ProviderContext = {}) {
+    const apiKey = getApiKey(context)
+    const responseFormat = normalizeTranscriptionResponseFormat(request.responseFormat, request.format)
+    const form = createTranscriptionForm(request, context, responseFormat)
+    form.set('stream', 'true')
+    const response = await fetch(`${getBaseUrl(context)}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}` },
+      body: form,
+    })
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      throw new Error(detail || `OpenAI transcription stream request failed: ${response.status}`)
+    }
+    if (!response.body) throw new Error('OpenAI transcription stream response was empty.')
+    return {
+      stream: response.body,
+      mimeType: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
+    }
+  }
 }
 
 const OPENAI_PRESET_VOICES: TtsVoice[] = [
@@ -229,6 +241,22 @@ const OPENAI_PRESET_VOICES: TtsVoice[] = [
   { id: 'marin', name: 'Marin', locale: 'en-US', gender: 'Female', provider: 'openai' },
   { id: 'cedar', name: 'Cedar', locale: 'en-US', gender: 'Male', provider: 'openai' },
 ]
+
+function createTranscriptionForm(
+  request: TranscribeRequest,
+  context: ProviderContext,
+  responseFormat: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
+): FormData {
+  const form = new FormData()
+  form.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
+  form.set('file', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
+  form.set('response_format', responseFormat)
+  const language = normalizeLanguage(request.language)
+  if (language) form.set('language', language)
+  const prompt = normalizePrompt(request.prompt)
+  if (prompt) form.set('prompt', prompt)
+  return form
+}
 
 function getApiKey(context: ProviderContext): string {
   const apiKey = getSecretString(context, 'apiKey')

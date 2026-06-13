@@ -11,6 +11,7 @@ export interface TtsProviderCapabilities {
   tts?: boolean
   ttsStreaming?: boolean
   asr?: boolean
+  asrStreaming?: boolean
   voiceDesign?: boolean
   voiceClone?: boolean
   soundEffects?: boolean
@@ -96,6 +97,7 @@ export interface TranscribeRequest {
   prompt?: string
   responseFormat?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json'
   format?: 'txt' | 'srt' | 'vtt' | 'raw' | 'diarized_json'
+  stream?: boolean
 }
 
 export interface TranscribeSegment {
@@ -193,6 +195,10 @@ export interface AsrProvider {
   readonly capabilities?: ProviderCapabilities
   readonly fields?: ProviderFieldDefinition[]
   transcribe(request: TranscribeRequest, context?: ProviderContext): Promise<TranscribeResult>
+  streamTranscribe?(request: TranscribeRequest, context?: ProviderContext): Promise<{
+    stream: ReadableStream<Uint8Array>
+    mimeType: string
+  }>
 }
 
 export interface SoundEffectProvider {

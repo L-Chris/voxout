@@ -179,6 +179,48 @@ test('OpenAI provider sends speech-to-text requests', async () => {
   assert.deepEqual(result.segments, [{ from: 0, to: 0.8, content: 'Recognized by OpenAI' }])
 })
 
+test('OpenAI provider streams speech-to-text requests', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url: String(url),
+      headers: init.headers,
+      model: init.body.get('model'),
+      responseFormat: init.body.get('response_format'),
+      stream: init.body.get('stream'),
+      file: init.body.get('file'),
+    }
+    return new Response('data: {"type":"transcript.text.delta","delta":"Hello"}\n\ndata: [DONE]\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  const provider = new OpenAiProvider()
+  const result = await provider.streamTranscribe({
+    model: 'gpt-4o-mini-transcribe',
+    file: {
+      data: Buffer.alloc(256, 1),
+      mimeType: 'audio/wav',
+      fileName: 'sample.wav',
+    },
+    responseFormat: 'text',
+    stream: true,
+  }, {
+    config: {},
+    secrets: { apiKey: 'test-openai-key' },
+  })
+
+  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(await readStreamText(result.stream), 'data: {"type":"transcript.text.delta","delta":"Hello"}\n\ndata: [DONE]\n\n')
+  assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
+  assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
+  assert.equal(captured.model, 'gpt-4o-mini-transcribe')
+  assert.equal(captured.responseFormat, 'text')
+  assert.equal(captured.stream, 'true')
+  assert.equal(captured.file.type, 'audio/wav')
+})
+
 test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   const provider = new OpenAiProvider()
   const voices = await provider.listVoices()
@@ -194,6 +236,7 @@ test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   assert.equal(openai.name, 'OpenAI')
   assert.equal(openai.capabilities.tts, true)
   assert.equal(openai.capabilities.asr, true)
+  assert.equal(openai.capabilities.asrStreaming, true)
   assert.equal(openai.capabilities.voiceClone, true)
   assert.ok(openai.fields.find(field => field.key === 'ttsModel').options.includes('gpt-4o-mini-tts'))
   assert.ok(openai.fields.find(field => field.key === 'asrModel').options.includes('gpt-4o-transcribe'))

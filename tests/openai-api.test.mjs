@@ -56,9 +56,11 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(mimo.owned_by, 'voxout')
   assert.equal(mimo.capabilities.tts, true)
   assert.equal(mimo.capabilities.asr, true)
+  assert.equal(mimo.capabilities.asrStreaming, true)
   const openai = payload.data.find(model => model.id === 'openai')
   assert.equal(openai.capabilities.tts, true)
   assert.equal(openai.capabilities.asr, true)
+  assert.equal(openai.capabilities.asrStreaming, true)
   assert.equal(openai.capabilities.voiceClone, true)
   const defaultProvider = payload.data.find(model => model.id === 'default')
   assert.equal(defaultProvider.capabilities.tts, true)
@@ -517,6 +519,23 @@ test('POST /v1/audio/transcriptions supports text response format', async () => 
   assert.equal(response.status, 200)
   assert.match(response.headers.get('content-type'), /^text\/plain/)
   assert.equal(text, 'Mock transcript for inline audio')
+})
+
+test('POST /v1/audio/transcriptions rejects unsupported streaming providers', async () => {
+  const form = new FormData()
+  form.set('provider', 'mock-asr')
+  form.set('model', 'mock-asr-model')
+  form.set('stream', 'true')
+  form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: form,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(payload.error, /Provider does not support streaming transcription/)
 })
 
 test('POST /v1/audio/transcriptions converts provider segments to VTT', async () => {

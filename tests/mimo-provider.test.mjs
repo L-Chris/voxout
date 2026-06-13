@@ -152,6 +152,7 @@ test('Mimo provider exposes voice design capability metadata', async () => {
   assert.equal(provider.capabilities.voiceDesign, true)
   assert.equal(provider.capabilities.voiceClone, true)
   assert.equal(provider.capabilities.asr, true)
+  assert.equal(provider.capabilities.asrStreaming, true)
   assert.ok(voices.length > 0)
   assert.equal(voices.find(voice => voice.id === 'mimo_default').gender, 'Female')
   assert.equal(voices[0].capabilities.voiceDesign, true)
@@ -163,6 +164,7 @@ test('Mimo provider exposes voice design capability metadata', async () => {
   assert.equal(mimo.capabilities.voiceDesign, true)
   assert.equal(mimo.capabilities.voiceClone, true)
   assert.equal(mimo.capabilities.asr, true)
+  assert.equal(mimo.capabilities.asrStreaming, true)
 })
 
 test('Mimo provider sends speech recognition requests', async () => {
@@ -225,6 +227,55 @@ test('Mimo provider sends speech recognition requests', async () => {
   assert.equal(result.raw.choices[0].message.content, '识别结果')
 })
 
+test('Mimo provider streams speech recognition as OpenAI transcription events', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url,
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '识别' } }] })}`,
+      '',
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '结果' } }] })}`,
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  const provider = new MimoTtsProvider()
+  const result = await provider.streamTranscribe({
+    model: 'mimo-v2.5-asr',
+    file: {
+      data: Buffer.from('audio'),
+      mimeType: 'audio/wav',
+      fileName: 'sample.wav',
+    },
+    language: 'auto',
+    stream: true,
+  }, {
+    config: {},
+    secrets: { apiKey: 'test-key' },
+  })
+
+  const streamText = await readStreamText(result.stream)
+  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
+  assert.equal(captured.headers['api-key'], 'test-key')
+  assert.equal(captured.body.stream, true)
+  assert.equal(captured.body.model, 'mimo-v2.5-asr')
+  assert.deepEqual(captured.body.asr_options, { language: 'auto' })
+  assert.match(streamText, /"type":"transcript\.text\.delta","delta":"识别"/)
+  assert.match(streamText, /"type":"transcript\.text\.delta","delta":"结果"/)
+  assert.match(streamText, /"type":"transcript\.text\.done","text":"识别结果"/)
+  assert.match(streamText, /data: \[DONE\]/)
+})
+
 async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = false }) {
   const captures = []
   globalThis.fetch = async (url, init) => {
@@ -267,4 +318,8 @@ async function readStreamBuffer(stream) {
     chunks.push(Buffer.from(value))
   }
   return Buffer.concat(chunks)
+}
+
+async function readStreamText(stream) {
+  return (await readStreamBuffer(stream)).toString('utf8')
 }
