@@ -21,6 +21,7 @@ import { formatVoiceRecord, mergeVoices } from './voice-records.js'
 import type {
   ProviderConfigInput,
   ProviderRuntimeConfig,
+  ProviderCapabilities,
 } from '../types.js'
 
 @Service()
@@ -72,6 +73,7 @@ function listOpenAiModels(): Array<{
   created: number
   owned_by: string
   capabilities: Record<string, boolean>
+  providers?: string[]
 }> {
   const models = new Map<string, {
     id: string
@@ -79,26 +81,81 @@ function listOpenAiModels(): Array<{
     created: number
     owned_by: string
     capabilities: Record<string, boolean>
+    providers?: string[]
   }>()
-  for (const provider of [
+  const providers = [
     ...listTtsProviders(),
     ...listAsrProviders(),
     ...listSoundEffectProviders(),
     ...listAudioIsolationProviders(),
     ...listVoiceDesignProviders(),
     ...listVoiceCloneProviders(),
-  ].filter(provider => !isInternalProviderId(provider.id))) {
-    const existing = models.get(provider.id)
-    models.set(provider.id, {
+  ].filter(provider => !isInternalProviderId(provider.id))
+  const uniqueProviders = [...new Map(providers.map(provider => [provider.id, provider])).values()]
+  const providerIds = new Set(uniqueProviders.map(provider => provider.id))
+
+  for (const provider of uniqueProviders) {
+    mergeModel(models, {
       id: provider.id,
-      object: 'model',
-      created: 0,
       owned_by: 'voxout',
-      capabilities: {
-        ...(existing?.capabilities ?? {}),
-        ...(provider.capabilities ?? {}),
-      },
+      capabilities: provider.capabilities ?? {},
+      providers: [provider.id],
     })
+    for (const field of provider.fields ?? []) {
+      const capability = getModelFieldCapability(field.key)
+      if (!capability) continue
+      for (const model of field.options ?? []) {
+        if (providerIds.has(model)) continue
+        mergeModel(models, {
+          id: model,
+          owned_by: provider.id,
+          capabilities: { [capability]: true },
+          providers: [provider.id],
+        })
+      }
+    }
   }
   return [...models.values()]
+}
+
+function mergeModel(
+  models: Map<string, {
+    id: string
+    object: 'model'
+    created: number
+    owned_by: string
+    capabilities: Record<string, boolean>
+    providers?: string[]
+  }>,
+  model: {
+    id: string
+    owned_by: string
+    capabilities: ProviderCapabilities
+    providers?: string[]
+  },
+): void {
+  const existing = models.get(model.id)
+  models.set(model.id, {
+    id: model.id,
+    object: 'model',
+    created: 0,
+    owned_by: existing?.owned_by ?? model.owned_by,
+    capabilities: {
+      ...(existing?.capabilities ?? {}),
+      ...model.capabilities,
+    },
+    providers: uniqueStrings([...(existing?.providers ?? []), ...(model.providers ?? [])]),
+  })
+}
+
+function getModelFieldCapability(fieldKey: string): keyof ProviderCapabilities | undefined {
+  if (fieldKey === 'tts_model') return 'tts'
+  if (fieldKey === 'asr_model') return 'asr'
+  if (fieldKey === 'sound_effect_model') return 'sound_effects'
+  if (fieldKey === 'voice_design_model') return 'voice_design'
+  return undefined
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)].filter(Boolean)
 }

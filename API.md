@@ -118,8 +118,8 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 | 实际传参 | [OpenAI 规范][openai-models] | [OpenAI][openai-models] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-rate-limit] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
-| 无 | OpenAI list models 返回 `{ object: "list", data: [...] }` | 聚合为 model object | 聚合为 model object | 聚合为 model object | 聚合为 model object | 聚合为 model object | 聚合为 model object | 无 |
-| 响应 | 官方 model object 更丰富 | `id=openai`，带 capabilities | `id=elevenlabs` | `id=cartesia` | `id=gradium` | `id=mimo` | `id=default`，仅 TTS capabilities | 返回 `{ object: "list", data: [{ id, object, created, owned_by, capabilities }] }` |
+| 无 | OpenAI list models 返回 `{ object: "list", data: [...] }` | 聚合 provider alias 与 `tts_model/asr_model` options 为 model object | 同左，另聚合 `sound_effect_model/voice_design_model` options | 同左 | 同左 | 同左 | `id=default` alias，另保留可声明的 model options | 无 |
+| 响应 | 官方 model object 更丰富 | `id=openai` alias，真实 model 如 `gpt-4o-mini-tts` / `gpt-4o-transcribe` 也返回 | `id=elevenlabs` alias + ElevenLabs model ids | `id=cartesia` alias + Cartesia model ids | `id=gradium` alias + Gradium model ids | `id=mimo` alias + MiMo model ids | `id=default`，仅 TTS capabilities | 返回 `{ object: "list", data: [{ id, object, created, owned_by, capabilities, providers }] }` |
 
 ## GET `/api/providers`
 
