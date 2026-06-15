@@ -122,6 +122,8 @@ test('OpenAI provider sends voice clone requests', async () => {
       name: init.body.get('name'),
       consent: init.body.get('consent'),
       audio_sample: init.body.get('audio_sample'),
+      custom_scalar: init.body.get('custom_scalar'),
+      custom_array: init.body.getAll('custom_array[]'),
     }
     return new Response(JSON.stringify({
       id: 'voice_openai_1',
@@ -143,6 +145,11 @@ test('OpenAI provider sends voice clone requests', async () => {
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
+    extra_params: {
+      consent: 'extra-consent-should-not-win',
+      custom_scalar: 'enabled',
+      custom_array: ['a', 'b'],
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-openai-key' },
@@ -153,6 +160,8 @@ test('OpenAI provider sends voice clone requests', async () => {
   assert.equal(captured.name, 'Narrator')
   assert.equal(captured.consent, 'cons_1234')
   assert.equal(captured.audio_sample.type, 'audio/wav')
+  assert.equal(captured.custom_scalar, 'enabled')
+  assert.deepEqual(captured.custom_array, ['a', 'b'])
   assert.equal(result.voice.voice_id, 'voice_openai_1')
   assert.equal(result.voice.provider_voice_id, 'voice_openai_1')
 })

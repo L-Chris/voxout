@@ -48,6 +48,13 @@ export function mergeJsonBody(base: Record<string, unknown>, extra_params?: Json
   return deepMergeJson(extra_params, compacted)
 }
 
+export function appendJsonParamsToForm(form: FormData, params?: JsonObject): void {
+  if (!params) return
+  for (const [key, value] of Object.entries(params)) {
+    appendJsonParamToForm(form, key, value)
+  }
+}
+
 export async function fetchWithProviderTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), getProviderTimeoutMs(context))
@@ -95,6 +102,20 @@ function deepMergeJson(base: JsonObject, extra: JsonObject): JsonObject {
     }
   }
   return merged
+}
+
+function appendJsonParamToForm(form: FormData, key: string, value: JsonValue): void {
+  const array_key = key.endsWith('[]') ? key : `${key}[]`
+  if (form.has(key) || form.has(array_key)) return
+  if (Array.isArray(value)) {
+    for (const item of value) form.append(array_key, stringifyFormValue(item))
+    return
+  }
+  form.set(key, stringifyFormValue(value))
+}
+
+function stringifyFormValue(value: JsonValue): string {
+  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 function isPlainJsonObject(value: JsonValue | undefined): value is JsonObject {

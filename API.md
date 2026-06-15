@@ -109,6 +109,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `description` / `language`，可选 string | OpenAI 无 | 保存到 Voxout voice record；不发送给 OpenAI voice clone | `description` 会发送；`language` 保存到 Voxout voice record | `description` / `language` 会发送；`language` 裁剪地区码，缺省 `en` | `description` / `language` 会发送；`language` 裁剪地区码 | 保存到 Voxout voice record；不调用下游 | 不支持 | 无 |
 | `metadata`，可选 JSON object string | OpenAI 无 | 保存到 Voxout voice record；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | multipart 中必须是 JSON object 字符串 |
 | `preview_text`，可选 string | OpenAI 无 | 保存到 Voxout voice metadata；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | 无 |
+| `extra_params`，可选 JSON object string | 无 | 追加到 OpenAI multipart；不能覆盖 `name/consent/audio_sample` 等已识别字段 | 追加到 ElevenLabs multipart；adapter 已映射字段优先 | 追加到 Cartesia multipart；adapter 已映射字段优先 | 追加到 Gradium multipart；adapter 已映射字段优先 | 当前不下发 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `provider/name/consent/audio_sample/description/language/metadata/preview_text` 等已识别字段 |
 | 固定/配置字段 | 无 | 无 | 无 | `base_voice_id` 来自 provider 配置 `base_voice_id` | `input_format` 由 MIME 推断；`start_s=0`；`timeout_s` 来自 `clone_timeout_seconds` 或 `10` | 本地生成 `mimo_*` voice id | 不支持 | 无 |
 | 响应 | `{ id, object: "audio.voice", created_at, name }` | Voxout 返回 OpenAI 风格响应，并保存 provider link | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应；无 provider voice id | 不支持 | 不返回 provider 原始 clone response |
 

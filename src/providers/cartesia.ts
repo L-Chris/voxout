@@ -12,6 +12,7 @@ import type {
   VoiceCloneResult,
 } from '../types.js'
 import {
+  appendJsonParamsToForm,
   compactObject,
   fetchWithProviderTimeout,
   getConfigString,
@@ -159,6 +160,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     if (request.description) form.set('description', request.description)
     const base_voice_id = getConfigString(context, 'base_voice_id')
     if (base_voice_id) form.set('base_voice_id', base_voice_id)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/clone`, {
       method: 'POST',

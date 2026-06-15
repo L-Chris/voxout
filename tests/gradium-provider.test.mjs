@@ -194,6 +194,10 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
+    extra_params: {
+      timeout_s: 99,
+      tags: ['narration', 'calm'],
+    },
   }, {
     config: { clone_timeout_seconds: 12 },
     secrets: { api_key: 'test-gradium-key' },
@@ -210,6 +214,7 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
   assert.equal(cloneCapture.init.body.get('language'), 'en')
   assert.equal(cloneCapture.init.body.get('input_format'), 'wav')
   assert.equal(cloneCapture.init.body.get('timeout_s'), '12')
+  assert.deepEqual(cloneCapture.init.body.getAll('tags[]'), ['narration', 'calm'])
   assert.equal(clone.voice.voice_id, 'gradium-clone-1')
   assert.equal(clone.voice.provider_voice_id, 'gradium-clone-1')
   assert.equal(captures[1].url, 'https://api.gradium.ai/api/voices/?skip=0&limit=100&include_catalog=true')

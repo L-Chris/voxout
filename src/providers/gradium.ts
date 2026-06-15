@@ -14,6 +14,7 @@ import type {
   VoiceCloneResult,
 } from '../types.js'
 import {
+  appendJsonParamsToForm,
   fetchWithProviderTimeout,
   getConfigNumber,
   getConfigString,
@@ -159,6 +160,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     if (request.language) form.set('language', normalizeLanguage(request.language) ?? request.language)
     form.set('start_s', '0')
     form.set('timeout_s', String(getConfigNumber(context, 'clone_timeout_seconds') ?? 10))
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/`, {
       method: 'POST',

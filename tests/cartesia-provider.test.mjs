@@ -194,8 +194,12 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
+    extra_params: {
+      base_voice_id: 'extra-base-should-not-win',
+      tags: ['narration', 'calm'],
+    },
   }, {
-    config: {},
+    config: { base_voice_id: 'config-base' },
     secrets: { api_key: 'test-cartesia-key' },
   })
   const voices = await provider.listVoices({
@@ -208,6 +212,8 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
   assert.equal(cloneCapture.init.body.get('name'), 'Narrator')
   assert.equal(cloneCapture.init.body.get('language'), 'en')
   assert.equal(cloneCapture.init.body.get('clip').type, 'audio/wav')
+  assert.equal(cloneCapture.init.body.get('base_voice_id'), 'config-base')
+  assert.deepEqual(cloneCapture.init.body.getAll('tags[]'), ['narration', 'calm'])
   assert.equal(clone.voice.voice_id, 'cartesia-clone-1')
   assert.equal(clone.voice.provider_voice_id, 'cartesia-clone-1')
   assert.equal(captures[1].url, 'https://api.cartesia.ai/voices?limit=100')

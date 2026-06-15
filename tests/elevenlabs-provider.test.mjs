@@ -285,6 +285,7 @@ test('ElevenLabs provider sends voice clone requests', async () => {
       name: init.body.get('name'),
       description: init.body.get('description'),
       file: init.body.get('files[]'),
+      labels: init.body.get('labels'),
     }
     return new Response(JSON.stringify({
       voice_id: 'eleven-clone-1',
@@ -304,6 +305,10 @@ test('ElevenLabs provider sends voice clone requests', async () => {
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
+    extra_params: {
+      description: 'extra-description-should-not-win',
+      labels: { accent: 'neutral' },
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-eleven-key' },
@@ -314,6 +319,7 @@ test('ElevenLabs provider sends voice clone requests', async () => {
   assert.equal(captured.name, 'Narrator Clone')
   assert.equal(captured.description, 'A clean narrator sample.')
   assert.equal(captured.file.type, 'audio/wav')
+  assert.equal(captured.labels, JSON.stringify({ accent: 'neutral' }))
   assert.equal(result.voice.voice_id, 'eleven-clone-1')
   assert.equal(result.voice.provider_voice_id, 'eleven-clone-1')
 })

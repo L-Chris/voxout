@@ -605,6 +605,19 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   assert.equal(invalidMetadataResponse.status, 400)
   assert.match(invalidMetadataPayload.error, /metadata must be a JSON object/)
 
+  const conflictingExtraParams = new FormData()
+  conflictingExtraParams.set('provider', 'mock')
+  conflictingExtraParams.set('name', 'Conflicting Extra Params')
+  conflictingExtraParams.set('extra_params', JSON.stringify({ name: 'Override Name' }))
+  conflictingExtraParams.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/voices`, {
+    method: 'POST',
+    body: conflictingExtraParams,
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.name conflicts/)
+
   const oversizedSample = new FormData()
   oversizedSample.set('provider', 'mock')
   oversizedSample.set('name', 'Oversized Sample')

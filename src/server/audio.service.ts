@@ -98,6 +98,17 @@ const VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'model',
   'extra_params',
 ])
+const VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'name',
+  'consent',
+  'audio_sample',
+  'description',
+  'language',
+  'metadata',
+  'preview_text',
+  'extra_params',
+])
 
 @Service()
 export class AudioService {
@@ -414,6 +425,10 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
   if (file.data.length > VOICE_SAMPLE_MAX_BYTES) throw new Error('audio_sample must be 10 MiB or smaller')
   const metadata = normalizeFormJsonObject(form.fields.metadata, 'metadata')
   const preview_text = normalizeOptionalString(form.fields.preview_text, 'preview_text')
+  const extra_params = normalizeExtraParams(
+    form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined,
+    VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS,
+  )
   return {
     provider: providerId,
     name,
@@ -427,6 +442,7 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
     language: normalizeOptionalString(form.fields.language, 'language'),
     preview_text,
     metadata: preview_text ? { ...(metadata ?? {}), preview_text } : metadata,
+    extra_params,
   }
 }
 

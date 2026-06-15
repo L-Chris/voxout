@@ -167,6 +167,7 @@ export interface VoiceCloneRequest {
   language?: string
   preview_text?: string
   metadata?: JsonObject
+  extra_params?: JsonObject
 }
 
 export interface VoicePreview {

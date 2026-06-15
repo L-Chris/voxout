@@ -42,6 +42,8 @@ ASR model, `file` is the uploaded audio, and `response_format`, `language`, and
 `prompt` are optional. Use the `provider` extension to choose a non-OpenAI ASR
 backend. `/v1/audio/voices` follows the OpenAI form-data shape with `name`,
 `consent`, and `audio_sample`, plus the same optional `provider` extension.
+Provider-specific clone fields can be passed as an `extra_params` JSON object
+form field.
 For streaming TTS, pass OpenAI-compatible `stream_format` with `audio` or
 `sse`. Streaming support is currently exposed by `default`, `openai`,
 `cartesia`, `mimo`, `gradium`, and `elevenlabs`; `elevenlabs` and `gradium`

@@ -12,6 +12,7 @@ import type {
   VoiceCloneResult,
 } from '../types.js'
 import {
+  appendJsonParamsToForm,
   getConfigString,
   getPayloadError,
   getSecretString,
@@ -175,6 +176,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     form.set('name', request.name)
     if (request.consent) form.set('consent', request.consent)
     form.set('audio_sample', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetch(`${getBaseUrl(context)}/audio/voices`, {
       method: 'POST',
@@ -312,8 +314,8 @@ function appendExtraParamsToForm(form: FormData, extra_params: TranscribeRequest
     if (OPENAI_TRANSCRIPTION_STANDARD_FIELDS.has(key)) {
       throw new Error(`extra_params.${key} conflicts with a standard OpenAI transcription field`)
     }
-    setFormJsonValue(form, key, value)
   }
+  appendJsonParamsToForm(form, extra_params)
 }
 
 function validateOpenAiTranscriptionForm(form: FormData): void {
@@ -355,21 +357,6 @@ function getRequiredFormString(form: FormData, key: string): string {
 function getOptionalFormString(form: FormData, key: string): string | undefined {
   const value = form.get(key)
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function setFormJsonValue(form: FormData, key: string, value: unknown): void {
-  if (Array.isArray(value)) {
-    form.delete(key)
-    form.delete(key.endsWith('[]') ? key : `${key}[]`)
-    const array_key = key.endsWith('[]') ? key : `${key}[]`
-    for (const item of value) form.append(array_key, stringifyFormValue(item))
-    return
-  }
-  form.set(key, stringifyFormValue(value))
-}
-
-function stringifyFormValue(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 function getApiKey(context: ProviderContext): string {

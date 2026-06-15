@@ -19,6 +19,7 @@ import type {
   VoiceDesignResult,
 } from '../types.js'
 import {
+  appendJsonParamsToForm,
   compactObject,
   getConfigBoolean,
   getConfigNumber,
@@ -296,6 +297,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     form.set('name', request.name)
     if (request.description) form.set('description', request.description)
     form.set('files[]', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetch(`${getBaseUrl(context)}/voices/add`, {
       method: 'POST',
