@@ -1,6 +1,6 @@
 # Voxout API Field Mapping
 
-本文档基于当前代码实现和各 provider 官方文档整理。`provider` 是 Voxout 的路由扩展字段，不属于 OpenAI 官方 audio API。表格中的 `Default` 表示默认 provider：当前仅提供 Edge TTS。
+本文档基于当前代码实现和各 provider 官方文档整理。`provider` 是 Voxout 的路由扩展字段，不属于 OpenAI 官方 audio API。表格中的 `Default` 表示默认 provider：TTS 使用 Edge TTS，ASR 使用 Bilibili Bcut ASR。
 
 Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以及 service 到 provider adapter 的内部 request/response 字段默认使用 snake_case。provider adapter 最后一跳会按上游官方接口要求转换字段名；例如 Edge TTS 的 SDK 参数仍会映射为其要求的 `outputFormat`。
 
@@ -13,7 +13,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | [OpenAI 规范][openai-api] | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `account_id` | 无 | 仅用于 Voxout voice 关联表 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
-| `timeout_ms` | 无 | Voxout 调用超时 | Voxout 调用超时 | Voxout 调用超时 | HTTP 调用超时；WebSocket 流也使用该超时 | HTTP 调用和下载超时 | Edge TTS `timeout`；voice catalog 下载超时另用 `voices_timeout_ms` | 不下发，除 Default/Edge 映射到库参数 |
+| `timeout_ms` | 无 | Voxout 调用超时 | Voxout 调用超时 | Voxout 调用超时 | HTTP 调用超时；WebSocket 流也使用该超时 | HTTP 调用和下载超时 | Edge TTS `timeout`；Bcut ASR 整体轮询超时；voice catalog 下载超时另用 `voices_timeout_ms` | 不下发，除 Default/Edge 映射到库参数 |
 
 ## POST `/v1/audio/speech`
 
@@ -22,7 +22,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | [OpenAI 规范][openai-speech] | [OpenAI][openai-speech] | [ElevenLabs][elevenlabs-tts] | [Cartesia][cartesia-tts] | [Gradium][gradium-tts-rest] | [MiMo][mimo-tts] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `model`，必填，除非 `provider` 显式指定 | 必填；官方 speech model | `model` | `model_id`，默认 `tts_model` 或 `eleven_multilingual_v2` | `model_id`，默认 `tts_model` 或 `sonic-3.5` | `model_name`，默认 `tts_model` 或 `default` | `model`，默认 `tts_model` 或 `mimo-v2.5-tts`；data URL voice 时改用 `voice_clone_model` | 不使用 | 无 |
-| `provider`，可选 | 无 | 只用于路由；省略时 OpenAI model 或未知 model 路由到 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 无 |
+| `provider`，可选 | 无 | 只用于路由；省略时 OpenAI model 路由到 OpenAI，唯一匹配的 provider model option 路由到对应 provider，未知 model 回落 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 无 |
 | `input`，必填 string | 必填；最大 4096 字符 | `input` | `text` | `transcript` | `text` | `messages[].content`，role 为 `assistant` | SSML 文本 | 无 |
 | `voice`，可选 string 或 `{ id }` | 官方支持内置 voice string 和 custom voice object `{ id }` | `voice` | path `:voice_id` | `voice: { mode: "id", id }` | `voice_id` | `audio.voice`；若是 data URL，走 voice clone model | Edge `voice` | 无；若传 Voxout voice id，会先解析为对应 provider voice id |
 | `response_format`，可选 | `mp3`、`opus`、`aac`、`flac`、`wav`、`pcm` | 原样 `response_format` | query `output_format`；`mp3 -> mp3_44100_128`，`pcm -> pcm_44100`，`wav -> pcm_44100` 后由 Voxout 包 WAV | `output_format` object；`mp3/wav/pcm` 转 Cartesia container/encoding | `output_format`；支持 `opus/wav/pcm` 等 Gradium 格式 | `audio.format`；`mp3/wav/pcm16` | Edge `outputFormat`；`mp3/wav/pcm` 转 Edge 格式 | 无 |
@@ -38,20 +38,20 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 | 实际传参 | [OpenAI 规范][openai-transcription] | [OpenAI][openai-transcription] | [ElevenLabs][elevenlabs-stt] | [Cartesia][cartesia-stt] | [Gradium][gradium-stt] | [MiMo][mimo-asr] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
-| `file`，必填 file | 官方必填 `file`，支持常见音频格式 | `file` | `file` | `file` | request body bytes | 内部转 data URL 放入 `input_audio.data` | 不支持 | 无 |
-| `model`，必填，除非 `provider` 显式指定 | 官方 ASR model | `model` | `model_id`，默认 `asr_model` 或 `scribe_v2` | `model`，默认 `asr_model` 或 `ink-whisper` | query `model`，默认 `asr_model` 或 `default` | `model`，默认 `asr_model` 或 `mimo-v2.5-asr` | 不支持 | 无 |
-| `provider`，可选 | 无 | 只用于路由；省略时 OpenAI ASR model 或未知 model 路由到 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 不支持 | 无 |
-| `language`，可选 string | ISO-639-1 | `language` | `language_code` | `language`，裁剪地区码 | `json_config={"language":...}`，裁剪地区码 | `asr_options.language`，默认 `auto` | 不支持 | 无 |
-| `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
-| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json`；非法值拒绝；部分模型有子集限制 | 原样传给 OpenAI；`gpt-4o-transcribe*` 非 diarize 仅允许 `json`；diarize 仅允许 `json/text/diarized_json`；`whisper-1` 不允许 `diarized_json` | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
+| `file`，必填 file | 官方必填 `file`，支持常见音频格式 | `file` | `file` | `file` | request body bytes | 内部转 data URL 放入 `input_audio.data` | Bcut 上传音频文件；支持 `flac/aac/m4a/mp3/wav/mp4/m4s` | 无 |
+| `model`，必填，除非 `provider` 显式指定 | 官方 ASR model | `model` | `model_id`，默认 `asr_model` 或 `scribe_v2` | `model`，默认 `asr_model` 或 `ink-whisper` | query `model`，默认 `asr_model` 或 `default` | `model`，默认 `asr_model` 或 `mimo-v2.5-asr` | Bcut `model_id`，默认 `asr_model` 或 `8`；`model=default` 只用于路由 | 无 |
+| `provider`，可选 | 无 | 只用于路由；省略时 OpenAI ASR model 路由到 OpenAI，唯一匹配的 provider model option 路由到对应 provider，未知 model 回落 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由；可用 `provider=default` 或唯一 model option `8` | 无 |
+| `language`，可选 string | ISO-639-1 | `language` | `language_code` | `language`，裁剪地区码 | `json_config={"language":...}`，裁剪地区码 | `asr_options.language`，默认 `auto` | 当前忽略 | 无 |
+| `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 忽略 | 忽略 | 忽略 | 忽略 | 当前忽略 | 无 |
+| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json`；非法值拒绝；部分模型有子集限制 | 原样传给 OpenAI；`gpt-4o-transcribe*` 非 diarize 仅允许 `json`；diarize 仅允许 `json/text/diarized_json`；`whisper-1` 不允许 `diarized_json` | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | Bcut 结果由 Voxout 本地格式化 | 无 |
 | `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；非法 boolean 拒绝；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE；`whisper-1` 在上游前拒绝 | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
-| `temperature`，可选 number | 官方 `0..1` | 校验后作为 `temperature` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json`；diarize 不支持 | 重复 multipart 字段 `timestamp_granularities[]`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `include[]`，可选 array | 当前支持 `logprobs`；只支持 `response_format=json` 且只支持 `gpt-4o-transcribe` / mini；diarize 不支持 | 重复 multipart 字段 `include[]`；不满足模型和格式约束时在上游前拒绝 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `chunking_strategy`，可选 `auto` 或 object | 官方 `auto` 或 server VAD object | `auto` 原样；object 以 JSON 字符串放入 multipart | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `known_speaker_names[]` / `known_speaker_references[]`，可选 array | diarization 已知说话人名称和参考音频 data URL | 重复 multipart 字段 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；不能覆盖已识别标准字段 | 追加到 ElevenLabs multipart；adapter 已映射字段优先 | 追加到 Cartesia multipart；adapter 已映射字段优先 | 合并进 Gradium `json_config`；adapter 已映射字段优先 | 深合并到 MiMo chat completion JSON body；adapter 已映射字段优先 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `model/file/language/prompt/response_format/stream/temperature/timestamp_granularities/include/chunking_strategy/known_speaker_*` 等已识别字段 |
-| 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；`verbose_json/diarized_json` 返回 `{ text, segments }`，segments 使用 OpenAI 风格 `id/start/end/text`；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage/segments` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / OpenAI 风格详细 JSON | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 非 OpenAI provider 不直接返回未整理 provider 原始响应 |
+| `temperature`，可选 number | 官方 `0..1` | 校验后作为 `temperature` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 无 |
+| `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json`；diarize 不支持 | 重复 multipart 字段 `timestamp_granularities[]`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 当前忽略；Bcut 默认返回 segments | 无 |
+| `include[]`，可选 array | 当前支持 `logprobs`；只支持 `response_format=json` 且只支持 `gpt-4o-transcribe` / mini；diarize 不支持 | 重复 multipart 字段 `include[]`；不满足模型和格式约束时在上游前拒绝 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 无 |
+| `chunking_strategy`，可选 `auto` 或 object | 官方 `auto` 或 server VAD object | `auto` 原样；object 以 JSON 字符串放入 multipart | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 无 |
+| `known_speaker_names[]` / `known_speaker_references[]`，可选 array | diarization 已知说话人名称和参考音频 data URL | 重复 multipart 字段 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 无 |
+| `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；不能覆盖已识别标准字段 | 追加到 ElevenLabs multipart；adapter 已映射字段优先 | 追加到 Cartesia multipart；adapter 已映射字段优先 | 合并进 Gradium `json_config`；adapter 已映射字段优先 | 深合并到 MiMo chat completion JSON body；adapter 已映射字段优先 | 追加到 Bcut resource/task 请求；adapter 已映射字段优先 | multipart 中必须是 JSON object 字符串；不能包含 `model/file/language/prompt/response_format/stream/temperature/timestamp_granularities/include/chunking_strategy/known_speaker_*` 等已识别字段 |
+| 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；`verbose_json/diarized_json` 返回 `{ text, segments }`，segments 使用 OpenAI 风格 `id/start/end/text`；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage/segments` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / OpenAI 风格详细 JSON | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 同 ElevenLabs；非流式，带 Bcut segments | 非 OpenAI provider 不直接返回未整理 provider 原始响应 |
 
 ## POST `/v1/audio/effect`
 
@@ -118,8 +118,8 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 | 实际传参 | [OpenAI 规范][openai-models] | [OpenAI][openai-models] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-rate-limit] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
-| 无 | OpenAI list models 返回 `{ object: "list", data: [...] }` | 聚合 provider alias 与 `tts_model/asr_model` options 为 model object | 同左，另聚合 `sound_effect_model/voice_design_model` options | 同左 | 同左 | 同左 | `id=default` alias，另保留可声明的 model options | 无 |
-| 响应 | 官方 model object 更丰富 | `id=openai` alias，真实 model 如 `gpt-4o-mini-tts` / `gpt-4o-transcribe` 也返回 | `id=elevenlabs` alias + ElevenLabs model ids | `id=cartesia` alias + Cartesia model ids | `id=gradium` alias + Gradium model ids | `id=mimo` alias + MiMo model ids | `id=default`，仅 TTS capabilities | 返回 `{ object: "list", data: [{ id, object, created, owned_by, capabilities, providers }] }` |
+| 无 | OpenAI list models 返回 `{ object: "list", data: [...] }` | 聚合 provider alias 与 `tts_model/asr_model` options 为 model object；唯一 model option 可直接作为 `model` 路由 | 同左，另聚合 `sound_effect_model/voice_design_model` options | 同左 | 同左 | 同左 | `id=default` alias，另保留可声明的 model options | 无 |
+| 响应 | 官方 model object 更丰富 | `id=openai` alias，真实 model 如 `gpt-4o-mini-tts` / `gpt-4o-transcribe` 也返回 | `id=elevenlabs` alias + ElevenLabs model ids | `id=cartesia` alias + Cartesia model ids | `id=gradium` alias + Gradium model ids | `id=mimo` alias + MiMo model ids | `id=default`，TTS + ASR capabilities | 返回 `{ object: "list", data: [{ id, object, created, owned_by, capabilities, providers }] }` |
 
 ## GET `/api/providers`
 
@@ -134,9 +134,9 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 |---|---|---|---|---|---|---|---|---|
 | `enabled` | 无 | 启停 provider | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
 | `secrets.api_key` | 无 | `Authorization: Bearer` | `xi-api-key` | `Authorization: Bearer` | `x-api-key` | `api-key` 和 `Authorization: Bearer` | 不使用；Edge 可配置 `trusted_client_token` | 仅 provider 读取的 secret 会下发 |
-| `config.base_url` | 无 | OpenAI API base URL | ElevenLabs API base URL | Cartesia API base URL | Gradium REST base URL | MiMo base URL | 不使用 | 未读取字段会保存但不会下发 |
-| `config.tts_model` / `config.asr_model` | 无 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | ASR/TTS 不使用 | 未读取字段会保存但不会下发 |
-| provider 专属配置 | 无 | `default_voice`、`response_format` | `default_voice_id`、`output_format`、`sound_effect_model`、`voice_design_model`、`prompt_influence` | `api_version`、`default_voice_id`、`output_format`、`base_voice_id`、`pronunciation_dict_id` | `ws_url`、`default_voice_id`、`output_format`、`clone_timeout_seconds` | `voice_design_model`、`voice_clone_model`、`format`、`voice_sample_text`、`optimize_text_preview` | `voices_url`、`trusted_client_token`、`proxy`、`voices_cache_ms`、`voices_timeout_ms` | `config` / `secrets` 可保存任意 JSON object；未读取字段不下发 |
+| `config.base_url` | 无 | OpenAI API base URL | ElevenLabs API base URL | Cartesia API base URL | Gradium REST base URL | MiMo base URL | 不使用；Bcut 使用 `bcut_base_url` | 未读取字段会保存但不会下发 |
+| `config.tts_model` / `config.asr_model` | 无 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | `asr_model` 作为 Bcut `model_id`；TTS 不使用 | 未读取字段会保存但不会下发 |
+| provider 专属配置 | 无 | `default_voice`、`response_format` | `default_voice_id`、`output_format`、`sound_effect_model`、`voice_design_model`、`prompt_influence` | `api_version`、`default_voice_id`、`output_format`、`base_voice_id`、`pronunciation_dict_id` | `ws_url`、`default_voice_id`、`output_format`、`clone_timeout_seconds` | `voice_design_model`、`voice_clone_model`、`format`、`voice_sample_text`、`optimize_text_preview` | `voices_url`、`trusted_client_token`、`proxy`、`voices_cache_ms`、`voices_timeout_ms`、`bcut_base_url`、`bcut_poll_interval_ms` | `config` / `secrets` 可保存任意 JSON object；未读取字段不下发 |
 | 响应 | 无 | `{ provider: record }` | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
 
 ## GET `/api/voices` 和 `/api/providers/:provider_id/voices`
@@ -151,7 +151,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 | 实际传参 | [OpenAI 规范][openai-api] | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
-| Default provider | 无 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | TTS 实际是 Edge TTS；不再注册 ASR capability。 | 无 |
+| Default provider | 无 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | TTS 实际是 Edge TTS；ASR 实际是 Bilibili Bcut ASR；不再暴露 `edge` 或 `bilibili-asr` 独立 provider。 | 无 |
 | OpenAI `voice` object `{ id }` | 官方支持 | Voxout 会把 `{ id }` 规范化为内部 string voice，并继续执行 provider voice 关联解析 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
 | OpenAI transcription streaming | 官方 `stream=true` | OpenAI 直接透传 SSE；MiMo 转成 OpenAI transcript SSE；其他 provider 不支持 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
 

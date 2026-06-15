@@ -78,7 +78,7 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   const defaultProvider = payload.data.find(model => model.id === 'default')
   assert.equal(defaultProvider.capabilities.tts, true)
   assert.equal(defaultProvider.capabilities.tts_streaming, true)
-  assert.equal(defaultProvider.capabilities.asr, undefined)
+  assert.equal(defaultProvider.capabilities.asr, true)
   const modelIds = payload.data.map(model => model.id)
   assert.ok(!modelIds.includes('edge'))
   assert.ok(!modelIds.includes('bilibili-asr'))
@@ -221,6 +221,21 @@ test('POST /v1/audio/speech treats OpenAI speech models as models, not providers
 
   assert.equal(response.status, 400)
   assert.match(payload.error, /openai api_key is required/)
+})
+
+test('POST /v1/audio/speech routes provider model ids to their provider', async () => {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'eleven_multilingual_v2',
+      input: 'hello from an ElevenLabs model id',
+    }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(payload.error, /elevenlabs api_key is required/)
 })
 
 test('POST /v1/audio/speech streams generated audio bytes', async () => {
@@ -877,6 +892,21 @@ test('POST /v1/audio/transcriptions treats OpenAI ASR models as models, not prov
 
   assert.equal(response.status, 400)
   assert.match(payload.error, /openai api_key is required/)
+})
+
+test('POST /v1/audio/transcriptions routes provider model ids to their provider', async () => {
+  const form = new FormData()
+  form.set('model', 'mimo-v2.5-asr')
+  form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: form,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(payload.error, /mimo api_key is required/)
 })
 
 function waitForServer(child) {

@@ -11,6 +11,8 @@ import {
   getTtsProvider,
   getVoiceCloneProvider,
   getVoiceDesignProvider,
+  listAsrProviders,
+  listTtsProviders,
 } from '../providers/registry.js'
 import { getProviderTimeoutMs, withTimeout } from '../timeout.js'
 import { readMultipartForm, sendBinary, sendJson, sendStream, sendText } from './http.js'
@@ -729,6 +731,8 @@ function resolveOpenAiSpeechTarget(model: unknown, provider: unknown): { provide
   if (OPENAI_SPEECH_MODELS.has(modelId)) {
     return { providerId: 'openai', model: modelId }
   }
+  const providerByModel = findProviderByModelOption(modelId, listTtsProviders(), 'tts_model')
+  if (providerByModel) return { providerId: providerByModel, model: modelId }
   return { providerId: 'openai', model: modelId }
 }
 
@@ -745,7 +749,20 @@ function resolveOpenAiTranscriptionTarget(model: unknown, provider: unknown): { 
   if (OPENAI_TRANSCRIPTION_MODELS.has(modelId)) {
     return { providerId: 'openai', model: modelId }
   }
+  const providerByModel = findProviderByModelOption(modelId, listAsrProviders(), 'asr_model')
+  if (providerByModel) return { providerId: providerByModel, model: modelId }
   return { providerId: 'openai', model: modelId }
+}
+
+function findProviderByModelOption(
+  modelId: string,
+  providers: Array<{ id: string, fields?: Array<{ key: string, options?: string[] }> }>,
+  fieldKey: string,
+): string | undefined {
+  const matches = providers
+    .filter(provider => provider.fields?.some(field => field.key === fieldKey && field.options?.includes(modelId)))
+    .map(provider => provider.id)
+  return matches.length === 1 ? matches[0] : undefined
 }
 
 function hasTtsProvider(id: string): boolean {
