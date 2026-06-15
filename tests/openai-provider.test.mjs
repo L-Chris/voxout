@@ -147,11 +147,21 @@ test('OpenAI provider sends speech-to-text requests', async () => {
       response_format: init.body.get('response_format'),
       language: init.body.get('language'),
       prompt: init.body.get('prompt'),
+      temperature: init.body.get('temperature'),
+      include: init.body.getAll('include[]'),
+      timestamp_granularities: init.body.getAll('timestamp_granularities[]'),
+      chunking_strategy: init.body.get('chunking_strategy'),
+      known_speaker_names: init.body.getAll('known_speaker_names[]'),
+      known_speaker_references: init.body.getAll('known_speaker_references[]'),
+      custom_scalar: init.body.get('custom_scalar'),
+      custom_array: init.body.getAll('custom_array[]'),
+      custom_object: init.body.get('custom_object'),
       file: init.body.get('file'),
     }
     return new Response(JSON.stringify({
       text: 'Recognized by OpenAI',
       segments: [{ start: 0, end: 0.8, text: 'Recognized by OpenAI' }],
+      logprobs: [{ token: 'Recognized', bytes: [82], logprob: -0.01 }],
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -168,6 +178,17 @@ test('OpenAI provider sends speech-to-text requests', async () => {
     },
     language: 'en',
     prompt: 'Technical vocabulary appears in this recording.',
+    temperature: 0.2,
+    include: ['logprobs'],
+    timestamp_granularities: ['word', 'segment'],
+    chunking_strategy: 'auto',
+    known_speaker_names: ['agent'],
+    known_speaker_references: ['data:audio/wav;base64,AAAA'],
+    extra_params: {
+      custom_scalar: 'enabled',
+      custom_array: ['a', 'b'],
+      custom_object: { nested_value: true },
+    },
     format: 'raw',
   }, {
     config: { asr_model: 'gpt-4o-transcribe' },
@@ -180,9 +201,19 @@ test('OpenAI provider sends speech-to-text requests', async () => {
   assert.equal(captured.response_format, 'verbose_json')
   assert.equal(captured.language, 'en')
   assert.equal(captured.prompt, 'Technical vocabulary appears in this recording.')
+  assert.equal(captured.temperature, '0.2')
+  assert.deepEqual(captured.include, ['logprobs'])
+  assert.deepEqual(captured.timestamp_granularities, ['word', 'segment'])
+  assert.equal(captured.chunking_strategy, 'auto')
+  assert.deepEqual(captured.known_speaker_names, ['agent'])
+  assert.deepEqual(captured.known_speaker_references, ['data:audio/wav;base64,AAAA'])
+  assert.equal(captured.custom_scalar, 'enabled')
+  assert.deepEqual(captured.custom_array, ['a', 'b'])
+  assert.equal(captured.custom_object, JSON.stringify({ nested_value: true }))
   assert.equal(captured.file.type, 'audio/wav')
   assert.equal(result.text, 'Recognized by OpenAI')
   assert.equal(result.raw.text, 'Recognized by OpenAI')
+  assert.deepEqual(result.raw.logprobs, [{ token: 'Recognized', bytes: [82], logprob: -0.01 }])
   assert.deepEqual(result.segments, [{ from: 0, to: 0.8, content: 'Recognized by OpenAI' }])
 })
 

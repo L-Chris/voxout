@@ -99,6 +99,12 @@ export interface TranscribeRequest {
   response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json'
   format?: 'txt' | 'srt' | 'vtt' | 'raw' | 'diarized_json'
   stream?: boolean
+  temperature?: number
+  timestamp_granularities?: Array<'word' | 'segment'>
+  include?: string[]
+  chunking_strategy?: 'auto' | JsonObject
+  known_speaker_names?: string[]
+  known_speaker_references?: string[]
   extra_params?: JsonObject
 }
 

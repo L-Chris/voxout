@@ -9,6 +9,7 @@ export interface MultipartFile {
 
 export interface MultipartForm {
   fields: Record<string, string>
+  field_arrays: Record<string, string[]>
   files: Record<string, MultipartFile>
 }
 
@@ -66,6 +67,7 @@ export async function readMultipartForm(req: IncomingMessage): Promise<Multipart
   const body = await readRequestBuffer(req)
   const boundaryBuffer = Buffer.from(`--${boundary}`)
   const fields: Record<string, string> = {}
+  const field_arrays: Record<string, string[]> = {}
   const files: Record<string, MultipartFile> = {}
   let cursor = body.indexOf(boundaryBuffer)
 
@@ -87,11 +89,14 @@ export async function readMultipartForm(req: IncomingMessage): Promise<Multipart
     if (name && file_name != null) {
       files[name] = { file_name, content_type, data }
     } else if (name) {
-      fields[name] = data.toString('utf8')
+      const value = data.toString('utf8')
+      fields[name] = value
+      const array_name = name.endsWith('[]') ? name.slice(0, -2) : name
+      field_arrays[array_name] = [...(field_arrays[array_name] ?? []), value]
     }
     cursor = body.indexOf(boundaryBuffer, nextBoundary + 2)
   }
-  return { fields, files }
+  return { fields, field_arrays, files }
 }
 
 async function readRequestBuffer(req: IncomingMessage): Promise<Buffer> {

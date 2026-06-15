@@ -24,10 +24,10 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `model`，必填，除非 `provider` 显式指定 | 必填；官方 speech model | `model` | `model_id`，默认 `tts_model` 或 `eleven_multilingual_v2` | `model_id`，默认 `tts_model` 或 `sonic-3.5` | `model_name`，默认 `tts_model` 或 `default` | `model`，默认 `tts_model` 或 `mimo-v2.5-tts`；data URL voice 时改用 `voice_clone_model` | 不使用 | 无 |
 | `provider`，可选 | 无 | 只用于路由；省略时 OpenAI model 或未知 model 路由到 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 无 |
 | `input`，必填 string | 必填；最大 4096 字符 | `input` | `text` | `transcript` | `text` | `messages[].content`，role 为 `assistant` | SSML 文本 | 无 |
-| `voice`，可选 string | 官方支持内置 voice string 和 custom voice object `{ id }` | `voice`；当前仅接收 string，不接收 object | path `:voice_id` | `voice: { mode: "id", id }` | `voice_id` | `audio.voice`；若是 data URL，走 voice clone model | Edge `voice` | 无；若传 Voxout voice id，会先解析为对应 provider voice id |
+| `voice`，可选 string 或 `{ id }` | 官方支持内置 voice string 和 custom voice object `{ id }` | `voice` | path `:voice_id` | `voice: { mode: "id", id }` | `voice_id` | `audio.voice`；若是 data URL，走 voice clone model | Edge `voice` | 无；若传 Voxout voice id，会先解析为对应 provider voice id |
 | `response_format`，可选 | `mp3`、`opus`、`aac`、`flac`、`wav`、`pcm` | 原样 `response_format` | query `output_format`；`mp3 -> mp3_44100_128`，`pcm -> pcm_44100`，`wav -> pcm_44100` 后由 Voxout 包 WAV | `output_format` object；`mp3/wav/pcm` 转 Cartesia container/encoding | `output_format`；支持 `opus/wav/pcm` 等 Gradium 格式 | `audio.format`；`mp3/wav/pcm16` | Edge `outputFormat`；`mp3/wav/pcm` 转 Edge 格式 | 无 |
-| `speed`，可选 number | 官方 `0.25..4.0` | `speed` | `voice_settings.speed`，按 ElevenLabs 范围 `0.7..1.2` 钳制 | `generation_config.speed` | 当前忽略 | 当前忽略 | 转 Edge prosody `rate` | 无 |
-| `instructions`，可选 string | 语音风格控制；不适用于 `tts-1` / `tts-1-hd` | `instructions` | 当前忽略 | 当前忽略 | 当前忽略 | 加入 `messages` 的 user prompt | 当前忽略 | 无 |
+| `speed`，可选 number | 官方 `0.25..4.0` | 校验后作为 `speed` | 校验后映射 `voice_settings.speed`，按 ElevenLabs 范围 `0.7..1.2` 钳制 | 校验后映射 `generation_config.speed` | 当前忽略 | 当前忽略 | 转 Edge prosody `rate` | 无 |
+| `instructions`，可选 string | 语音风格控制；不适用于 `tts-1` / `tts-1-hd`；最大 4096 字符 | 校验后作为 `instructions` | 当前忽略 | 当前忽略 | 当前忽略 | 加入 `messages` 的 user prompt | 当前忽略 | 无 |
 | `stream_format`，可选 `audio` 或 `sse` | 官方 `audio` / `sse`；`sse` 不适用于 `tts-1` / `tts-1-hd` | `stream_format` | 只支持 `audio`；`sse` 报错 | 调用 `/tts/sse`；`sse` 原样返回，`audio` 解码 SSE 音频 | WebSocket；`sse` 报错 | 下游 `stream: true`；`sse` 原样返回，`audio` 解码 SSE 音频 | WebSocket；`sse` 由 Voxout 包装 | 无 |
 | `extra_params`，可选 object | 无 | 深合并到 OpenAI JSON body | 深合并到 ElevenLabs JSON body，可覆盖或补充 `voice_settings` 等嵌套字段 | 深合并到 Cartesia JSON body | 深合并到 Gradium REST/WebSocket setup JSON body | 深合并到 MiMo chat completion JSON body | 当前不使用 | 仅接受 JSON object；由 provider adapter 最后一跳合并 |
 | 响应 | 音频 bytes 或事件流 | 音频 bytes / OpenAI SSE | 音频 bytes / stream bytes | 音频 bytes / Cartesia SSE 或解码音频流 | 音频 bytes / WebSocket 音频流 | 音频 bytes / MiMo SSE 或解码音频流 | 音频 bytes / WebSocket 音频流 | 不返回 provider 原始 JSON；必要时 Voxout 做 `pcm <-> wav` 简单转换 |
@@ -45,9 +45,13 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
 | `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json` | 原样传给 OpenAI | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
 | `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
-| `extra_params`，可选 JSON string | 无 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 深合并到 MiMo chat completion JSON body | 不支持 | multipart 中必须是 JSON object 字符串 |
-| 官方未实现字段 | `chunking_strategy`、`include`、`known_speaker_names`、`known_speaker_references`、`temperature`、`timestamp_granularities[]` | 当前不读取 | 当前不读取 | 当前不读取；但固定发送 `timestamp_granularities[]=word` | 当前不读取 | 当前不读取 | 不支持 | 无 |
-| 响应 | `json -> { text }`；`text/srt/vtt` 返回文本；详细格式返回 JSON；`stream=true` 返回 SSE | 同官方；由 Voxout 包装最终响应；stream 直接透传 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 不直接返回未整理 provider 原始响应，除 verbose/diarized 中的 `raw` |
+| `temperature`，可选 number | 官方 `0..1` | 校验后作为 `temperature` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json` | 重复 multipart 字段 `timestamp_granularities[]` | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `include[]`，可选 array | 当前支持 `logprobs` | 重复 multipart 字段 `include[]` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `chunking_strategy`，可选 `auto` 或 object | 官方 `auto` 或 server VAD object | `auto` 原样；object 以 JSON 字符串放入 multipart | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `known_speaker_names[]` / `known_speaker_references[]`，可选 array | diarization 已知说话人名称和参考音频 data URL | 重复 multipart 字段 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；可覆盖同名标准字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 深合并到 MiMo chat completion JSON body | 不支持 | multipart 中必须是 JSON object 字符串 |
+| 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；详细格式返回 JSON；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 不直接返回未整理 provider 原始响应，除 OpenAI JSON 扩展字段或 verbose/diarized 中的 `raw` |
 
 ## POST `/v1/audio/effect`
 

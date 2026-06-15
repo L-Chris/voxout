@@ -27,12 +27,14 @@ const DEFAULT_VOICE = 'alloy'
 const DEFAULT_RESPONSE_FORMAT = 'mp3'
 const OPENAI_TTS_MODELS = [
   'gpt-4o-mini-tts',
+  'gpt-4o-mini-tts-2025-12-15',
   'tts-1',
   'tts-1-hd',
 ]
 const OPENAI_ASR_MODELS = [
   'gpt-4o-transcribe',
   'gpt-4o-mini-transcribe',
+  'gpt-4o-mini-transcribe-2025-12-15',
   'gpt-4o-transcribe-diarize',
   'whisper-1',
 ]
@@ -200,7 +202,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         to: segment.end ?? 0,
         content: segment.text ?? '',
       })),
-      raw: request.format === 'raw' ? payload : undefined,
+      raw: request.format === 'raw' || request.include?.length ? payload : undefined,
     }
   }
 
@@ -255,7 +257,40 @@ function createTranscriptionForm(
   if (language) form.set('language', language)
   const prompt = normalizePrompt(request.prompt)
   if (prompt) form.set('prompt', prompt)
+  if (request.temperature != null) form.set('temperature', String(request.temperature))
+  if (request.chunking_strategy) {
+    form.set('chunking_strategy', typeof request.chunking_strategy === 'string'
+      ? request.chunking_strategy
+      : JSON.stringify(request.chunking_strategy))
+  }
+  for (const item of request.include ?? []) form.append('include[]', item)
+  for (const item of request.timestamp_granularities ?? []) form.append('timestamp_granularities[]', item)
+  for (const item of request.known_speaker_names ?? []) form.append('known_speaker_names[]', item)
+  for (const item of request.known_speaker_references ?? []) form.append('known_speaker_references[]', item)
+  appendExtraParamsToForm(form, request.extra_params)
   return form
+}
+
+function appendExtraParamsToForm(form: FormData, extra_params: TranscribeRequest['extra_params']): void {
+  if (!extra_params) return
+  for (const [key, value] of Object.entries(extra_params)) {
+    setFormJsonValue(form, key, value)
+  }
+}
+
+function setFormJsonValue(form: FormData, key: string, value: unknown): void {
+  if (Array.isArray(value)) {
+    form.delete(key)
+    form.delete(key.endsWith('[]') ? key : `${key}[]`)
+    const array_key = key.endsWith('[]') ? key : `${key}[]`
+    for (const item of value) form.append(array_key, stringifyFormValue(item))
+    return
+  }
+  form.set(key, stringifyFormValue(value))
+}
+
+function stringifyFormValue(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 function getApiKey(context: ProviderContext): string {

@@ -39,7 +39,7 @@ import type {
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url))
 const audioDir = process.env.TTS_AUDIO_DIR ?? join(rootDir, 'audio')
-const OPENAI_SPEECH_MODELS = new Set(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
+const OPENAI_SPEECH_MODELS = new Set(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'tts-1', 'tts-1-hd'])
 const OPENAI_TRANSCRIPTION_MODELS = new Set([
   'whisper-1',
   'gpt-4o-transcribe',
@@ -89,6 +89,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
   assertPublicProviderAccess(providerId)
   const input = typeof body.input === 'string' ? body.input : ''
   if (!input.trim()) throw new Error('input is required')
+  if (input.length > 4096) throw new Error('input must be 4096 characters or fewer')
 
   const provider = getTtsProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
@@ -104,8 +105,8 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     voice: body.voice,
     output_format: speechFormat.provider_format,
     stream_format,
-    speed: typeof body.speed === 'number' ? body.speed : undefined,
-    instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+    speed: normalizeSpeechSpeed(body.speed),
+    instructions: normalizeSpeechInstructions(body.instructions),
     extra_params: normalizeExtraParams(body.extra_params),
   })
   await resolveVoiceForSynthesis(provider.id, request)
@@ -243,17 +244,16 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
     prompt: form.fields.prompt,
     response_format: providerResponseFormat,
     stream,
+    temperature: normalizeTranscriptionTemperature(form.fields.temperature),
+    timestamp_granularities: normalizeTimestampGranularities(form),
+    include: normalizeStringArrayField(form, 'include', ['logprobs']),
+    chunking_strategy: normalizeChunkingStrategy(form.fields.chunking_strategy),
+    known_speaker_names: normalizeStringArrayField(form, 'known_speaker_names'),
+    known_speaker_references: normalizeStringArrayField(form, 'known_speaker_references'),
     extra_params: normalizeExtraParams(form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined),
-    format: providerResponseFormat === 'srt'
-      ? 'srt'
-      : providerResponseFormat === 'vtt'
-        ? 'vtt'
-        : providerResponseFormat === 'verbose_json'
-          ? 'raw'
-          : providerResponseFormat === 'diarized_json'
-            ? 'diarized_json'
-            : 'txt',
+    format: getTranscriptionOutputFormat(providerResponseFormat),
   }
+  validateTranscriptionRequest(request)
 
   const timeout_ms = getProviderTimeoutMs(context)
   if (stream) {
@@ -282,7 +282,7 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
       raw: result.raw,
     })
   }
-  return sendJson(res, { text })
+  return sendJson(res, formatJsonTranscriptionResult(text, result.raw))
 }
 
 function normalizeOpenAiSpeechInput(providerId: string, input: {
@@ -295,7 +295,7 @@ function normalizeOpenAiSpeechInput(providerId: string, input: {
   instructions?: string
   extra_params?: JsonObject
 }): SynthesizeRequest {
-  const voice = typeof input.voice === 'string' ? input.voice : undefined
+  const voice = normalizeSpeechVoice(input.voice)
   return {
     provider: providerId,
     model: input.model,
@@ -460,6 +460,99 @@ function normalizeExtraParams(value: unknown): JsonObject | undefined {
     throw new Error('extra_params must be a JSON object')
   }
   return value as JsonObject
+}
+
+function normalizeSpeechVoice(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value === 'string') return value.trim() || undefined
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const id = (value as { id?: unknown }).id
+    if (typeof id === 'string' && id.trim()) return id.trim()
+  }
+  throw new Error('voice must be a string or object with id')
+}
+
+function normalizeSpeechSpeed(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('speed must be a number')
+  if (value < 0.25 || value > 4) throw new Error('speed must be between 0.25 and 4')
+  return value
+}
+
+function normalizeSpeechInstructions(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'string') throw new Error('instructions must be a string')
+  if (value.length > 4096) throw new Error('instructions must be 4096 characters or fewer')
+  return value.trim() || undefined
+}
+
+function normalizeTranscriptionTemperature(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined
+  const number = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(number)) throw new Error('temperature must be a number')
+  if (number < 0 || number > 1) throw new Error('temperature must be between 0 and 1')
+  return number
+}
+
+function normalizeTimestampGranularities(form: Awaited<ReturnType<typeof readMultipartForm>>): Array<'word' | 'segment'> | undefined {
+  const values = normalizeStringArrayField(form, 'timestamp_granularities', ['word', 'segment'])
+  return values as Array<'word' | 'segment'> | undefined
+}
+
+function normalizeStringArrayField(
+  form: Awaited<ReturnType<typeof readMultipartForm>>,
+  field_name: string,
+  allowed_values?: string[],
+): string[] | undefined {
+  const raw_values = form.field_arrays[field_name] ?? []
+  const values = raw_values.flatMap(value => parseStringArrayValue(value, field_name))
+    .map(value => value.trim())
+    .filter(Boolean)
+  if (!values.length) return undefined
+  if (allowed_values) {
+    const allowed = new Set(allowed_values)
+    const invalid = values.find(value => !allowed.has(value))
+    if (invalid) throw new Error(`${field_name} contains unsupported value "${invalid}"`)
+  }
+  return values
+}
+
+function parseStringArrayValue(value: string, field_name: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+  if (!trimmed.startsWith('[')) return [trimmed]
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!Array.isArray(parsed) || parsed.some(item => typeof item !== 'string')) {
+      throw new Error(`${field_name} must be an array of strings`)
+    }
+    return parsed
+  } catch (error) {
+    if (error instanceof Error && error.message === `${field_name} must be an array of strings`) throw error
+    throw new Error(`${field_name} must be valid JSON`)
+  }
+}
+
+function normalizeChunkingStrategy(value: string | undefined): 'auto' | JsonObject | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  if (trimmed === 'auto') return 'auto'
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !isJsonValue(parsed)) {
+      throw new Error('chunking_strategy must be "auto" or a JSON object')
+    }
+    return parsed as JsonObject
+  } catch (error) {
+    if (error instanceof Error && error.message === 'chunking_strategy must be "auto" or a JSON object') throw error
+    throw new Error('chunking_strategy must be "auto" or valid JSON')
+  }
+}
+
+function validateTranscriptionRequest(request: TranscribeRequest): void {
+  if (request.timestamp_granularities?.length && request.response_format !== 'verbose_json') {
+    throw new Error('timestamp_granularities requires response_format "verbose_json"')
+  }
 }
 
 function parseJsonObjectField(value: string, fieldName: string): JsonObject {
@@ -653,6 +746,16 @@ function normalizeProviderTranscriptionResponseFormat(
   return response_format
 }
 
+function getTranscriptionOutputFormat(
+  response_format: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
+): TranscribeRequest['format'] {
+  if (response_format === 'srt') return 'srt'
+  if (response_format === 'vtt') return 'vtt'
+  if (response_format === 'verbose_json') return 'raw'
+  if (response_format === 'diarized_json') return 'diarized_json'
+  return 'txt'
+}
+
 function transcriptionTextContentType(format: 'text' | 'srt' | 'vtt'): string {
   if (format === 'vtt') return 'text/vtt; charset=utf-8'
   return 'text/plain; charset=utf-8'
@@ -674,6 +777,14 @@ function formatTranscriptionText(format: 'text' | 'srt' | 'vtt', result: Transcr
     `${formatSrtTimestamp(segment.from)} --> ${formatSrtTimestamp(segment.to)}`,
     segment.content,
   ].join('\n')).join('\n\n')}\n`
+}
+
+function formatJsonTranscriptionResult(text: string, raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { text }
+  return {
+    ...(raw as Record<string, unknown>),
+    text: typeof (raw as { text?: unknown }).text === 'string' ? (raw as { text: string }).text : text,
+  }
 }
 
 function formatSrtTimestamp(seconds: number): string {

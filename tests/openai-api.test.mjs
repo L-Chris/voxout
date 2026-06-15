@@ -111,6 +111,53 @@ test('POST /v1/audio/speech returns generated audio bytes', async () => {
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
 })
 
+test('POST /v1/audio/speech accepts OpenAI custom voice objects', async () => {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello from a custom voice object',
+      voice: { id: 'mock-dialogue' },
+      speed: 1.25,
+      response_format: 'wav',
+    }),
+  })
+  const audio = Buffer.from(await response.arrayBuffer())
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^audio\/wav/)
+  assert.equal(audio.subarray(0, 4).toString('ascii'), 'RIFF')
+})
+
+test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
+  const invalidSpeedResponse = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello',
+      speed: 8,
+    }),
+  })
+  const invalidSpeedPayload = await invalidSpeedResponse.json()
+  assert.equal(invalidSpeedResponse.status, 400)
+  assert.match(invalidSpeedPayload.error, /speed must be between 0\.25 and 4/)
+
+  const invalidVoiceResponse = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello',
+      voice: { name: 'not an id' },
+    }),
+  })
+  const invalidVoicePayload = await invalidVoiceResponse.json()
+  assert.equal(invalidVoiceResponse.status, 400)
+  assert.match(invalidVoicePayload.error, /voice must be a string or object with id/)
+})
+
 test('POST /v1/audio/speech accepts provider extension with OpenAI-style model', async () => {
   const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
@@ -463,6 +510,36 @@ test('POST /v1/audio/transcriptions accepts multipart file uploads', async () =>
 
   assert.equal(response.status, 200)
   assert.deepEqual(payload, { text: 'Mock transcript for inline audio' })
+})
+
+test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', async () => {
+  const temperatureForm = new FormData()
+  temperatureForm.set('provider', 'mock-asr')
+  temperatureForm.set('model', 'mock-asr-model')
+  temperatureForm.set('temperature', '2')
+  temperatureForm.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const temperatureResponse = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: temperatureForm,
+  })
+  const temperaturePayload = await temperatureResponse.json()
+  assert.equal(temperatureResponse.status, 400)
+  assert.match(temperaturePayload.error, /temperature must be between 0 and 1/)
+
+  const timestampsForm = new FormData()
+  timestampsForm.set('provider', 'mock-asr')
+  timestampsForm.set('model', 'mock-asr-model')
+  timestampsForm.set('timestamp_granularities[]', 'word')
+  timestampsForm.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const timestampsResponse = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: timestampsForm,
+  })
+  const timestampsPayload = await timestampsResponse.json()
+  assert.equal(timestampsResponse.status, 400)
+  assert.match(timestampsPayload.error, /timestamp_granularities requires response_format "verbose_json"/)
 })
 
 test('POST /v1/audio/transcriptions only accepts multipart file input', async () => {
