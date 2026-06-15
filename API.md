@@ -42,15 +42,15 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `model`，必填，除非 `provider` 显式指定 | 官方 ASR model | `model` | `model_id`，默认 `asr_model` 或 `scribe_v2` | `model`，默认 `asr_model` 或 `ink-whisper` | query `model`，默认 `asr_model` 或 `default` | `model`，默认 `asr_model` 或 `mimo-v2.5-asr` | 不支持 | 无 |
 | `provider`，可选 | 无 | 只用于路由；省略时 OpenAI ASR model 或未知 model 路由到 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 不支持 | 无 |
 | `language`，可选 string | ISO-639-1 | `language` | `language_code` | `language`，裁剪地区码 | `json_config={"language":...}`，裁剪地区码 | `asr_options.language`，默认 `auto` | 不支持 | 无 |
-| `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
-| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json`；非法值拒绝 | 原样传给 OpenAI | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
-| `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；非法 boolean 拒绝；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
+| `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
+| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json`；非法值拒绝；部分模型有子集限制 | 原样传给 OpenAI；`gpt-4o-transcribe*` 非 diarize 仅允许 `json`；diarize 仅允许 `json/text/diarized_json`；`whisper-1` 不允许 `diarized_json` | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
+| `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；非法 boolean 拒绝；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE；`whisper-1` 在上游前拒绝 | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
 | `temperature`，可选 number | 官方 `0..1` | 校验后作为 `temperature` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json` | 重复 multipart 字段 `timestamp_granularities[]` | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `include[]`，可选 array | 当前支持 `logprobs` | 重复 multipart 字段 `include[]` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json`；diarize 不支持 | 重复 multipart 字段 `timestamp_granularities[]`；`gpt-4o-transcribe-diarize` 在上游前拒绝 | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 不支持 | 无 |
+| `include[]`，可选 array | 当前支持 `logprobs`；只支持 `response_format=json` 且只支持 `gpt-4o-transcribe` / mini；diarize 不支持 | 重复 multipart 字段 `include[]`；不满足模型和格式约束时在上游前拒绝 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `chunking_strategy`，可选 `auto` 或 object | 官方 `auto` 或 server VAD object | `auto` 原样；object 以 JSON 字符串放入 multipart | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `known_speaker_names[]` / `known_speaker_references[]`，可选 array | diarization 已知说话人名称和参考音频 data URL | 重复 multipart 字段 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
-| `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；可覆盖同名标准字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 深合并到 MiMo chat completion JSON body | 不支持 | multipart 中必须是 JSON object 字符串 |
+| `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；不能覆盖已识别标准字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 深合并到 MiMo chat completion JSON body | 不支持 | multipart 中必须是 JSON object 字符串；字段默认 snake_case |
 | 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；详细格式返回 JSON；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 不直接返回未整理 provider 原始响应，除 OpenAI JSON 扩展字段或 verbose/diarized 中的 `raw` |
 
 ## POST `/v1/audio/effect`

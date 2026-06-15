@@ -199,7 +199,6 @@ test('OpenAI provider sends speech-to-text requests', async () => {
     language: 'en',
     prompt: 'Technical vocabulary appears in this recording.',
     temperature: 0.2,
-    include: ['logprobs'],
     timestamp_granularities: ['word', 'segment'],
     chunking_strategy: 'auto',
     known_speaker_names: ['agent'],
@@ -222,7 +221,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
   assert.equal(captured.language, 'en')
   assert.equal(captured.prompt, 'Technical vocabulary appears in this recording.')
   assert.equal(captured.temperature, '0.2')
-  assert.deepEqual(captured.include, ['logprobs'])
+  assert.deepEqual(captured.include, [])
   assert.deepEqual(captured.timestamp_granularities, ['word', 'segment'])
   assert.equal(captured.chunking_strategy, 'auto')
   assert.deepEqual(captured.known_speaker_names, ['agent'])
@@ -262,7 +261,7 @@ test('OpenAI provider streams speech-to-text requests', async () => {
       mime_type: 'audio/wav',
       file_name: 'sample.wav',
     },
-    response_format: 'text',
+    response_format: 'json',
     stream: true,
   }, {
     config: {},
@@ -274,9 +273,128 @@ test('OpenAI provider streams speech-to-text requests', async () => {
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
   assert.equal(captured.model, 'gpt-4o-mini-transcribe')
-  assert.equal(captured.response_format, 'text')
+  assert.equal(captured.response_format, 'json')
   assert.equal(captured.stream, 'true')
   assert.equal(captured.file.type, 'audio/wav')
+})
+
+test('OpenAI provider sends transcription logprobs on supported models', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url: String(url),
+      model: init.body.get('model'),
+      response_format: init.body.get('response_format'),
+      include: init.body.getAll('include[]'),
+    }
+    return new Response(JSON.stringify({
+      text: 'Recognized by OpenAI',
+      logprobs: [{ token: 'Recognized', bytes: [82], logprob: -0.01 }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  const provider = new OpenAiProvider()
+  const result = await provider.transcribe({
+    model: 'gpt-4o-transcribe',
+    file: {
+      data: Buffer.alloc(256, 1),
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
+    },
+    response_format: 'json',
+    include: ['logprobs'],
+  }, {
+    config: {},
+    secrets: { api_key: 'test-openai-key' },
+  })
+
+  assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
+  assert.equal(captured.model, 'gpt-4o-transcribe')
+  assert.equal(captured.response_format, 'json')
+  assert.deepEqual(captured.include, ['logprobs'])
+  assert.deepEqual(result.raw.logprobs, [{ token: 'Recognized', bytes: [82], logprob: -0.01 }])
+})
+
+test('OpenAI provider rejects unsupported transcription model parameters', async () => {
+  globalThis.fetch = async () => {
+    throw new Error('fetch should not be called')
+  }
+
+  const provider = new OpenAiProvider()
+  const file = {
+    data: Buffer.alloc(256, 1),
+    mime_type: 'audio/wav',
+    file_name: 'sample.wav',
+  }
+
+  await assert.rejects(
+    () => provider.transcribe({
+      model: 'gpt-4o-transcribe',
+      file,
+      response_format: 'verbose_json',
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /only supports response_format "json"/,
+  )
+
+  await assert.rejects(
+    () => provider.transcribe({
+      model: 'whisper-1',
+      file,
+      response_format: 'json',
+      include: ['logprobs'],
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /include\[\] is only supported/,
+  )
+
+  await assert.rejects(
+    () => provider.transcribe({
+      model: 'gpt-4o-transcribe-diarize',
+      file,
+      response_format: 'diarized_json',
+      prompt: 'Speaker labels should be stable.',
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /does not support prompt/,
+  )
+
+  await assert.rejects(
+    () => provider.streamTranscribe({
+      model: 'whisper-1',
+      file,
+      response_format: 'json',
+      stream: true,
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /does not support stream/,
+  )
+
+  await assert.rejects(
+    () => provider.transcribe({
+      model: 'gpt-4o-transcribe',
+      file,
+      response_format: 'json',
+      extra_params: {
+        response_format: 'verbose_json',
+      },
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /extra_params\.response_format conflicts/,
+  )
 })
 
 test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {

@@ -40,6 +40,35 @@ const OPENAI_ASR_MODELS = [
   'gpt-4o-transcribe-diarize',
   'whisper-1',
 ]
+const OPENAI_JSON_ONLY_ASR_MODELS = new Set([
+  'gpt-4o-transcribe',
+  'gpt-4o-mini-transcribe',
+  'gpt-4o-mini-transcribe-2025-12-15',
+])
+const OPENAI_LOGPROBS_ASR_MODELS = new Set([
+  'gpt-4o-transcribe',
+  'gpt-4o-mini-transcribe',
+  'gpt-4o-mini-transcribe-2025-12-15',
+])
+const OPENAI_DIARIZE_ASR_MODEL = 'gpt-4o-transcribe-diarize'
+const OPENAI_TRANSCRIPTION_STANDARD_FIELDS = new Set([
+  'file',
+  'model',
+  'language',
+  'prompt',
+  'response_format',
+  'stream',
+  'temperature',
+  'timestamp_granularities',
+  'timestamp_granularities[]',
+  'include',
+  'include[]',
+  'chunking_strategy',
+  'known_speaker_names',
+  'known_speaker_names[]',
+  'known_speaker_references',
+  'known_speaker_references[]',
+])
 
 interface OpenAiVoicePayload {
   id?: string
@@ -215,6 +244,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     const response_format = normalizeTranscriptionResponseFormat(request.response_format, request.format)
     const form = createTranscriptionForm(request, context, response_format)
     form.set('stream', 'true')
+    validateOpenAiTranscriptionForm(form)
     const response = await fetch(`${getBaseUrl(context)}/audio/transcriptions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${api_key}` },
@@ -272,14 +302,59 @@ function createTranscriptionForm(
   for (const item of request.known_speaker_names ?? []) form.append('known_speaker_names[]', item)
   for (const item of request.known_speaker_references ?? []) form.append('known_speaker_references[]', item)
   appendExtraParamsToForm(form, request.extra_params)
+  validateOpenAiTranscriptionForm(form)
   return form
 }
 
 function appendExtraParamsToForm(form: FormData, extra_params: TranscribeRequest['extra_params']): void {
   if (!extra_params) return
   for (const [key, value] of Object.entries(extra_params)) {
+    if (OPENAI_TRANSCRIPTION_STANDARD_FIELDS.has(key)) {
+      throw new Error(`extra_params.${key} conflicts with a standard OpenAI transcription field`)
+    }
     setFormJsonValue(form, key, value)
   }
+}
+
+function validateOpenAiTranscriptionForm(form: FormData): void {
+  const model = getRequiredFormString(form, 'model')
+  const response_format = getOptionalFormString(form, 'response_format') ?? 'json'
+  const stream = getOptionalFormString(form, 'stream') === 'true'
+  const include = form.getAll('include[]').map(String)
+  const timestamp_granularities = form.getAll('timestamp_granularities[]').map(String)
+
+  if (OPENAI_JSON_ONLY_ASR_MODELS.has(model) && response_format !== 'json') {
+    throw new Error(`OpenAI transcription model ${model} only supports response_format "json"`)
+  }
+  if (model === OPENAI_DIARIZE_ASR_MODEL && response_format !== 'json' && response_format !== 'text' && response_format !== 'diarized_json') {
+    throw new Error(`OpenAI transcription model ${model} only supports response_format "json", "text", or "diarized_json"`)
+  }
+  if (model === 'whisper-1' && response_format === 'diarized_json') {
+    throw new Error('OpenAI transcription model whisper-1 does not support response_format "diarized_json"')
+  }
+  if (stream && model === 'whisper-1') {
+    throw new Error('OpenAI transcription model whisper-1 does not support stream')
+  }
+  if (include.length && (response_format !== 'json' || !OPENAI_LOGPROBS_ASR_MODELS.has(model))) {
+    throw new Error(`OpenAI transcription include[] is only supported with response_format "json" on gpt-4o transcription models`)
+  }
+  if (model === OPENAI_DIARIZE_ASR_MODEL && getOptionalFormString(form, 'prompt')) {
+    throw new Error(`OpenAI transcription model ${model} does not support prompt`)
+  }
+  if (model === OPENAI_DIARIZE_ASR_MODEL && timestamp_granularities.length) {
+    throw new Error(`OpenAI transcription model ${model} does not support timestamp_granularities`)
+  }
+}
+
+function getRequiredFormString(form: FormData, key: string): string {
+  const value = getOptionalFormString(form, key)
+  if (!value) throw new Error(`${key} is required`)
+  return value
+}
+
+function getOptionalFormString(form: FormData, key: string): string | undefined {
+  const value = form.get(key)
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function setFormJsonValue(form: FormData, key: string, value: unknown): void {
