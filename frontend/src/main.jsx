@@ -193,6 +193,8 @@ function App() {
         response_format: speechForm.response_format,
         stream_format: speechForm.stream_format || undefined,
         speed: Number(speechForm.speed) || undefined,
+        instructions: speechForm.instructions || undefined,
+        extra_params: parseJsonObject(speechForm.extra_params, 'Extra params'),
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
@@ -223,6 +225,10 @@ function App() {
     form.set('response_format', transcriptionForm.response_format)
     if (transcriptionForm.model.trim()) form.set('model', transcriptionForm.model.trim())
     if (transcriptionForm.language.trim()) form.set('language', transcriptionForm.language.trim())
+    if (transcriptionForm.prompt.trim()) form.set('prompt', transcriptionForm.prompt.trim())
+    if (transcriptionForm.temperature.trim()) form.set('temperature', transcriptionForm.temperature.trim())
+    if (transcriptionForm.stream) form.set('stream', 'true')
+    appendExtraParams(form, transcriptionForm.extra_params)
     if (!transcriptionFile) throw new Error('Choose an audio file.')
     form.set('file', transcriptionFile)
 
@@ -254,6 +260,7 @@ function App() {
         duration_seconds: Number(effectForm.duration_seconds) || undefined,
         prompt_influence: Number(effectForm.prompt_influence) || undefined,
         loop: effectForm.loop,
+        extra_params: parseJsonObject(effectForm.extra_params, 'Extra params'),
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
@@ -272,6 +279,7 @@ function App() {
     const form = new FormData()
     form.set('provider', selectedProvider.id)
     form.set('file_format', isolationForm.file_format)
+    appendExtraParams(form, isolationForm.extra_params)
     if (!isolationFile) throw new Error('Choose an audio file.')
     form.set('file', isolationFile)
 
@@ -292,11 +300,15 @@ function App() {
   }
 
   async function runDesignTest() {
-    const extra_params = compactPayload({
+    const typed_extra_params = compactPayload({
       auto_generate_text: designForm.auto_generate_text,
       guidance_scale: optionalNumber(designForm.guidance_scale),
       seed: optionalNumber(designForm.seed),
     })
+    const extra_params = {
+      ...parseJsonObject(designForm.extra_params, 'Extra params'),
+      ...typed_extra_params,
+    }
     const response = await fetch(apiUrl('/v1/audio/design', api_base_url), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -330,6 +342,7 @@ function App() {
     form.set('provider', selectedProvider.id)
     form.set('name', cloneForm.name)
     if (cloneForm.consent.trim()) form.set('consent', cloneForm.consent.trim())
+    appendExtraParams(form, cloneForm.extra_params)
     if (cloneFile) {
       form.set('audio_sample', cloneFile)
     } else {
@@ -449,10 +462,12 @@ function App() {
                         modelField={getProviderField(selectedProvider, 'asr_model')}
                         onFileChange={setTranscriptionFile}
                         onFormChange={setTranscriptionForm}
+                        supportsStreaming={Boolean(selectedProvider.capabilities?.asr_streaming)}
                       />
                     ) : (
                       <SpeechTestForm
                         form={speechForm}
+                        modelField={getProviderField(selectedProvider, 'tts_model')}
                         onFormChange={setSpeechForm}
                         supportsStreaming={Boolean(selectedProvider.capabilities?.tts_streaming)}
                         voiceOptions={voiceOptions}
@@ -565,11 +580,13 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
 
 function SpeechTestForm({
   form,
+  modelField,
   onFormChange,
   supportsStreaming,
   voiceOptions,
   voiceTree,
 }) {
+  const modelListId = modelField?.options?.length ? 'speech-model-options' : undefined
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
@@ -580,6 +597,25 @@ function SpeechTestForm({
           onChange={event => onFormChange({ ...form, input: event.target.value })}
         />
       </label>
+      {modelField ? (
+        <label className="grid gap-1.5 text-sm font-semibold">
+          Model
+          <input
+            className="input"
+            list={modelListId}
+            placeholder={modelField.placeholder || 'provider default'}
+            value={form.model}
+            onChange={event => onFormChange({ ...form, model: event.target.value })}
+          />
+          {modelListId ? (
+            <datalist id={modelListId}>
+              {modelField.options.map(option => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          ) : null}
+        </label>
+      ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
         Voice
         {voiceOptions.length ? (
@@ -605,8 +641,12 @@ function SpeechTestForm({
           value={form.response_format}
           onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
-          <option value="wav">wav</option>
           <option value="mp3">mp3</option>
+          <option value="opus">opus</option>
+          <option value="aac">aac</option>
+          <option value="flac">flac</option>
+          <option value="wav">wav</option>
+          <option value="pcm">pcm</option>
         </select>
       </label>
       {supportsStreaming ? (
@@ -635,6 +675,15 @@ function SpeechTestForm({
           onChange={event => onFormChange({ ...form, speed: event.target.value })}
         />
       </label>
+      <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+        Instructions
+        <textarea
+          className="textarea min-h-20"
+          value={form.instructions}
+          onChange={event => onFormChange({ ...form, instructions: event.target.value })}
+        />
+      </label>
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
   )
 }
@@ -749,11 +798,12 @@ function IsolationTestForm({ file, form, onFileChange, onFormChange }) {
           <option value="pcm_s16le_16">pcm_s16le_16</option>
         </select>
       </label>
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
   )
 }
 
-function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormChange }) {
+function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormChange, supportsStreaming }) {
   const modelListId = modelField?.options?.length ? 'transcription-model-options' : undefined
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -791,6 +841,26 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
+        Prompt
+        <input
+          className="input"
+          value={form.prompt}
+          onChange={event => onFormChange({ ...form, prompt: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
+        Temperature
+        <input
+          className="input"
+          min="0"
+          max="1"
+          step="0.1"
+          type="number"
+          value={form.temperature}
+          onChange={event => onFormChange({ ...form, temperature: event.target.value })}
+        />
+      </label>
+      <label className="grid gap-1.5 text-sm font-semibold">
         Response format
         <select
           className="input"
@@ -801,8 +871,21 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
           <option value="text">text</option>
           <option value="verbose_json">verbose_json</option>
           <option value="srt">srt</option>
+          <option value="vtt">vtt</option>
+          <option value="diarized_json">diarized_json</option>
         </select>
       </label>
+      {supportsStreaming ? (
+        <label className="inline-flex items-center gap-2 self-end text-sm font-semibold">
+          <input
+            type="checkbox"
+            checked={form.stream}
+            onChange={event => onFormChange({ ...form, stream: event.target.checked })}
+          />
+          Stream
+        </label>
+      ) : null}
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
   )
 }
@@ -889,6 +972,7 @@ function EffectTestForm({ form, onFormChange }) {
         />
         Loop
       </label>
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
   )
 }
@@ -972,6 +1056,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
         Auto text
       </label>
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
   )
 }
@@ -1013,7 +1098,22 @@ function CloneTestForm({ file, form, onFileChange, onFormChange }) {
           onChange={event => onFormChange({ ...form, consent: event.target.value })}
         />
       </label>
+      <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
+  )
+}
+
+function ExtraParamsField({ onChange, value }) {
+  return (
+    <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+      Extra params
+      <textarea
+        className="textarea min-h-20 font-mono"
+        placeholder="{}"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+      />
+    </label>
   )
 }
 
@@ -1099,10 +1199,13 @@ function getTestModeLabel(mode) {
 function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
+    model: provider?.config?.tts_model ?? '',
     voice: '',
     response_format: provider?.id === 'mimo' ? 'wav' : 'mp3',
     stream_format: '',
     speed: '1',
+    instructions: '',
+    extra_params: '',
   }
 }
 
@@ -1113,12 +1216,14 @@ function defaultEffectForm() {
     prompt_influence: '0.3',
     response_format: 'mp3_44100_128',
     loop: false,
+    extra_params: '',
   }
 }
 
 function defaultIsolationForm() {
   return {
     file_format: 'other',
+    extra_params: '',
   }
 }
 
@@ -1132,6 +1237,7 @@ function defaultDesignForm() {
     auto_generate_text: true,
     guidance_scale: '',
     seed: '',
+    extra_params: '',
   }
 }
 
@@ -1139,6 +1245,7 @@ function defaultCloneForm() {
   return {
     name: 'Cloned voice',
     consent: '',
+    extra_params: '',
   }
 }
 
@@ -1146,7 +1253,11 @@ function defaultTranscriptionForm(provider) {
   return {
     model: getProviderField(provider, 'asr_model') ? provider?.config?.asr_model ?? '' : '',
     language: 'auto',
+    prompt: '',
+    temperature: '',
+    stream: false,
     response_format: 'json',
+    extra_params: '',
   }
 }
 
@@ -1169,6 +1280,26 @@ function compactPayload(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ''),
   )
+}
+
+function parseJsonObject(value, fieldName) {
+  const text = String(value ?? '').trim()
+  if (!text) return undefined
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error(`${fieldName} must be valid JSON.`)
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${fieldName} must be a JSON object.`)
+  }
+  return parsed
+}
+
+function appendExtraParams(form, value) {
+  const extra_params = parseJsonObject(value, 'Extra params')
+  if (extra_params) form.set('extra_params', JSON.stringify(extra_params))
 }
 
 function formatBytes(value) {
