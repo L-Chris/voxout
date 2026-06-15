@@ -12,6 +12,7 @@ import {
   getVoiceCloneProvider,
   getVoiceDesignProvider,
   listAsrProviders,
+  listSoundEffectProviders,
   listTtsProviders,
 } from '../providers/registry.js'
 import { getProviderTimeoutMs, withTimeout } from '../timeout.js'
@@ -210,13 +211,14 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
 
 async function handleAudioEffect(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
   assertSupportedJsonFields(body, SOUND_EFFECT_BODY_FIELDS)
-  const providerId = getRequiredProvider(body.provider)
+  const target = resolveSoundEffectTarget(body.model, body.provider)
+  const providerId = target.providerId
   assertPublicProviderAccess(providerId)
   const provider = getSoundEffectProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
 
-  const request = normalizeSoundEffectInput(provider.id, body)
+  const request = normalizeSoundEffectInput(provider.id, { ...body, model: target.model })
   const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.createSoundEffect(request, context),
@@ -759,6 +761,21 @@ function resolveOpenAiTranscriptionTarget(model: unknown, provider: unknown): { 
   return { providerId: 'openai', model: modelId }
 }
 
+function resolveSoundEffectTarget(model: unknown, provider: unknown): { providerId: string, model?: string } {
+  const modelId = typeof model === 'string' ? model.trim() : ''
+  const explicitProvider = typeof provider === 'string' ? provider.trim() : ''
+  if (explicitProvider) {
+    return { providerId: explicitProvider, model: modelId || undefined }
+  }
+  if (!modelId) throw new Error('model is required')
+  if (hasSoundEffectProvider(modelId)) {
+    return { providerId: modelId }
+  }
+  const providerByModel = findProviderByModelOption(modelId, listSoundEffectProviders(), 'sound_effect_model')
+  if (providerByModel) return { providerId: providerByModel, model: modelId }
+  throw new Error(`Unknown sound effect model: ${modelId}`)
+}
+
 function findProviderByModelOption(
   modelId: string,
   providers: Array<{ id: string, fields?: Array<{ key: string, options?: string[] }> }>,
@@ -782,6 +799,15 @@ function hasTtsProvider(id: string): boolean {
 function hasAsrProvider(id: string): boolean {
   try {
     getAsrProvider(id)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function hasSoundEffectProvider(id: string): boolean {
+  try {
+    getSoundEffectProvider(id)
     return true
   } catch {
     return false

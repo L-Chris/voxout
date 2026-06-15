@@ -93,7 +93,7 @@ Sound effect generation:
 curl -X POST http://127.0.0.1:4177/v1/audio/effect \
   -H 'content-type: application/json' \
   --output effect.mp3 \
-  --data '{"provider":"elevenlabs","input":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3_44100_128"}'
+  --data '{"model":"eleven_text_to_sound_v2","input":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3_44100_128"}'
 ```
 
 Voice isolation:

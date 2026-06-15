@@ -75,6 +75,10 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(elevenLabsTtsModel.owned_by, 'elevenlabs')
   assert.equal(elevenLabsTtsModel.capabilities.tts, true)
   assert.deepEqual(elevenLabsTtsModel.providers, ['elevenlabs'])
+  const elevenLabsEffectModel = payload.data.find(model => model.id === 'eleven_text_to_sound_v2')
+  assert.equal(elevenLabsEffectModel.owned_by, 'elevenlabs')
+  assert.equal(elevenLabsEffectModel.capabilities.sound_effects, true)
+  assert.deepEqual(elevenLabsEffectModel.providers, ['elevenlabs'])
   const defaultProvider = payload.data.find(model => model.id === 'default')
   assert.equal(defaultProvider.capabilities.tts, true)
   assert.equal(defaultProvider.capabilities.tts_streaming, true)
@@ -332,8 +336,7 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      provider: 'mock',
-      model: 'mock-effect-model',
+      model: 'mock',
       input: 'a short test chime',
       duration_seconds: 0.5,
       response_format: 'wav',
@@ -347,17 +350,30 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
 })
 
-test('POST /v1/audio/effect requires provider and OpenAI-style field names', async () => {
-  const legacyProviderResponse = await fetch(`${base_url}/v1/audio/effect`, {
+test('POST /v1/audio/effect requires model or provider and OpenAI-style field names', async () => {
+  const missingModelResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: 'mock',
       input: 'a short test chime',
       response_format: 'wav',
     }),
   })
-  assert.equal(legacyProviderResponse.status, 400)
+  const missingModelPayload = await missingModelResponse.json()
+  assert.equal(missingModelResponse.status, 400)
+  assert.match(missingModelPayload.error, /model is required/)
+
+  const unknownModelResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'not-a-sound-effect-model',
+      input: 'a short test chime',
+    }),
+  })
+  const unknownModelPayload = await unknownModelResponse.json()
+  assert.equal(unknownModelResponse.status, 400)
+  assert.match(unknownModelPayload.error, /Unknown sound effect model: not-a-sound-effect-model/)
 
   const legacyInputResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
