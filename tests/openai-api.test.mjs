@@ -108,6 +108,24 @@ test('GET /api/providers does not expose internal test providers', async () => {
   assert.ok(!providerIds.includes('mock-asr'))
 })
 
+test('server errors use OpenAI-style error objects', async () => {
+  const notFoundResponse = await fetch(`${base_url}/v1/not-found`)
+  const notFoundPayload = await notFoundResponse.json()
+
+  assert.equal(notFoundResponse.status, 404)
+  assert.equal(errorMessage(notFoundPayload), 'Not found')
+  assert.equal(notFoundPayload.error.type, 'not_found_error')
+  assert.equal(notFoundPayload.error.param, null)
+  assert.equal(notFoundPayload.error.code, null)
+
+  const missingAudioResponse = await fetch(`${base_url}/audio/${'0'.repeat(64)}.wav`)
+  const missingAudioPayload = await missingAudioResponse.json()
+
+  assert.equal(missingAudioResponse.status, 404)
+  assert.equal(errorMessage(missingAudioPayload), 'Audio not found')
+  assert.equal(missingAudioPayload.error.type, 'not_found_error')
+})
+
 test('GET /api/providers/:id/voices returns provider voices', async () => {
   const response = await fetch(`${base_url}/api/providers/default/voices`)
   const payload = await response.json()
@@ -167,7 +185,11 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   })
   const invalidSpeedPayload = await invalidSpeedResponse.json()
   assert.equal(invalidSpeedResponse.status, 400)
-  assert.match(invalidSpeedPayload.error, /speed must be between 0\.25 and 4/)
+  assert.deepEqual(Object.keys(invalidSpeedPayload.error), ['message', 'type', 'param', 'code'])
+  assert.equal(invalidSpeedPayload.error.type, 'invalid_request_error')
+  assert.equal(invalidSpeedPayload.error.param, null)
+  assert.equal(invalidSpeedPayload.error.code, null)
+  assert.match(errorMessage(invalidSpeedPayload), /speed must be between 0\.25 and 4/)
 
   const invalidVoiceResponse = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
@@ -180,7 +202,7 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   })
   const invalidVoicePayload = await invalidVoiceResponse.json()
   assert.equal(invalidVoiceResponse.status, 400)
-  assert.match(invalidVoicePayload.error, /voice must be a string or object with id/)
+  assert.match(errorMessage(invalidVoicePayload), /voice must be a string or object with id/)
 
   const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
@@ -193,7 +215,7 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   })
   const unsupportedFieldPayload = await unsupportedFieldResponse.json()
   assert.equal(unsupportedFieldResponse.status, 400)
-  assert.match(unsupportedFieldPayload.error, /rate is not supported/)
+  assert.match(errorMessage(unsupportedFieldPayload), /rate is not supported/)
 
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
@@ -208,7 +230,7 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.response_format conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.response_format conflicts/)
 })
 
 test('POST /v1/audio/speech accepts provider extension with OpenAI-style model', async () => {
@@ -245,7 +267,7 @@ test('POST /v1/audio/speech treats OpenAI speech models as models, not providers
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /openai api_key is required/)
+  assert.match(errorMessage(payload), /openai api_key is required/)
 })
 
 test('POST /v1/audio/speech routes provider model ids to their provider', async () => {
@@ -260,7 +282,7 @@ test('POST /v1/audio/speech routes provider model ids to their provider', async 
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /elevenlabs api_key is required/)
+  assert.match(errorMessage(payload), /elevenlabs api_key is required/)
 })
 
 test('POST /v1/audio/speech streams generated audio bytes', async () => {
@@ -336,7 +358,7 @@ test('POST /v1/audio/speech rejects unsupported provider response formats', asyn
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /cannot synthesize response_format "flac"/)
+  assert.match(errorMessage(payload), /cannot synthesize response_format "flac"/)
 })
 
 test('POST /v1/audio/effect returns generated audio bytes', async () => {
@@ -388,7 +410,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const missingModelPayload = await missingModelResponse.json()
   assert.equal(missingModelResponse.status, 400)
-  assert.match(missingModelPayload.error, /model is required/)
+  assert.match(errorMessage(missingModelPayload), /model is required/)
 
   const unknownModelResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -400,7 +422,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const unknownModelPayload = await unknownModelResponse.json()
   assert.equal(unknownModelResponse.status, 400)
-  assert.match(unknownModelPayload.error, /Unknown sound effect model: not-a-sound-effect-model/)
+  assert.match(errorMessage(unknownModelPayload), /Unknown sound effect model: not-a-sound-effect-model/)
 
   const legacyInputResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -424,7 +446,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const unsupportedFieldPayload = await unsupportedFieldResponse.json()
   assert.equal(unsupportedFieldResponse.status, 400)
-  assert.match(unsupportedFieldPayload.error, /voice_settings is not supported/)
+  assert.match(errorMessage(unsupportedFieldPayload), /voice_settings is not supported/)
 
   const unsupportedFormatResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -437,7 +459,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const unsupportedFormatPayload = await unsupportedFormatResponse.json()
   assert.equal(unsupportedFormatResponse.status, 400)
-  assert.match(unsupportedFormatPayload.error, /cannot generate response_format "flac"/)
+  assert.match(errorMessage(unsupportedFormatPayload), /cannot generate response_format "flac"/)
 
   const invalidDurationResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -450,7 +472,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const invalidDurationPayload = await invalidDurationResponse.json()
   assert.equal(invalidDurationResponse.status, 400)
-  assert.match(invalidDurationPayload.error, /duration_seconds must be between 0\.5 and 30/)
+  assert.match(errorMessage(invalidDurationPayload), /duration_seconds must be between 0\.5 and 30/)
 
   const invalidInfluenceResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -463,7 +485,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const invalidInfluencePayload = await invalidInfluenceResponse.json()
   assert.equal(invalidInfluenceResponse.status, 400)
-  assert.match(invalidInfluencePayload.error, /prompt_influence must be between 0 and 1/)
+  assert.match(errorMessage(invalidInfluencePayload), /prompt_influence must be between 0 and 1/)
 
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -478,7 +500,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.duration_seconds conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.duration_seconds conflicts/)
 })
 
 test('POST /v1/audio/isolation returns processed audio bytes', async () => {
@@ -515,7 +537,7 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 
   const invalidFormat = new FormData()
@@ -528,7 +550,7 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
   })
   const invalidFormatPayload = await invalidFormatResponse.json()
   assert.equal(invalidFormatResponse.status, 400)
-  assert.match(invalidFormatPayload.error, /file_format must be "pcm_s16le_16" or "other"/)
+  assert.match(errorMessage(invalidFormatPayload), /file_format must be "pcm_s16le_16" or "other"/)
 
   const conflictingExtraParams = new FormData()
   conflictingExtraParams.set('model', 'mock')
@@ -540,7 +562,7 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.file_format conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.file_format conflicts/)
 })
 
 test('POST /v1/audio/design persists generated voices', async () => {
@@ -586,7 +608,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
   })
   const missingModelPayload = await missingModelResponse.json()
   assert.equal(missingModelResponse.status, 400)
-  assert.match(missingModelPayload.error, /model is required/)
+  assert.match(errorMessage(missingModelPayload), /model is required/)
 
   const unknownModelResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
@@ -598,7 +620,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
   })
   const unknownModelPayload = await unknownModelResponse.json()
   assert.equal(unknownModelResponse.status, 400)
-  assert.match(unknownModelPayload.error, /Unknown voice design model: not-a-voice-design-model/)
+  assert.match(errorMessage(unknownModelPayload), /Unknown voice design model: not-a-voice-design-model/)
 
   const legacyInputResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
@@ -611,7 +633,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
   })
   const legacyInputPayload = await legacyInputResponse.json()
   assert.equal(legacyInputResponse.status, 400)
-  assert.match(legacyInputPayload.error, /voice_description is not supported/)
+  assert.match(errorMessage(legacyInputPayload), /voice_description is not supported/)
 
   const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
@@ -624,7 +646,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
   })
   const unsupportedFieldPayload = await unsupportedFieldResponse.json()
   assert.equal(unsupportedFieldResponse.status, 400)
-  assert.match(unsupportedFieldPayload.error, /style_prompt is not supported/)
+  assert.match(errorMessage(unsupportedFieldPayload), /style_prompt is not supported/)
 
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
@@ -639,7 +661,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.input conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.input conflicts/)
 })
 
 test('POST /v1/audio/voices clones and persists provider-linked voices', async () => {
@@ -680,7 +702,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   })
   const legacyProviderPayload = await legacyProviderResponse.json()
   assert.equal(legacyProviderResponse.status, 400)
-  assert.match(legacyProviderPayload.error, /model is not supported/)
+  assert.match(errorMessage(legacyProviderPayload), /model is not supported/)
 
   for (const field of ['file', 'audio']) {
     const form = new FormData()
@@ -693,7 +715,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
     })
     const payload = await response.json()
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 
   for (const field of ['url', 'audioData', 'mimeType']) {
@@ -709,7 +731,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
     })
     const payload = await response.json()
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 
   for (const field of ['description', 'language', 'metadata', 'preview_text']) {
@@ -724,7 +746,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
     })
     const payload = await response.json()
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 
   const conflictingExtraParams = new FormData()
@@ -738,7 +760,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.name conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.name conflicts/)
 
   const oversizedSample = new FormData()
   oversizedSample.set('provider', 'mock')
@@ -750,7 +772,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   })
   const oversizedSamplePayload = await oversizedSampleResponse.json()
   assert.equal(oversizedSampleResponse.status, 400)
-  assert.match(oversizedSamplePayload.error, /audio_sample must be 10 MiB or smaller/)
+  assert.match(errorMessage(oversizedSamplePayload), /audio_sample must be 10 MiB or smaller/)
 })
 
 test('POST /v1/audio/transcriptions accepts multipart file uploads', async () => {
@@ -783,7 +805,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   })
   const temperaturePayload = await temperatureResponse.json()
   assert.equal(temperatureResponse.status, 400)
-  assert.match(temperaturePayload.error, /temperature must be between 0 and 1/)
+  assert.match(errorMessage(temperaturePayload), /temperature must be between 0 and 1/)
 
   const timestampsForm = new FormData()
   timestampsForm.set('provider', 'mock-asr')
@@ -797,7 +819,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   })
   const timestampsPayload = await timestampsResponse.json()
   assert.equal(timestampsResponse.status, 400)
-  assert.match(timestampsPayload.error, /timestamp_granularities requires response_format "verbose_json"/)
+  assert.match(errorMessage(timestampsPayload), /timestamp_granularities requires response_format "verbose_json"/)
 
   const formatForm = new FormData()
   formatForm.set('provider', 'mock-asr')
@@ -811,7 +833,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   })
   const formatPayload = await formatResponse.json()
   assert.equal(formatResponse.status, 400)
-  assert.match(formatPayload.error, /response_format must be one of/)
+  assert.match(errorMessage(formatPayload), /response_format must be one of/)
 
   const streamForm = new FormData()
   streamForm.set('provider', 'mock-asr')
@@ -825,7 +847,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   })
   const streamPayload = await streamResponse.json()
   assert.equal(streamResponse.status, 400)
-  assert.match(streamPayload.error, /stream must be a boolean/)
+  assert.match(errorMessage(streamPayload), /stream must be a boolean/)
 
   const conflictingExtraParamsForm = new FormData()
   conflictingExtraParamsForm.set('provider', 'mock-asr')
@@ -839,7 +861,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(conflictingExtraParamsPayload.error, /extra_params\.response_format conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.response_format conflicts/)
 })
 
 test('POST /v1/audio/transcriptions only accepts multipart file input', async () => {
@@ -858,7 +880,7 @@ test('POST /v1/audio/transcriptions only accepts multipart file input', async ()
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 })
 
@@ -876,7 +898,7 @@ test('POST /v1/audio/transcriptions rejects legacy model aliases', async () => {
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, new RegExp(`${field} is not supported`))
+    assert.match(errorMessage(payload), new RegExp(`${field} is not supported`))
   }
 })
 
@@ -938,7 +960,7 @@ test('POST /v1/audio/transcriptions rejects unsupported streaming providers', as
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /Provider does not support streaming transcription/)
+  assert.match(errorMessage(payload), /Provider does not support streaming transcription/)
 })
 
 test('POST /v1/audio/transcriptions converts provider segments to VTT', async () => {
@@ -973,7 +995,7 @@ test('POST /v1/audio/transcriptions treats OpenAI ASR models as models, not prov
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /openai api_key is required/)
+  assert.match(errorMessage(payload), /openai api_key is required/)
 })
 
 test('POST /v1/audio/transcriptions routes provider model ids to their provider', async () => {
@@ -988,7 +1010,7 @@ test('POST /v1/audio/transcriptions routes provider model ids to their provider'
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /mimo api_key is required/)
+  assert.match(errorMessage(payload), /mimo api_key is required/)
 })
 
 function waitForServer(child) {
@@ -1025,4 +1047,11 @@ async function getFreePort() {
 
 function createTinyWav() {
   return Buffer.from('UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=', 'base64')
+}
+
+function errorMessage(payload) {
+  const error = payload?.error
+  if (typeof error === 'string') return error
+  if (error && typeof error.message === 'string') return error.message
+  return ''
 }

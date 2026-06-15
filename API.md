@@ -10,6 +10,23 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 各接口表格的 `OpenAI 规范` 和 provider 表头已内联链接到对应官方文档；没有官方对应接口的 Voxout 扩展表格会链接到 provider 最接近的 API 文档。
 
+## 错误响应
+
+所有 JSON 错误响应使用 OpenAI 风格的错误对象：
+
+```json
+{
+  "error": {
+    "message": "error message",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": null
+  }
+}
+```
+
+`type` 会按 HTTP 状态映射为 `invalid_request_error`、`not_found_error` 或 `server_error`。当前校验错误暂不细分 `param` 和 `code`，两者返回 `null`。
+
 ## Provider 配置通用字段
 
 | 实际传参 | [OpenAI 规范][openai-api] | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |

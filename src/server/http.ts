@@ -28,6 +28,23 @@ export function sendJson(res: ServerResponse, value: unknown, status = 200, head
   res.end(headOnly ? undefined : body)
 }
 
+export function sendError(res: ServerResponse, message: string, status = 400, headOnly = false): void {
+  sendJson(res, {
+    error: {
+      message,
+      type: getErrorType(status),
+      param: null,
+      code: null,
+    },
+  }, status, headOnly)
+}
+
+function getErrorType(status: number): string {
+  if (status === 404) return 'not_found_error'
+  if (status >= 500) return 'server_error'
+  return 'invalid_request_error'
+}
+
 export function sendText(res: ServerResponse, value: string, contentType: string): void {
   res.writeHead(200, {
     'content-type': contentType,

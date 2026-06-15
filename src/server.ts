@@ -10,7 +10,7 @@ import { ApiController } from './server/api.controller.js'
 import { AudioController } from './server/audio.controller.js'
 import { AudioService } from './server/audio.service.js'
 import { ErrorMiddleware } from './server/error.middleware.js'
-import { sendJson, setCorsHeaders } from './server/http.js'
+import { sendError, setCorsHeaders } from './server/http.js'
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url))
 
@@ -56,7 +56,7 @@ useKoaServer(app, {
 app.use(ctx => {
   if (ctx.respond === false || ctx.body !== undefined || ctx.status !== 404) return
   ctx.respond = false
-  sendJson(ctx.res, { error: 'Not found' }, 404, ctx.method === 'HEAD')
+  sendError(ctx.res, 'Not found', 404, ctx.method === 'HEAD')
 })
 
 await Container.get(AudioService).initialize()

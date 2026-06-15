@@ -1,7 +1,7 @@
 import type { Context, Next } from 'koa'
 import { Middleware, type KoaMiddlewareInterface } from 'routing-controllers'
 import { Service } from 'typedi'
-import { sendJson } from './http.js'
+import { sendError } from './http.js'
 
 @Middleware({ type: 'before' })
 @Service()
@@ -12,7 +12,7 @@ export class ErrorMiddleware implements KoaMiddlewareInterface {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       ctx.respond = false
-      sendJson(ctx.res, { error: message }, getErrorStatus(error), ctx.method === 'HEAD')
+      sendError(ctx.res, message, getErrorStatus(error), ctx.method === 'HEAD')
     }
   }
 }

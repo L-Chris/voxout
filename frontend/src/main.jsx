@@ -80,7 +80,7 @@ function App() {
   async function loadProviders() {
     const response = await fetch(apiUrl('/api/providers', api_base_url))
     const payload = await response.json()
-    if (!response.ok) throw new Error(payload.error || 'Failed to load providers')
+    if (!response.ok) throw new Error(formatErrorPayload(payload) || 'Failed to load providers')
     const nextProviders = payload.providers || []
     setProviders(nextProviders)
     setSelectedProviderId(current => {
@@ -92,7 +92,7 @@ function App() {
   async function loadProviderVoices(providerId) {
     const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(providerId)}/voices`, api_base_url))
     const payload = await response.json()
-    if (!response.ok) throw new Error(payload.error || 'Failed to load voices')
+    if (!response.ok) throw new Error(formatErrorPayload(payload) || 'Failed to load voices')
     return (payload.voices || []).map(formatVoiceOption)
   }
 
@@ -146,7 +146,7 @@ function App() {
     })
     const payload = await response.json()
     if (!response.ok) {
-      setSaveStatus(payload.error || 'Save failed')
+      setSaveStatus(formatErrorPayload(payload) || 'Save failed')
       return
     }
     setSaveStatus('Saved')
@@ -1152,10 +1152,18 @@ async function loadConfig() {
 async function readError(response) {
   const text = await response.text()
   try {
-    return JSON.parse(text).error || text
+    return formatErrorPayload(JSON.parse(text)) || text
   } catch {
     return text || `Request failed: ${response.status}`
   }
+}
+
+function formatErrorPayload(payload) {
+  const error = payload?.error
+  if (!error) return ''
+  if (typeof error === 'string') return error
+  if (typeof error.message === 'string') return error.message
+  return ''
 }
 
 function getProviderFormValues(provider) {
