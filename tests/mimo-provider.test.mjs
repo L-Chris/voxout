@@ -261,6 +261,15 @@ test('Mimo provider streams speech recognition as OpenAI transcription events', 
     },
     language: 'auto',
     stream: true,
+    extra_params: {
+      model: 'extra-model-should-not-win',
+      stream: false,
+      asr_options: {
+        language: 'ja',
+        punctuation: true,
+      },
+      trace_id: 'trace-1',
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-key' },
@@ -272,7 +281,8 @@ test('Mimo provider streams speech recognition as OpenAI transcription events', 
   assert.equal(captured.headers['api-key'], 'test-key')
   assert.equal(captured.body.stream, true)
   assert.equal(captured.body.model, 'mimo-v2.5-asr')
-  assert.deepEqual(captured.body.asr_options, { language: 'auto' })
+  assert.equal(captured.body.trace_id, 'trace-1')
+  assert.deepEqual(captured.body.asr_options, { language: 'auto', punctuation: true })
   assert.match(streamText, /"type":"transcript\.text\.delta","delta":"识别"/)
   assert.match(streamText, /"type":"transcript\.text\.delta","delta":"结果"/)
   assert.match(streamText, /"type":"transcript\.text\.done","text":"识别结果"/)

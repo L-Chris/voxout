@@ -28,7 +28,9 @@ test('ElevenLabs provider sends text-to-speech requests', async () => {
     output_format: 'mp3_44100_192',
     speed: 1.15,
     extra_params: {
+      model_id: 'extra-model-should-not-win',
       voice_settings: {
+        speed: 0.7,
         stability: 0.4,
       },
       seed: 123,

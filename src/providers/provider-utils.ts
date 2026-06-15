@@ -45,7 +45,7 @@ export function compactObject<T extends Record<string, unknown>>(value: T): Part
 export function mergeJsonBody(base: Record<string, unknown>, extra_params?: JsonObject): Record<string, unknown> {
   const compacted = compactObject(base) as Record<string, JsonValue>
   if (!extra_params) return compacted
-  return deepMergeJson(compacted, extra_params)
+  return deepMergeJson(extra_params, compacted)
 }
 
 export async function fetchWithProviderTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {

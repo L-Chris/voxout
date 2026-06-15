@@ -27,6 +27,12 @@ test('Gradium provider sends text-to-speech requests', async () => {
   const result = await provider.synthesize({
     voice: 'gradium-voice-1',
     output_format: 'pcm_16000',
+    extra_params: {
+      model_name: 'extra-model-should-not-win',
+      output_format: 'ulaw_8000',
+      only_audio: false,
+      continuation: 'preserve',
+    },
     id: 'tts',
     text: 'Hello from Gradium.',
   }, {
@@ -44,6 +50,7 @@ test('Gradium provider sends text-to-speech requests', async () => {
     model_name: 'default',
     output_format: 'pcm_16000',
     only_audio: true,
+    continuation: 'preserve',
   })
 })
 

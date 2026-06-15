@@ -139,7 +139,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const api_key = getSecretString(context, 'api_key')
     if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const response = await postMimoCompletionStream(api_key, mergeJsonBody(buildAsrBody(request, context), { ...(request.extra_params ?? {}), stream: true }), context)
+    const response = await postMimoCompletionStream(api_key, { ...buildAsrBody(request, context), stream: true }, context)
     if (!response.body) throw new Error('MiMo ASR stream response was empty.')
     return {
       stream: decodeMimoTranscriptionSseStream(response.body),

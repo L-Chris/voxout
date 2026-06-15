@@ -28,6 +28,15 @@ test('Cartesia provider sends text-to-speech requests', async () => {
     output_format: 'mp3',
     lang: 'en-US',
     speed: 1.1,
+    extra_params: {
+      model_id: 'extra-model-should-not-win',
+      output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: 16000 },
+      generation_config: {
+        speed: 0.5,
+        emotion: 'positivity',
+      },
+      experimental_control: true,
+    },
     id: 'tts',
     text: 'Hello from Cartesia.',
   }, {
@@ -44,9 +53,10 @@ test('Cartesia provider sends text-to-speech requests', async () => {
     model_id: 'sonic-3.5',
     transcript: 'Hello from Cartesia.',
     voice: { mode: 'id', id: 'cartesia-voice-1' },
-    output_format: { container: 'mp3', bit_rate: 128000, sample_rate: 44100 },
+    output_format: { container: 'mp3', encoding: 'pcm_s16le', bit_rate: 128000, sample_rate: 44100 },
     language: 'en',
-    generation_config: { speed: 1.1 },
+    generation_config: { speed: 1.1, emotion: 'positivity' },
+    experimental_control: true,
   })
 })
 
