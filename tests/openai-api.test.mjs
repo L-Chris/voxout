@@ -313,6 +313,32 @@ test('POST /v1/audio/effect requires provider and OpenAI-style field names', asy
     }),
   })
   assert.equal(legacyInputResponse.status, 400)
+
+  const invalidDurationResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'a short test chime',
+      duration_seconds: 90,
+    }),
+  })
+  const invalidDurationPayload = await invalidDurationResponse.json()
+  assert.equal(invalidDurationResponse.status, 400)
+  assert.match(invalidDurationPayload.error, /duration_seconds must be between 0\.5 and 30/)
+
+  const invalidInfluenceResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'a short test chime',
+      prompt_influence: 2,
+    }),
+  })
+  const invalidInfluencePayload = await invalidInfluenceResponse.json()
+  assert.equal(invalidInfluenceResponse.status, 400)
+  assert.match(invalidInfluencePayload.error, /prompt_influence must be between 0 and 1/)
 })
 
 test('POST /v1/audio/isolation returns processed audio bytes', async () => {
@@ -364,6 +390,18 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
     assert.equal(response.status, 400)
     assert.match(payload.error, /file is required/)
   }
+
+  const invalidFormat = new FormData()
+  invalidFormat.set('model', 'mock')
+  invalidFormat.set('file', new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
+  invalidFormat.set('file_format', 'wav')
+  const invalidFormatResponse = await fetch(`${base_url}/v1/audio/isolation`, {
+    method: 'POST',
+    body: invalidFormat,
+  })
+  const invalidFormatPayload = await invalidFormatResponse.json()
+  assert.equal(invalidFormatResponse.status, 400)
+  assert.match(invalidFormatPayload.error, /file_format must be "pcm_s16le_16" or "other"/)
 })
 
 test('POST /v1/audio/design persists generated voices', async () => {
@@ -421,6 +459,10 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   const form = new FormData()
   form.set('provider', 'mock')
   form.set('name', 'Uploaded Mock')
+  form.set('description', 'Uploaded sample voice')
+  form.set('language', 'zh-CN')
+  form.set('preview_text', 'Preview text sample')
+  form.set('metadata', JSON.stringify({ owner: 'test-suite' }))
   form.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
 
   const response = await fetch(`${base_url}/v1/audio/voices`, {
@@ -440,7 +482,12 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   const voicesResponse = await fetch(`${base_url}/api/voices?provider=mock`)
   const voicesPayload = await voicesResponse.json()
   assert.equal(voicesResponse.status, 200)
-  assert.ok(voicesPayload.voices.some(voice => voice.voice_id === payload.id))
+  const storedVoice = voicesPayload.voices.find(voice => voice.voice_id === payload.id)
+  assert.ok(storedVoice)
+  assert.equal(storedVoice.description, 'Uploaded sample voice')
+  assert.equal(storedVoice.language, 'zh-CN')
+  assert.equal(storedVoice.metadata.owner, 'test-suite')
+  assert.equal(storedVoice.metadata.preview_text, 'Preview text sample')
 })
 
 test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => {
@@ -493,6 +540,31 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   const legacyDataPayload = await legacyDataResponse.json()
   assert.equal(legacyDataResponse.status, 400)
   assert.match(legacyDataPayload.error, /audio_sample is required/)
+
+  const invalidMetadata = new FormData()
+  invalidMetadata.set('provider', 'mock')
+  invalidMetadata.set('name', 'Invalid Metadata')
+  invalidMetadata.set('metadata', '[1,2,3]')
+  invalidMetadata.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
+  const invalidMetadataResponse = await fetch(`${base_url}/v1/audio/voices`, {
+    method: 'POST',
+    body: invalidMetadata,
+  })
+  const invalidMetadataPayload = await invalidMetadataResponse.json()
+  assert.equal(invalidMetadataResponse.status, 400)
+  assert.match(invalidMetadataPayload.error, /metadata must be a JSON object/)
+
+  const oversizedSample = new FormData()
+  oversizedSample.set('provider', 'mock')
+  oversizedSample.set('name', 'Oversized Sample')
+  oversizedSample.set('audio_sample', new Blob([Buffer.alloc(10 * 1024 * 1024 + 1)], { type: 'audio/wav' }), 'voice.wav')
+  const oversizedSampleResponse = await fetch(`${base_url}/v1/audio/voices`, {
+    method: 'POST',
+    body: oversizedSample,
+  })
+  const oversizedSamplePayload = await oversizedSampleResponse.json()
+  assert.equal(oversizedSampleResponse.status, 400)
+  assert.match(oversizedSamplePayload.error, /audio_sample must be 10 MiB or smaller/)
 })
 
 test('POST /v1/audio/transcriptions accepts multipart file uploads', async () => {

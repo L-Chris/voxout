@@ -39,6 +39,7 @@ import type {
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url))
 const audioDir = process.env.TTS_AUDIO_DIR ?? join(rootDir, 'audio')
+const VOICE_SAMPLE_MAX_BYTES = 10 * 1024 * 1024
 const OPENAI_SPEECH_MODELS = new Set(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'tts-1', 'tts-1-hd'])
 const OPENAI_TRANSCRIPTION_MODELS = new Set([
   'whisper-1',
@@ -207,7 +208,7 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
     timeout_ms,
     `Voice cloning timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  const voice = await persistProviderVoice(provider.id, context, result.voice, {
+  const voice = await persistProviderVoice(provider.id, context, mergeVoicePreviewMetadata(result.voice, request.metadata), {
     requested_consent: request.consent ?? null,
     source: 'audio_sample',
   })
@@ -320,8 +321,8 @@ function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnTy
       mime_type: normalizeMimeType(file.content_type),
       file_name: file.file_name,
     },
-    file_format: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
-    preview_b64: form.fields.preview_b64,
+    file_format: normalizeIsolationFileFormat(form.fields.file_format),
+    preview_b64: normalizeOptionalString(form.fields.preview_b64, 'preview_b64'),
   }
 }
 
@@ -334,9 +335,9 @@ function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEff
     model: typeof value.model === 'string' ? value.model : undefined,
     prompt,
     output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
-    duration_seconds: typeof value.duration_seconds === 'number' ? value.duration_seconds : undefined,
-    prompt_influence: typeof value.prompt_influence === 'number' ? value.prompt_influence : undefined,
-    loop: typeof value.loop === 'boolean' ? value.loop : undefined,
+    duration_seconds: normalizeSoundEffectDuration(value.duration_seconds),
+    prompt_influence: normalizePromptInfluence(value.prompt_influence),
+    loop: normalizeOptionalBoolean(value.loop, 'loop'),
     extra_params: normalizeExtraParams(value.extra_params),
   }
 }
@@ -361,6 +362,9 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
   const name = form.fields.name?.trim()
   if (!name) throw new Error('name is required')
   if (!file) throw new Error('audio_sample is required')
+  if (file.data.length > VOICE_SAMPLE_MAX_BYTES) throw new Error('audio_sample must be 10 MiB or smaller')
+  const metadata = normalizeFormJsonObject(form.fields.metadata, 'metadata')
+  const preview_text = normalizeOptionalString(form.fields.preview_text, 'preview_text')
   return {
     provider: providerId,
     name,
@@ -369,7 +373,11 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
       mime_type: normalizeMimeType(file.content_type),
       file_name: file.file_name,
     },
-    consent: form.fields.consent,
+    consent: normalizeOptionalString(form.fields.consent, 'consent'),
+    description: normalizeOptionalString(form.fields.description, 'description'),
+    language: normalizeOptionalString(form.fields.language, 'language'),
+    preview_text,
+    metadata: preview_text ? { ...(metadata ?? {}), preview_text } : metadata,
   }
 }
 
@@ -462,6 +470,23 @@ function normalizeExtraParams(value: unknown): JsonObject | undefined {
   return value as JsonObject
 }
 
+function normalizeFormJsonObject(value: string | undefined, field_name: string): JsonObject | undefined {
+  if (value == null || value === '') return undefined
+  return parseJsonObjectField(value, field_name)
+}
+
+function normalizeOptionalString(value: unknown, field_name: string): string | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'string') throw new Error(`${field_name} must be a string`)
+  return value.trim() || undefined
+}
+
+function normalizeOptionalBoolean(value: unknown, field_name: string): boolean | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'boolean') throw new Error(`${field_name} must be a boolean`)
+  return value
+}
+
 function normalizeSpeechVoice(value: unknown): string | undefined {
   if (value == null || value === '') return undefined
   if (typeof value === 'string') return value.trim() || undefined
@@ -484,6 +509,27 @@ function normalizeSpeechInstructions(value: unknown): string | undefined {
   if (typeof value !== 'string') throw new Error('instructions must be a string')
   if (value.length > 4096) throw new Error('instructions must be 4096 characters or fewer')
   return value.trim() || undefined
+}
+
+function normalizeSoundEffectDuration(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('duration_seconds must be a number')
+  if (value < 0.5 || value > 30) throw new Error('duration_seconds must be between 0.5 and 30')
+  return Number(value.toFixed(2))
+}
+
+function normalizePromptInfluence(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('prompt_influence must be a number')
+  if (value < 0 || value > 1) throw new Error('prompt_influence must be between 0 and 1')
+  return value
+}
+
+function normalizeIsolationFileFormat(value: string | undefined): 'pcm_s16le_16' | 'other' {
+  const format = value?.trim()
+  if (!format) return 'other'
+  if (format === 'pcm_s16le_16' || format === 'other') return format
+  throw new Error('file_format must be "pcm_s16le_16" or "other"')
 }
 
 function normalizeTranscriptionTemperature(value: unknown): number | undefined {
@@ -552,6 +598,17 @@ function normalizeChunkingStrategy(value: string | undefined): 'auto' | JsonObje
 function validateTranscriptionRequest(request: TranscribeRequest): void {
   if (request.timestamp_granularities?.length && request.response_format !== 'verbose_json') {
     throw new Error('timestamp_granularities requires response_format "verbose_json"')
+  }
+}
+
+function mergeVoicePreviewMetadata(voice: VoicePreview, metadata: JsonObject | undefined): VoicePreview {
+  if (!metadata) return voice
+  return {
+    ...voice,
+    metadata: {
+      ...metadata,
+      ...(voice.metadata ?? {}),
+    },
   }
 }
 

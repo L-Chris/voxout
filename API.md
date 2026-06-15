@@ -63,8 +63,8 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `input`，必填 string | 无 | 不支持 | `text` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `model`，可选 string | 无 | 不支持 | `model_id`，默认 `sound_effect_model` 或 `model` 或 `eleven_text_to_sound_v2` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `response_format`，可选 string | 无 | 不支持 | query `output_format`，默认 `output_format` 或 `mp3_44100_128` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `duration_seconds`，可选 number | 无 | 不支持 | `duration_seconds`，限制到 `0.5..30` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `prompt_influence`，可选 number | 无 | 不支持 | `prompt_influence`，限制到 `0..1` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `duration_seconds`，可选 number | 无 | 不支持 | 校验 `0.5..30` 后映射 `duration_seconds` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `prompt_influence`，可选 number | 无 | 不支持 | 校验 `0..1` 后映射 `prompt_influence` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `loop`，可选 boolean | 无 | 不支持 | `loop` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs sound generation JSON body | 不支持 | 不支持 | 不支持 | 不支持 | 仅接受 JSON object |
 | 响应 | 无 | 不支持 | 音频 bytes，MIME 来自 `content-type`，缺省 `audio/mpeg` | 不支持 | 不支持 | 不支持 | 不支持 | 不返回 ElevenLabs JSON |
@@ -77,7 +77,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 |---|---|---|---|---|---|---|---|---|
 | `provider` 或 `model`，必填其一 | 无 | 不支持 | 只用于路由 | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `file`，必填 file | 无 | 不支持 | Voxout provider 内部映射成 ElevenLabs `audio` multipart file | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `file_format`，可选 `pcm_s16le_16` 或 `other` | 无 | 不支持 | `file_format`，缺省 `other` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `file_format`，可选 `pcm_s16le_16` 或 `other` | 无 | 不支持 | 校验后映射 `file_format`，缺省 `other` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `preview_b64`，可选 string | 无 | 不支持 | `preview_b64` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | 响应 | 无 | 不支持 | 隔离后的音频 bytes，MIME 来自 `content-type`，缺省输入 MIME | 不支持 | 不支持 | 不支持 | 不支持 | 不返回 ElevenLabs JSON |
 
@@ -106,7 +106,9 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `name`，必填 string | 必填 | `name` | `name` | `name` | `name` | 本地保存 name | 不支持 | 无 |
 | `consent`，可选 string | 官方要求 consent recording id | `consent` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
 | `audio_sample`，必填 file | 必填；最大 10 MiB，支持常见音频格式 | `audio_sample` | `files[]` | `clip` | `audio_file` | 不调用下游，仅保存为 preview audio | 不支持 | 无 |
-| `description` / `language` | OpenAI 无 | 当前外部 form 不读取 | provider 能力存在，但当前外部 form 不读取 | provider 能力存在，但当前外部 form 不读取；`language` 固定默认 `en` | provider 能力存在，但当前外部 form 不读取 | 当前外部 form 不读取 | 不支持 | 无 |
+| `description` / `language`，可选 string | OpenAI 无 | 保存到 Voxout voice record；不发送给 OpenAI voice clone | `description` 会发送；`language` 保存到 Voxout voice record | `description` / `language` 会发送；`language` 裁剪地区码，缺省 `en` | `description` / `language` 会发送；`language` 裁剪地区码 | 保存到 Voxout voice record；不调用下游 | 不支持 | 无 |
+| `metadata`，可选 JSON object string | OpenAI 无 | 保存到 Voxout voice record；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | multipart 中必须是 JSON object 字符串 |
+| `preview_text`，可选 string | OpenAI 无 | 保存到 Voxout voice metadata；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | 无 |
 | 固定/配置字段 | 无 | 无 | 无 | `base_voice_id` 来自 provider 配置 `base_voice_id` | `input_format` 由 MIME 推断；`start_s=0`；`timeout_s` 来自 `clone_timeout_seconds` 或 `10` | 本地生成 `mimo_*` voice id | 不支持 | 无 |
 | 响应 | `{ id, object: "audio.voice", created_at, name }` | Voxout 返回 OpenAI 风格响应，并保存 provider link | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应；无 provider voice id | 不支持 | 不返回 provider 原始 clone response |
 
@@ -148,7 +150,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | [OpenAI 规范][openai-api] | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | Default provider | 无 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | TTS 实际是 Edge TTS；不再注册 ASR capability。 | 无 |
-| OpenAI `voice` object `{ id }` | 官方支持 | 当前 Voxout 只接受 string voice；如需完全兼容官方 custom voice object，需要改 `normalizeOpenAiSpeechInput` | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
+| OpenAI `voice` object `{ id }` | 官方支持 | Voxout 会把 `{ id }` 规范化为内部 string voice，并继续执行 provider voice 关联解析 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
 | OpenAI transcription streaming | 官方 `stream=true` | OpenAI 直接透传 SSE；MiMo 转成 OpenAI transcript SSE；其他 provider 不支持 | 不适用 | 不适用 | 不适用 | 不适用 | 不适用 | 无 |
 
 [openai-api]: https://developers.openai.com/api/reference
