@@ -34,7 +34,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 ## POST `/v1/audio/transcriptions`
 
-语音转文字。请求体是 `multipart/form-data`。为贴近 OpenAI 规范，当前只接受 `file` 输入；`url`、`audioData`、`mimeType` 不再作为该接口入参。
+语音转文字。请求体是 `multipart/form-data`。为贴近 OpenAI 规范，当前只接受 `file` 输入；旧的远程 URL、data URL、MIME 覆盖字段不再作为该接口入参。
 
 | 实际传参 | [OpenAI 规范][openai-transcription] | [OpenAI][openai-transcription] | [ElevenLabs][elevenlabs-stt] | [Cartesia][cartesia-stt] | [Gradium][gradium-stt] | [MiMo][mimo-asr] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
@@ -67,7 +67,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 ## POST `/v1/audio/isolation`
 
-人声/音频隔离。请求体是 `multipart/form-data`。OpenAI 官方当前没有对应的 `/v1/audio/isolation` 规范；这是 Voxout 扩展接口。为保持音频上传接口一致，当前只接受 `file` 输入；`audio`、`url`、`audioData`、`mimeType` 不再作为该接口入参。
+人声/音频隔离。请求体是 `multipart/form-data`。OpenAI 官方当前没有对应的 `/v1/audio/isolation` 规范；这是 Voxout 扩展接口。为保持音频上传接口一致，当前只接受 `file` 输入；旧的远程 URL、data URL、MIME 覆盖字段不再作为该接口入参。
 
 | 实际传参 | OpenAI 规范 | OpenAI | [ElevenLabs][elevenlabs-isolation] | Cartesia | Gradium | MiMo | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
@@ -120,7 +120,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 无 | 无 | 返回 provider 定义、fields、enabled、configured | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
 | 响应 | 无 | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | 内部测试 provider 默认不返回 |
 
-## PUT `/api/providers/:providerId/config`
+## PUT `/api/providers/:provider_id/config`
 
 | 实际传参 | OpenAI 规范 | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
@@ -131,12 +131,12 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | provider 专属配置 | 无 | `default_voice`、`response_format` | `default_voice_id`、`output_format`、`sound_effect_model`、`voice_design_model`、`prompt_influence` | `api_version`、`default_voice_id`、`output_format`、`base_voice_id`、`pronunciation_dict_id` | `ws_url`、`default_voice_id`、`output_format`、`clone_timeout_seconds` | `voice_design_model`、`voice_clone_model`、`format`、`voice_sample_text`、`optimize_text_preview` | `voices_url`、`trusted_client_token`、`proxy`、`voices_cache_ms`、`voices_timeout_ms` | `config` / `secrets` 可保存任意 JSON object；未读取字段不下发 |
 | 响应 | 无 | `{ provider: record }` | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
 
-## GET `/api/voices` 和 `/api/providers/:providerId/voices`
+## GET `/api/voices` 和 `/api/providers/:provider_id/voices`
 
 | 实际传参 | OpenAI 规范 | [OpenAI][openai-voice] | [ElevenLabs][elevenlabs-voices] | [Cartesia][cartesia-voices] | [Gradium][gradium-clone] | [MiMo][mimo-tts] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `/api/voices?provider=...` 可选 provider | 无 | 过滤 Voxout 持久化 voices | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
-| `/api/providers/:providerId/voices` 必填 provider path | 无 | 内置 OpenAI voices + 持久化 voices | 请求 ElevenLabs `/v2/voices` + 持久化 voices | 请求 Cartesia `/voices` + 持久化 voices | 请求 Gradium `/voices/` + 持久化 voices | 内置 MiMo voices + 持久化 voices | 请求 Edge voice catalog + 持久化 voices | 无 |
+| `/api/providers/:provider_id/voices` 必填 provider path | 无 | 内置 OpenAI voices + 持久化 voices | 请求 ElevenLabs `/v2/voices` + 持久化 voices | 请求 Cartesia `/voices` + 持久化 voices | 请求 Gradium `/voices/` + 持久化 voices | 内置 MiMo voices + 持久化 voices | 请求 Edge voice catalog + 持久化 voices | 无 |
 | 响应 | 无 | `{ voices }` | `{ voices }` | `{ voices }` | `{ voices }` | `{ voices }` | `{ voices }` | `/api/voices` 返回 voice records；provider voices 返回 `TtsVoice[]` |
 
 ## Provider 特别说明

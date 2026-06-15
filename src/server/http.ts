@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 
 export interface MultipartFile {
-  fileName: string
-  contentType: string
+  file_name: string
+  content_type: string
   data: Buffer
 }
 
@@ -82,10 +82,10 @@ export async function readMultipartForm(req: IncomingMessage): Promise<Multipart
     const data = body.slice(dataStart, nextBoundary)
     const disposition = /^content-disposition:\s*([^\r\n]+)/im.exec(headers)?.[1] ?? ''
     const name = /name="([^"]+)"/.exec(disposition)?.[1]
-    const fileName = /filename="([^"]*)"/.exec(disposition)?.[1]
-    const partContentType = /^content-type:\s*([^\r\n]+)/im.exec(headers)?.[1]?.trim() ?? 'application/octet-stream'
-    if (name && fileName != null) {
-      files[name] = { fileName, contentType: partContentType, data }
+    const file_name = /filename="([^"]*)"/.exec(disposition)?.[1]
+    const content_type = /^content-type:\s*([^\r\n]+)/im.exec(headers)?.[1]?.trim() ?? 'application/octet-stream'
+    if (name && file_name != null) {
+      files[name] = { file_name, content_type, data }
     } else if (name) {
       fields[name] = data.toString('utf8')
     }

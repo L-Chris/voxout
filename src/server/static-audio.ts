@@ -4,12 +4,12 @@ import { join, normalize } from 'node:path'
 import type { ServerResponse } from 'node:http'
 import { sendJson } from './http.js'
 
-export async function sendAudio(res: ServerResponse, audioDir: string, fileName: string, headOnly = false): Promise<void> {
-  if (!/^[a-f0-9]{64}\.(?:wav|mp3)$/.test(fileName)) {
+export async function sendAudio(res: ServerResponse, audioDir: string, file_name: string, headOnly = false): Promise<void> {
+  if (!/^[a-f0-9]{64}\.(?:wav|mp3)$/.test(file_name)) {
     sendJson(res, { error: 'Invalid audio file name' }, 400, headOnly)
     return
   }
-  const filePath = normalize(join(audioDir, fileName))
+  const filePath = normalize(join(audioDir, file_name))
   if (!filePath.startsWith(normalize(audioDir))) {
     sendJson(res, { error: 'Invalid audio path' }, 400, headOnly)
     return
@@ -20,7 +20,7 @@ export async function sendAudio(res: ServerResponse, audioDir: string, fileName:
     return
   }
   res.writeHead(200, {
-    'content-type': fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
+    'content-type': file_name.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
     'content-length': String(fileStat.size),
   })
   if (headOnly) {

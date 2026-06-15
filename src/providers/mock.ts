@@ -84,7 +84,7 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
 
   async cloneVoice(request: VoiceCloneRequest): Promise<VoiceCloneResult> {
     const voice_id = `mock-clone-${getFrequency(request.name)}`
-    const audioData = request.audio_sample.data.toString('base64')
+    const audio_data = request.audio_sample.data.toString('base64')
     return {
       provider: this.id,
       voice: {
@@ -93,7 +93,7 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
         name: request.name,
         description: request.description,
         language: request.language,
-        preview_audio_data: `data:${request.audio_sample.mime_type};base64,${audioData}`,
+        preview_audio_data: `data:${request.audio_sample.mime_type};base64,${audio_data}`,
         preview_mime_type: request.audio_sample.mime_type,
         metadata: {},
       },

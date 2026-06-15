@@ -23,9 +23,9 @@ export class ApiController {
     return this.providers.listVoices(provider)
   }
 
-  @Get('/api/providers/:providerId/voices')
-  listProviderVoices(@Param('providerId') providerId: string) {
-    return this.providers.listProviderVoices(providerId)
+  @Get('/api/providers/:provider_id/voices')
+  listProviderVoices(@Param('provider_id') provider_id: string) {
+    return this.providers.listProviderVoices(provider_id)
   }
 
   @Get('/v1/models')
@@ -33,11 +33,11 @@ export class ApiController {
     return this.providers.listModels()
   }
 
-  @Put('/api/providers/:providerId/config')
+  @Put('/api/providers/:provider_id/config')
   async updateProviderConfig(
-    @Param('providerId') providerId: string,
+    @Param('provider_id') provider_id: string,
     @Body({ required: true }) input: ProviderConfigInput,
   ) {
-    return this.providers.updateProviderConfig(providerId, input)
+    return this.providers.updateProviderConfig(provider_id, input)
   }
 }

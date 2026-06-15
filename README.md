@@ -57,9 +57,9 @@ Provider management API:
 
 - `GET /health`
 - `GET /api/providers`
-- `GET /api/providers/:providerId/voices`
-- `GET /api/voices?provider=:providerId`
-- `PUT /api/providers/:providerId/config`
+- `GET /api/providers/:provider_id/voices`
+- `GET /api/voices?provider=:provider_id`
+- `PUT /api/providers/:provider_id/config`
 - `GET /audio/:file`
 
 The old `/v1/tts/*` API has been removed.

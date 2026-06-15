@@ -89,9 +89,9 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
 
     const { body, format } = await this.buildSynthesisBody(api_key, request, context)
     const response = await postMimoCompletion(api_key, body, context)
-    const audioData = response.choices?.[0]?.message?.audio?.data
-    if (!audioData) throw new Error('MiMo TTS response did not include audio data.')
-    const audio = Buffer.from(stripDataUrlPrefix(audioData), 'base64')
+    const audio_data = response.choices?.[0]?.message?.audio?.data
+    if (!audio_data) throw new Error('MiMo TTS response did not include audio data.')
+    const audio = Buffer.from(stripDataUrlPrefix(audio_data), 'base64')
     if (audio.length < 128) throw new Error('MiMo TTS response audio was empty.')
     return {
       audio,
@@ -222,9 +222,9 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
         optimize_text_preview: getBooleanConfig(context, 'optimize_text_preview', true),
       },
     }, extra_params), context)
-    const audioData = response.choices?.[0]?.message?.audio?.data
-    if (!audioData) throw new Error('MiMo voice design response did not include audio data.')
-    const base64 = stripDataUrlPrefix(audioData)
+    const audio_data = response.choices?.[0]?.message?.audio?.data
+    if (!audio_data) throw new Error('MiMo voice design response did not include audio data.')
+    const base64 = stripDataUrlPrefix(audio_data)
     const audio = Buffer.from(base64, 'base64')
     if (audio.length < 128) throw new Error('MiMo voice design response audio was empty.')
     return `data:audio/wav;base64,${base64}`
@@ -509,8 +509,8 @@ function parseMimoTextChunk(data: string): string {
 function parseMimoAudioChunk(data: string): Buffer {
   try {
     const payload = JSON.parse(data) as MimoCompletionChunk
-    const audioData = payload.choices?.[0]?.delta?.audio?.data
-    return audioData ? Buffer.from(stripDataUrlPrefix(audioData), 'base64') : Buffer.alloc(0)
+    const audio_data = payload.choices?.[0]?.delta?.audio?.data
+    return audio_data ? Buffer.from(stripDataUrlPrefix(audio_data), 'base64') : Buffer.alloc(0)
   } catch {
     return Buffer.alloc(0)
   }

@@ -45,15 +45,15 @@ export class AudioController {
     return ctx
   }
 
-  @Get('/audio/:fileName')
-  async getAudio(@Param('fileName') fileName: string, @Ctx() ctx: Context) {
-    await this.audio.sendAudio(takeOverResponse(ctx), fileName)
+  @Get('/audio/:file_name')
+  async getAudio(@Param('file_name') file_name: string, @Ctx() ctx: Context) {
+    await this.audio.sendAudio(takeOverResponse(ctx), file_name)
     return ctx
   }
 
-  @Head('/audio/:fileName')
-  async headAudio(@Param('fileName') fileName: string, @Ctx() ctx: Context) {
-    await this.audio.sendAudio(takeOverResponse(ctx), fileName, true)
+  @Head('/audio/:file_name')
+  async headAudio(@Param('file_name') file_name: string, @Ctx() ctx: Context) {
+    await this.audio.sendAudio(takeOverResponse(ctx), file_name, true)
     return ctx
   }
 }

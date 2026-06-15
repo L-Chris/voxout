@@ -435,17 +435,17 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   assert.equal(urlResponse.status, 400)
   assert.match(urlPayload.error, /audio_sample is required/)
 
-  const audioDataForm = new FormData()
-  audioDataForm.set('provider', 'mock')
-  audioDataForm.set('name', 'Legacy Audio Data')
-  audioDataForm.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
-  const audioDataResponse = await fetch(`${base_url}/v1/audio/voices`, {
+  const legacyDataForm = new FormData()
+  legacyDataForm.set('provider', 'mock')
+  legacyDataForm.set('name', 'Legacy Audio Data')
+  legacyDataForm.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
+  const legacyDataResponse = await fetch(`${base_url}/v1/audio/voices`, {
     method: 'POST',
-    body: audioDataForm,
+    body: legacyDataForm,
   })
-  const audioDataPayload = await audioDataResponse.json()
-  assert.equal(audioDataResponse.status, 400)
-  assert.match(audioDataPayload.error, /audio_sample is required/)
+  const legacyDataPayload = await legacyDataResponse.json()
+  assert.equal(legacyDataResponse.status, 400)
+  assert.match(legacyDataPayload.error, /audio_sample is required/)
 })
 
 test('POST /v1/audio/transcriptions accepts multipart file uploads', async () => {

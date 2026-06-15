@@ -78,8 +78,8 @@ export class AudioService {
     return handleOpenAiTranscription(req, res)
   }
 
-  sendAudio(res: ServerResponse, fileName: string, headOnly = false): Promise<void> {
-    return sendStaticAudio(res, audioDir, fileName, headOnly)
+  sendAudio(res: ServerResponse, file_name: string, headOnly = false): Promise<void> {
+    return sendStaticAudio(res, audioDir, file_name, headOnly)
   }
 }
 
@@ -102,7 +102,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     model: target.model,
     input,
     voice: body.voice,
-    output_format: speechFormat.providerFormat,
+    output_format: speechFormat.provider_format,
     stream_format,
     speed: typeof body.speed === 'number' ? body.speed : undefined,
     instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
@@ -207,7 +207,7 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
     `Voice cloning timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
   const voice = await persistProviderVoice(provider.id, context, result.voice, {
-    requestedConsent: request.consent ?? null,
+    requested_consent: request.consent ?? null,
     source: 'audio_sample',
   })
   sendJson(res, {
@@ -236,8 +236,8 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
     model: target.model,
     file: {
       data: file.data,
-      mime_type: normalizeMimeType(file.contentType),
-      file_name: file.fileName,
+      mime_type: normalizeMimeType(file.content_type),
+      file_name: file.file_name,
     },
     language: form.fields.language,
     prompt: form.fields.prompt,
@@ -317,8 +317,8 @@ function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnTy
     provider: providerId,
     file: {
       data: file.data,
-      mime_type: normalizeMimeType(file.contentType),
-      file_name: file.fileName,
+      mime_type: normalizeMimeType(file.content_type),
+      file_name: file.file_name,
     },
     file_format: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
     preview_b64: form.fields.preview_b64,
@@ -366,8 +366,8 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
     name,
     audio_sample: {
       data: file.data,
-      mime_type: normalizeMimeType(file.contentType),
-      file_name: file.fileName,
+      mime_type: normalizeMimeType(file.content_type),
+      file_name: file.file_name,
     },
     consent: form.fields.consent,
   }
@@ -534,38 +534,38 @@ function normalizeSpeechMimeType(response_format: string | undefined, providerMi
 }
 
 function resolveSpeechResponseFormat(providerId: string, value: string | undefined): {
-  providerFormat?: string
+  provider_format?: string
   response_format?: string
   conversion?: 'pcm-to-wav' | 'wav-to-pcm'
-  sampleRate?: number
+  sample_rate?: number
 } {
   const format = value?.toLowerCase().trim()
   if (!format) return {}
   if (providerId === 'openai') {
-    if (isOpenAiSpeechResponseFormat(format)) return { providerFormat: format, response_format: format }
+    if (isOpenAiSpeechResponseFormat(format)) return { provider_format: format, response_format: format }
     throw new Error(`Unsupported response_format for OpenAI speech: ${format}`)
   }
   if (providerId === 'elevenlabs') {
-    if (format.startsWith('mp3_') || format.startsWith('pcm_') || format.startsWith('ulaw_')) return { providerFormat: format }
-    if (format === 'mp3') return { providerFormat: 'mp3_44100_128', response_format: 'mp3' }
-    if (format === 'pcm') return { providerFormat: 'pcm_44100', response_format: 'pcm' }
-    if (format === 'wav') return { providerFormat: 'pcm_44100', response_format: 'wav', conversion: 'pcm-to-wav', sampleRate: 44100 }
+    if (format.startsWith('mp3_') || format.startsWith('pcm_') || format.startsWith('ulaw_')) return { provider_format: format }
+    if (format === 'mp3') return { provider_format: 'mp3_44100_128', response_format: 'mp3' }
+    if (format === 'pcm') return { provider_format: 'pcm_44100', response_format: 'pcm' }
+    if (format === 'wav') return { provider_format: 'pcm_44100', response_format: 'wav', conversion: 'pcm-to-wav', sample_rate: 44100 }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'gradium') {
-    if (format === 'opus' || format === 'wav' || format === 'pcm') return { providerFormat: format, response_format: format }
+    if (format === 'opus' || format === 'wav' || format === 'pcm') return { provider_format: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'mock') {
-    if (format === 'wav') return { providerFormat: 'wav', response_format: 'wav' }
-    if (format === 'pcm') return { providerFormat: 'wav', response_format: 'pcm', conversion: 'wav-to-pcm' }
+    if (format === 'wav') return { provider_format: 'wav', response_format: 'wav' }
+    if (format === 'pcm') return { provider_format: 'wav', response_format: 'pcm', conversion: 'wav-to-pcm' }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'cartesia' || providerId === 'mimo' || providerId === 'default') {
-    if (format === 'wav' || format === 'pcm' || format === 'mp3') return { providerFormat: format, response_format: format }
+    if (format === 'wav' || format === 'pcm' || format === 'mp3') return { provider_format: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
-  return { providerFormat: format, response_format: format }
+  return { provider_format: format, response_format: format }
 }
 
 function isOpenAiSpeechResponseFormat(format: string): boolean {
@@ -575,11 +575,11 @@ function isOpenAiSpeechResponseFormat(format: string): boolean {
 function convertSpeechAudio(
   audio: Buffer,
   providerMimeType: string,
-  format: { response_format?: string, conversion?: 'pcm-to-wav' | 'wav-to-pcm', sampleRate?: number },
+  format: { response_format?: string, conversion?: 'pcm-to-wav' | 'wav-to-pcm', sample_rate?: number },
 ): { audio: Buffer, mime_type: string } {
   if (format.conversion === 'pcm-to-wav') {
     return {
-      audio: wrapPcmAsWav(audio, format.sampleRate ?? 44100),
+      audio: wrapPcmAsWav(audio, format.sample_rate ?? 44100),
       mime_type: 'audio/wav',
     }
   }
@@ -595,9 +595,9 @@ function convertSpeechAudio(
   }
 }
 
-function wrapPcmAsWav(pcm: Buffer, sampleRate: number, channels = 1, bitsPerSample = 16): Buffer {
-  const blockAlign = channels * bitsPerSample / 8
-  const byteRate = sampleRate * blockAlign
+function wrapPcmAsWav(pcm: Buffer, sample_rate: number, channels = 1, bits_per_sample = 16): Buffer {
+  const blockAlign = channels * bits_per_sample / 8
+  const byteRate = sample_rate * blockAlign
   const header = Buffer.alloc(44)
   header.write('RIFF', 0)
   header.writeUInt32LE(36 + pcm.length, 4)
@@ -606,10 +606,10 @@ function wrapPcmAsWav(pcm: Buffer, sampleRate: number, channels = 1, bitsPerSamp
   header.writeUInt32LE(16, 16)
   header.writeUInt16LE(1, 20)
   header.writeUInt16LE(channels, 22)
-  header.writeUInt32LE(sampleRate, 24)
+  header.writeUInt32LE(sample_rate, 24)
   header.writeUInt32LE(byteRate, 28)
   header.writeUInt16LE(blockAlign, 32)
-  header.writeUInt16LE(bitsPerSample, 34)
+  header.writeUInt16LE(bits_per_sample, 34)
   header.write('data', 36)
   header.writeUInt32LE(pcm.length, 40)
   return Buffer.concat([header, pcm])

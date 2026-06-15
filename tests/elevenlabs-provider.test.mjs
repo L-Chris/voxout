@@ -104,9 +104,9 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
     captured = {
       url: String(url),
       headers: init.headers,
-      modelId: init.body.get('model_id'),
+      model_id: init.body.get('model_id'),
       file: init.body.get('file'),
-      languageCode: init.body.get('language_code'),
+      language_code: init.body.get('language_code'),
     }
     return new Response(JSON.stringify({
       text: 'Recognized text',
@@ -138,9 +138,9 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
 
   assert.equal(captured.url, 'https://api.elevenlabs.io/v1/speech-to-text')
   assert.equal(captured.headers['xi-api-key'], 'test-eleven-key')
-  assert.equal(captured.modelId, 'scribe_v1')
+  assert.equal(captured.model_id, 'scribe_v1')
   assert.equal(captured.file.type, 'audio/wav')
-  assert.equal(captured.languageCode, 'en')
+  assert.equal(captured.language_code, 'en')
   assert.equal(result.text, 'Recognized text')
   assert.equal(result.raw.text, 'Recognized text')
 })
