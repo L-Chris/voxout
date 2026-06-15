@@ -64,7 +64,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `provider`，可选 | 无 | 不支持 | 只用于路由；省略时可用 `model` 的唯一 provider model option 路由 | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `input`，必填 string | 无 | 不支持 | `text` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `model`，必填，除非 `provider` 显式指定 | 无 | 不支持 | `model_id`；`model=elevenlabs` 只用于路由，`model=eleven_text_to_sound_v2` 会路由到 ElevenLabs 并下发为 model id；缺省 `sound_effect_model` 或 `model` 或 `eleven_text_to_sound_v2` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `response_format`，可选 string | 无 | 不支持 | query `output_format`，默认 `output_format` 或 `mp3_44100_128` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `response_format`，可选 string | 无；参考 speech 的 `mp3/wav/pcm` | 不支持 | `mp3 -> mp3_44100_128`，`pcm -> pcm_44100`，`wav -> pcm_44100` 后由 Voxout 包 WAV；也接受 `mp3_*`、`pcm_*`、`ulaw_*` provider-native output format | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `duration_seconds`，可选 number | 无 | 不支持 | 校验 `0.5..30` 后映射 `duration_seconds` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `prompt_influence`，可选 number | 无 | 不支持 | 校验 `0..1` 后映射 `prompt_influence` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `loop`，可选 boolean | 无 | 不支持 | `loop` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |

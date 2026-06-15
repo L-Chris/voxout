@@ -206,7 +206,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     timeout_ms,
     `Speech generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  const output = convertSpeechAudio(result.audio, result.mime_type, speechFormat)
+  const output = convertAudioOutput(result.audio, result.mime_type, speechFormat)
   sendBinary(res, output.audio, output.mime_type)
 }
 
@@ -218,15 +218,17 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
   const provider = getSoundEffectProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
+  const effectFormat = resolveAudioEffectResponseFormat(provider.id, typeof body.response_format === 'string' ? body.response_format : undefined)
 
-  const request = normalizeSoundEffectInput(provider.id, { ...body, model: target.model })
+  const request = normalizeSoundEffectInput(provider.id, { ...body, model: target.model, response_format: effectFormat.provider_format })
   const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.createSoundEffect(request, context),
     timeout_ms,
     `Sound effect generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  sendBinary(res, result.audio, result.mime_type)
+  const output = convertAudioOutput(result.audio, result.mime_type, effectFormat)
+  sendBinary(res, output.audio, output.mime_type)
 }
 
 async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -877,11 +879,34 @@ function resolveSpeechResponseFormat(providerId: string, value: string | undefin
   return { provider_format: format, response_format: format }
 }
 
+function resolveAudioEffectResponseFormat(providerId: string, value: string | undefined): {
+  provider_format?: string
+  response_format?: string
+  conversion?: 'pcm-to-wav' | 'wav-to-pcm'
+  sample_rate?: number
+} {
+  const format = value?.toLowerCase().trim()
+  if (!format) return {}
+  if (providerId === 'elevenlabs') {
+    if (format.startsWith('mp3_') || format.startsWith('pcm_') || format.startsWith('ulaw_')) return { provider_format: format }
+    if (format === 'mp3') return { provider_format: 'mp3_44100_128', response_format: 'mp3' }
+    if (format === 'pcm') return { provider_format: 'pcm_44100', response_format: 'pcm' }
+    if (format === 'wav') return { provider_format: 'pcm_44100', response_format: 'wav', conversion: 'pcm-to-wav', sample_rate: 44100 }
+    throw new Error(`Provider ${providerId} cannot generate response_format "${format}" without an audio encoder`)
+  }
+  if (providerId === 'mock') {
+    if (format === 'wav') return { provider_format: 'wav', response_format: 'wav' }
+    if (format === 'pcm') return { provider_format: 'wav', response_format: 'pcm', conversion: 'wav-to-pcm' }
+    throw new Error(`Provider ${providerId} cannot generate response_format "${format}" without an audio encoder`)
+  }
+  return { provider_format: format, response_format: format }
+}
+
 function isOpenAiSpeechResponseFormat(format: string): boolean {
   return format === 'mp3' || format === 'opus' || format === 'aac' || format === 'flac' || format === 'wav' || format === 'pcm'
 }
 
-function convertSpeechAudio(
+function convertAudioOutput(
   audio: Buffer,
   providerMimeType: string,
   format: { response_format?: string, conversion?: 'pcm-to-wav' | 'wav-to-pcm', sample_rate?: number },

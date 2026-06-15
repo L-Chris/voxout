@@ -958,10 +958,9 @@ function EffectTestForm({ form, onFormChange }) {
           value={form.response_format}
           onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
-          <option value="mp3_44100_128">mp3_44100_128</option>
-          <option value="mp3_44100_192">mp3_44100_192</option>
-          <option value="pcm_44100">pcm_44100</option>
-          <option value="ulaw_8000">ulaw_8000</option>
+          <option value="mp3">mp3</option>
+          <option value="wav">wav</option>
+          <option value="pcm">pcm</option>
         </select>
       </label>
       <label className="inline-flex items-center gap-2 self-end text-sm font-semibold">
@@ -1214,7 +1213,7 @@ function defaultEffectForm() {
     input: 'a short cinematic whoosh',
     duration_seconds: '1.5',
     prompt_influence: '0.3',
-    response_format: 'mp3_44100_128',
+    response_format: 'mp3',
     loop: false,
     extra_params: '',
   }

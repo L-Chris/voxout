@@ -358,6 +358,25 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
   assert.equal(audio.subarray(8, 12).toString('ascii'), 'WAVE')
 })
 
+test('POST /v1/audio/effect converts WAV provider output to PCM', async () => {
+  const response = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'a short test chime',
+      duration_seconds: 0.5,
+      response_format: 'pcm',
+    }),
+  })
+  const audio = Buffer.from(await response.arrayBuffer())
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type'), /^audio\/pcm/)
+  assert.notEqual(audio.subarray(0, 4).toString('ascii'), 'RIFF')
+  assert.ok(audio.length > 0)
+})
+
 test('POST /v1/audio/effect requires model or provider and OpenAI-style field names', async () => {
   const missingModelResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
@@ -406,6 +425,19 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
   const unsupportedFieldPayload = await unsupportedFieldResponse.json()
   assert.equal(unsupportedFieldResponse.status, 400)
   assert.match(unsupportedFieldPayload.error, /voice_settings is not supported/)
+
+  const unsupportedFormatResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'a short test chime',
+      response_format: 'flac',
+    }),
+  })
+  const unsupportedFormatPayload = await unsupportedFormatResponse.json()
+  assert.equal(unsupportedFormatResponse.status, 400)
+  assert.match(unsupportedFormatPayload.error, /cannot generate response_format "flac"/)
 
   const invalidDurationResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
