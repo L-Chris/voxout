@@ -110,7 +110,7 @@ Voice design:
 ```bash
 curl -X POST http://127.0.0.1:4177/v1/audio/design \
   -H 'content-type: application/json' \
-  --data '{"provider":"elevenlabs","model":"eleven_multilingual_ttv_v2","input":"A calm narrator voice with a clean tone.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
+  --data '{"model":"eleven_multilingual_ttv_v2","input":"A calm narrator voice with a clean tone.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
 ```
 
 Voice cloning from an audio sample:

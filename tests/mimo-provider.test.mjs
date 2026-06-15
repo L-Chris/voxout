@@ -106,13 +106,14 @@ test('Mimo provider designs a reusable voice preview', async () => {
   const result = await provider.designVoice({
     input: '年轻男性，冷静克制，嗓音清亮。',
     name: '冷静男声',
+    model: 'mimo-custom-design-model',
   }, {
     config: {},
     secrets: { api_key: 'test-key' },
   })
 
   assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
-  assert.equal(captured.body.model, 'mimo-v2.5-tts-voicedesign')
+  assert.equal(captured.body.model, 'mimo-custom-design-model')
   assert.equal(result.voices[0].name, '冷静男声')
   assert.match(result.voices[0].voice_id, /^mimo_/)
   assert.match(result.voices[0].preview_audio_data, /^data:audio\/wav;base64,/)

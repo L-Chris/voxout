@@ -37,6 +37,7 @@ const DEFAULT_BASE_URL = 'https://api.elevenlabs.io/v1'
 const DEFAULT_TTS_MODEL = 'eleven_multilingual_v2'
 const DEFAULT_ASR_MODEL = 'scribe_v2'
 const DEFAULT_SOUND_EFFECT_MODEL = 'eleven_text_to_sound_v2'
+const DEFAULT_VOICE_DESIGN_MODEL = 'eleven_multilingual_ttv_v2'
 const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
 const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
 const ELEVENLABS_TTS_MODELS = [
@@ -89,7 +90,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: ELEVENLABS_TTS_MODELS },
     { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: ELEVENLABS_ASR_MODELS },
     { key: 'sound_effect_model', label: 'Sound Effect Model', type: 'text' as const, placeholder: DEFAULT_SOUND_EFFECT_MODEL, options: [DEFAULT_SOUND_EFFECT_MODEL] },
-    { key: 'voice_design_model', label: 'Voice Design Model', type: 'text' as const, placeholder: 'eleven_multilingual_ttv_v2' },
+    { key: 'voice_design_model', label: 'Voice Design Model', type: 'text' as const, placeholder: DEFAULT_VOICE_DESIGN_MODEL, options: [DEFAULT_VOICE_DESIGN_MODEL] },
     { key: 'default_voice_id', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
     { key: 'output_format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT },
     { key: 'prompt_influence', label: 'Prompt Influence', type: 'number' as const, placeholder: '0.3' },
@@ -251,7 +252,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
       },
       body: JSON.stringify(mergeJsonBody({
         voice_description: request.input,
-        model_id: request.model ?? getConfigString(context, 'voice_design_model') ?? 'eleven_multilingual_ttv_v2',
+        model_id: request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
         text: request.text,
         auto_generate_text: options.auto_generate_text,
         loudness: options.loudness,
@@ -282,7 +283,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
           preview_mime_type: mediaType,
           duration_seconds: preview.duration_secs,
           metadata: {
-            model: request.model ?? getConfigString(context, 'voice_design_model') ?? 'eleven_multilingual_ttv_v2',
+            model: request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
           },
         }
       })

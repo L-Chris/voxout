@@ -14,6 +14,7 @@ import {
   listAsrProviders,
   listSoundEffectProviders,
   listTtsProviders,
+  listVoiceDesignProviders,
 } from '../providers/registry.js'
 import { getProviderTimeoutMs, withTimeout } from '../timeout.js'
 import { readMultipartForm, sendBinary, sendJson, sendStream, sendText } from './http.js'
@@ -249,13 +250,14 @@ async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): 
 
 async function handleVoiceDesign(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
   assertSupportedJsonFields(body, VOICE_DESIGN_BODY_FIELDS)
-  const providerId = getRequiredProvider(body.provider)
+  const target = resolveVoiceDesignTarget(body.model, body.provider)
+  const providerId = target.providerId
   assertPublicProviderAccess(providerId)
   const provider = getVoiceDesignProvider(providerId)
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
 
-  const request = normalizeVoiceDesignInput(provider.id, body)
+  const request = normalizeVoiceDesignInput(provider.id, { ...body, model: target.model })
   const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.designVoice(request, context),
@@ -562,12 +564,6 @@ function getOpenAiModelProvider(model: unknown, provider: unknown): string {
   return providerId
 }
 
-function getRequiredProvider(provider: unknown): string {
-  const providerId = typeof provider === 'string' ? provider.trim() : ''
-  if (!providerId) throw new Error('provider is required')
-  return providerId
-}
-
 function isJsonValue(value: unknown): value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true
   if (Array.isArray(value)) return value.every(isJsonValue)
@@ -776,6 +772,21 @@ function resolveSoundEffectTarget(model: unknown, provider: unknown): { provider
   throw new Error(`Unknown sound effect model: ${modelId}`)
 }
 
+function resolveVoiceDesignTarget(model: unknown, provider: unknown): { providerId: string, model?: string } {
+  const modelId = typeof model === 'string' ? model.trim() : ''
+  const explicitProvider = typeof provider === 'string' ? provider.trim() : ''
+  if (explicitProvider) {
+    return { providerId: explicitProvider, model: modelId || undefined }
+  }
+  if (!modelId) throw new Error('model is required')
+  if (hasVoiceDesignProvider(modelId)) {
+    return { providerId: modelId }
+  }
+  const providerByModel = findProviderByModelOption(modelId, listVoiceDesignProviders(), 'voice_design_model')
+  if (providerByModel) return { providerId: providerByModel, model: modelId }
+  throw new Error(`Unknown voice design model: ${modelId}`)
+}
+
 function findProviderByModelOption(
   modelId: string,
   providers: Array<{ id: string, fields?: Array<{ key: string, options?: string[] }> }>,
@@ -808,6 +819,15 @@ function hasAsrProvider(id: string): boolean {
 function hasSoundEffectProvider(id: string): boolean {
   try {
     getSoundEffectProvider(id)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function hasVoiceDesignProvider(id: string): boolean {
+  try {
+    getVoiceDesignProvider(id)
     return true
   } catch {
     return false

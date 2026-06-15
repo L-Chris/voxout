@@ -79,6 +79,14 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(elevenLabsEffectModel.owned_by, 'elevenlabs')
   assert.equal(elevenLabsEffectModel.capabilities.sound_effects, true)
   assert.deepEqual(elevenLabsEffectModel.providers, ['elevenlabs'])
+  const elevenLabsDesignModel = payload.data.find(model => model.id === 'eleven_multilingual_ttv_v2')
+  assert.equal(elevenLabsDesignModel.owned_by, 'elevenlabs')
+  assert.equal(elevenLabsDesignModel.capabilities.voice_design, true)
+  assert.deepEqual(elevenLabsDesignModel.providers, ['elevenlabs'])
+  const mimoDesignModel = payload.data.find(model => model.id === 'mimo-v2.5-tts-voicedesign')
+  assert.equal(mimoDesignModel.owned_by, 'mimo')
+  assert.equal(mimoDesignModel.capabilities.voice_design, true)
+  assert.deepEqual(mimoDesignModel.providers, ['mimo'])
   const defaultProvider = payload.data.find(model => model.id === 'default')
   assert.equal(defaultProvider.capabilities.tts, true)
   assert.equal(defaultProvider.capabilities.tts_streaming, true)
@@ -508,8 +516,7 @@ test('POST /v1/audio/design persists generated voices', async () => {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      provider: 'mock',
-      model: 'mock-design-model',
+      model: 'mock',
       input: 'A calm narrator voice with a clean tone.',
       name: 'Calm Mock',
     }),
@@ -536,17 +543,30 @@ test('POST /v1/audio/design persists generated voices', async () => {
   assert.equal(storedVoice.provider_links[0].provider_voice_key, payload.data[0].id)
 })
 
-test('POST /v1/audio/design requires provider and input fields', async () => {
-  const legacyProviderResponse = await fetch(`${base_url}/v1/audio/design`, {
+test('POST /v1/audio/design requires model or provider and input fields', async () => {
+  const missingModelResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: 'mock',
       input: 'A calm narrator voice.',
       name: 'Legacy Provider',
     }),
   })
-  assert.equal(legacyProviderResponse.status, 400)
+  const missingModelPayload = await missingModelResponse.json()
+  assert.equal(missingModelResponse.status, 400)
+  assert.match(missingModelPayload.error, /model is required/)
+
+  const unknownModelResponse = await fetch(`${base_url}/v1/audio/design`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'not-a-voice-design-model',
+      input: 'A calm narrator voice.',
+    }),
+  })
+  const unknownModelPayload = await unknownModelResponse.json()
+  assert.equal(unknownModelResponse.status, 400)
+  assert.match(unknownModelPayload.error, /Unknown voice design model: not-a-voice-design-model/)
 
   const legacyInputResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
