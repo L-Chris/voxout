@@ -235,9 +235,9 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
     voices.push(await persistProviderVoice(provider.id, context, voice))
   }
   sendJson(res, {
-    provider: provider.id,
+    object: 'list',
+    data: voices.map(formatAudioVoiceObject),
     text: result.text,
-    voices: voices.map(formatVoiceRecord),
   })
 }
 
@@ -490,7 +490,18 @@ function toUnixSeconds(value: string | undefined): number {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : Math.floor(Date.now() / 1000)
 }
 
-
+function formatAudioVoiceObject(voice: VoiceRecord): Record<string, unknown> {
+  return {
+    id: voice.voice_id,
+    object: 'audio.voice',
+    created_at: toUnixSeconds(voice.created_at),
+    name: voice.name,
+    description: voice.description,
+    language: voice.language,
+    preview_mime_type: voice.preview_mime_type,
+    preview_audio: voice.preview_audio,
+  }
+}
 
 function getOpenAiModelProvider(model: unknown, provider: unknown): string {
   const providerId = typeof provider === 'string' && provider.trim()

@@ -94,7 +94,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `response_format`，可选 string | 无 | 不支持 | query `output_format` | 不支持 | 不支持 | 预览固定 `wav` | 不支持 | 无 |
 | `model`，可选 string | 无 | 不支持 | `model_id` | 不支持 | 不支持 | 当前不直接传入设计请求；使用 provider 配置 `voice_design_model` | 不支持 | 无 |
 | `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs voice design JSON body；常用 `auto_generate_text`、`loudness`、`seed`、`guidance_scale`、`quality`、`reference_audio_base64`、`prompt_strength`；adapter 已映射字段优先 | 不支持 | 不支持 | 深合并到 MiMo voice preview chat completion JSON body；adapter 已映射字段优先 | 不支持 | 仅接受 JSON object；不能包含 `provider/input/name/text/response_format/model` 等已识别字段 |
-| 响应 | 无 | 不支持 | Voxout 持久化 previews 为 voice records | 不支持 | 不支持 | Voxout 生成本地 `mimo_*` voice 并保存 preview | 不支持 | 不直接返回下游原始 previews，除非写入 metadata |
+| 响应 | 无 | 不支持 | Voxout 持久化 previews，并返回 `{ object: "list", data: [{ id, object: "audio.voice", created_at, name, preview_audio, ... }] }` | 不支持 | 不支持 | Voxout 生成本地 `mimo_*` voice 并返回同样的 list/audio.voice 结构 | 不支持 | 不返回 provider link 或下游原始 previews；完整内部 voice record 走 `/api/voices` |
 
 ## POST `/v1/audio/voices`
 
