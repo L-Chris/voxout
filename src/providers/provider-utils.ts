@@ -1,5 +1,5 @@
 import { getProviderTimeoutMs } from '../timeout.js'
-import type { ProviderContext } from '../types.js'
+import type { JsonObject, JsonValue, ProviderContext } from '../types.js'
 
 export function getConfigString(context: ProviderContext, key: string): string | undefined {
   const value = context.config?.[key]
@@ -42,6 +42,12 @@ export function compactObject<T extends Record<string, unknown>>(value: T): Part
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as Partial<T>
 }
 
+export function mergeJsonBody(base: Record<string, unknown>, extra_params?: JsonObject): Record<string, unknown> {
+  const compacted = compactObject(base) as Record<string, JsonValue>
+  if (!extra_params) return compacted
+  return deepMergeJson(compacted, extra_params)
+}
+
 export async function fetchWithProviderTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), getProviderTimeoutMs(context))
@@ -76,4 +82,21 @@ export function getPayloadError(payload: unknown): string | undefined {
   if (typeof value.message === 'string') return value.message
   if (typeof value.detail === 'string') return value.detail
   return undefined
+}
+
+function deepMergeJson(base: JsonObject, extra: JsonObject): JsonObject {
+  const merged: JsonObject = { ...base }
+  for (const [key, value] of Object.entries(extra)) {
+    const baseValue = merged[key]
+    if (isPlainJsonObject(baseValue) && isPlainJsonObject(value)) {
+      merged[key] = deepMergeJson(baseValue, value)
+    } else {
+      merged[key] = value
+    }
+  }
+  return merged
+}
+
+function isPlainJsonObject(value: JsonValue | undefined): value is JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

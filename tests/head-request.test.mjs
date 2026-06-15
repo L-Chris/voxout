@@ -8,7 +8,7 @@ import { createServer } from 'node:net'
 import { after, before, test } from 'node:test'
 
 let serverProcess
-let baseUrl
+let base_url
 let audioDir
 let serverStdout = ''
 let serverStderr = ''
@@ -16,7 +16,7 @@ let serverStderr = ''
 before(async () => {
   const port = await getFreePort()
   audioDir = await mkdtemp(join(tmpdir(), 'voxout-head-'))
-  baseUrl = `http://127.0.0.1:${port}`
+  base_url = `http://127.0.0.1:${port}`
   serverProcess = spawn(process.execPath, ['dist/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
@@ -46,7 +46,7 @@ after(async () => {
 })
 
 test('HEAD returns headers without a body for public files', async () => {
-  const response = await fetch(`${baseUrl}/`, { method: 'HEAD' })
+  const response = await fetch(`${base_url}/`, { method: 'HEAD' })
 
   assert.equal(response.status, 200)
   assert.match(response.headers.get('content-type'), /^text\/html/)
@@ -56,7 +56,7 @@ test('HEAD returns headers without a body for public files', async () => {
 
 test('HEAD returns headers without a body for JSON endpoints', async () => {
   for (const pathname of ['/health', '/api/providers', '/v1/models']) {
-    const response = await fetch(`${baseUrl}${pathname}`, { method: 'HEAD' })
+    const response = await fetch(`${base_url}${pathname}`, { method: 'HEAD' })
 
     assert.equal(response.status, 200)
     assert.match(response.headers.get('content-type'), /^application\/json/)

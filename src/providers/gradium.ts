@@ -14,11 +14,11 @@ import type {
   VoiceCloneResult,
 } from '../types.js'
 import {
-  compactObject,
   fetchWithProviderTimeout,
   getConfigNumber,
   getConfigString,
   getSecretString,
+  mergeJsonBody,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -58,22 +58,22 @@ interface GradiumStreamMessage {
 export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
   readonly id = 'gradium'
   readonly name = 'Gradium'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, asr: true, voice_clone: true }
   readonly fields = [
-    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
-    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
-    { key: 'wsUrl', label: 'WebSocket URL', type: 'url' as const, placeholder: DEFAULT_WS_URL },
-    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_MODEL, options: GRADIUM_MODELS },
-    { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_MODEL, options: GRADIUM_MODELS },
-    { key: 'defaultVoiceId', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
-    { key: 'outputFormat', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT, options: GRADIUM_OUTPUT_FORMATS },
+    { key: 'api_key', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'base_url', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'ws_url', label: 'WebSocket URL', type: 'url' as const, placeholder: DEFAULT_WS_URL },
+    { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_MODEL, options: GRADIUM_MODELS },
+    { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_MODEL, options: GRADIUM_MODELS },
+    { key: 'default_voice_id', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
+    { key: 'output_format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT, options: GRADIUM_OUTPUT_FORMATS },
   ]
 
   async listVoices(context: ProviderContext = {}): Promise<TtsVoice[]> {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) return [getDefaultVoice(this.id, context)]
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) return [getDefaultVoice(this.id, context)]
 
-    const payload = await listGradiumVoices(context, apiKey)
+    const payload = await listGradiumVoices(context, api_key)
     const voices = payload
       .map(voice => normalizeVoice(voice, this.id))
       .filter((voice): voice is TtsVoice => !!voice)
@@ -81,21 +81,21 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
   }
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const apiKey = getApiKey(context)
-    const outputFormat = normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT)
+    const api_key = getApiKey(context)
+    const output_format = normalizeOutputFormat(request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT)
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/post/speech/tts`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': api_key,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(mergeJsonBody({
         text: request.text.trim(),
         voice_id: getVoiceId(request, context),
-        model_name: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_MODEL,
-        output_format: outputFormat,
+        model_name: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_MODEL,
+        output_format: output_format,
         only_audio: true,
-      }),
+      }, request.extra_params)),
     }, context)
     const audio = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
@@ -105,25 +105,25 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     if (audio.length < 128) throw new Error('Gradium text-to-speech response audio was empty.')
     return {
       audio,
-      mimeType: response.headers.get('content-type')?.split(';')[0] || getMimeType(outputFormat),
-      durationMs: 0,
+      mime_type: response.headers.get('content-type')?.split(';')[0] || getMimeType(output_format),
+      duration_ms: 0,
     }
   }
 
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    if ((request.streamFormat ?? 'audio') === 'sse') throw new Error('Gradium TTS streaming supports stream_format "audio" only.')
-    const outputFormat = normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? 'pcm')
+    if ((request.stream_format ?? 'audio') === 'sse') throw new Error('Gradium TTS streaming supports stream_format "audio" only.')
+    const output_format = normalizeOutputFormat(request.output_format ?? getConfigString(context, 'output_format') ?? 'pcm')
     return {
-      stream: createGradiumAudioStream(request, context, outputFormat),
-      mimeType: getMimeType(outputFormat),
+      stream: createGradiumAudioStream(request, context, output_format),
+      mime_type: getMimeType(output_format),
     }
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
-    const apiKey = getApiKey(context)
-    const inputFormat = getGradiumInputFormat(request.file.mimeType)
+    const api_key = getApiKey(context)
+    const inputFormat = getGradiumInputFormat(request.file.mime_type)
     const url = new URL(`${getBaseUrl(context)}/post/speech/asr`)
-    url.searchParams.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_MODEL)
+    url.searchParams.set('model', request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_MODEL)
     url.searchParams.set('input_format', inputFormat)
     const language = normalizeLanguage(request.language)
     if (language) url.searchParams.set('json_config', JSON.stringify({ language }))
@@ -131,10 +131,10 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     const response = await fetchWithProviderTimeout(url, {
       method: 'POST',
       headers: {
-        'content-type': request.file.mimeType,
-        'x-api-key': apiKey,
+        'content-type': request.file.mime_type,
+        'x-api-key': api_key,
       },
-      body: new Blob([request.file.data], { type: request.file.mimeType }),
+      body: new Blob([request.file.data], { type: request.file.mime_type }),
     }, context)
     const text = await response.text()
     if (!response.ok) throw new Error(text.slice(0, 500) || `Gradium speech-to-text request failed: ${response.status}`)
@@ -149,20 +149,20 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
   }
 
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
-    const apiKey = getApiKey(context)
-    const audio = parseAudioData(request.audioData, request.mimeType)
+    const api_key = getApiKey(context)
+    const audio = request.audio_sample
     const form = new FormData()
-    form.set('audio_file', new Blob([audio.data], { type: audio.mimeType }), request.fileName || audio.fileName)
+    form.set('audio_file', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
     form.set('name', request.name)
-    form.set('input_format', getGradiumInputFormat(audio.mimeType))
+    form.set('input_format', getGradiumInputFormat(audio.mime_type))
     if (request.description) form.set('description', request.description)
     if (request.language) form.set('language', normalizeLanguage(request.language) ?? request.language)
     form.set('start_s', '0')
-    form.set('timeout_s', String(getConfigNumber(context, 'cloneTimeoutSeconds') ?? 10))
+    form.set('timeout_s', String(getConfigNumber(context, 'clone_timeout_seconds') ?? 10))
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/`, {
       method: 'POST',
-      headers: { 'x-api-key': apiKey },
+      headers: { 'x-api-key': api_key },
       body: form,
     }, context)
     const payload = await readJsonResponse<GradiumCreateVoicePayload>(response)
@@ -174,8 +174,8 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     return {
       provider: this.id,
       voice: {
-        voiceId: payload.uid,
-        providerVoiceId: payload.uid,
+        voice_id: payload.uid,
+        provider_voice_id: payload.uid,
         name: request.name,
         description: request.description,
         language: request.language,
@@ -188,7 +188,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
   }
 }
 
-async function listGradiumVoices(context: ProviderContext, apiKey: string): Promise<GradiumVoicePayload[]> {
+async function listGradiumVoices(context: ProviderContext, api_key: string): Promise<GradiumVoicePayload[]> {
   const voices: GradiumVoicePayload[] = []
   const limit = 100
   for (let page = 0; page < 20; page += 1) {
@@ -197,7 +197,7 @@ async function listGradiumVoices(context: ProviderContext, apiKey: string): Prom
     url.searchParams.set('limit', String(limit))
     url.searchParams.set('include_catalog', 'true')
     const response = await fetchWithProviderTimeout(url, {
-      headers: { 'x-api-key': apiKey },
+      headers: { 'x-api-key': api_key },
     }, context)
     if (!response.ok) return voices
     const payload = await readJsonResponse<GradiumVoicePayload[]>(response)
@@ -208,13 +208,13 @@ async function listGradiumVoices(context: ProviderContext, apiKey: string): Prom
   return voices
 }
 
-function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderContext, outputFormat: string): ReadableStream<Uint8Array> {
-  const apiKey = getApiKey(context)
+function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderContext, output_format: string): ReadableStream<Uint8Array> {
+  const api_key = getApiKey(context)
   const ws = new WebSocket(`${getWsUrl(context)}/speech/tts`, {
-    headers: { 'x-api-key': apiKey },
+    headers: { 'x-api-key': api_key },
   })
   let settled = false
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   let timer: ReturnType<typeof setTimeout> | undefined
 
   return new ReadableStream<Uint8Array>({
@@ -223,16 +223,16 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
         settled = true
         ws.close()
         controller.error(new Error('Gradium text-to-speech stream timed out.'))
-      }, timeoutMs)
+      }, timeout_ms)
 
       ws.on('open', () => {
-        ws.send(JSON.stringify(compactObject({
+        ws.send(JSON.stringify(mergeJsonBody({
           type: 'setup',
           voice_id: getVoiceId(request, context),
-          model_name: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_MODEL,
-          output_format: outputFormat,
+          model_name: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_MODEL,
+          output_format: output_format,
           close_ws_on_eos: true,
-        })))
+        }, request.extra_params)))
         ws.send(JSON.stringify({ type: 'text', text: request.text.trim() }))
         ws.send(JSON.stringify({ type: 'end_of_stream' }))
       })
@@ -311,7 +311,7 @@ function parseGradiumTranscription(value: string): { text: string, raw: unknown[
 }
 
 function getVoiceId(request: SynthesizeRequest, context: ProviderContext): string {
-  return request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+  return request.voice ?? getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
 }
 
 function normalizeVoice(voice: GradiumVoicePayload, provider: string): TtsVoice | null {
@@ -321,27 +321,27 @@ function normalizeVoice(voice: GradiumVoicePayload, provider: string): TtsVoice 
     name: voice.name ?? voice.uid,
     locale: voice.language ?? undefined,
     provider,
-    capabilities: { tts: true, ttsStreaming: true, voiceClone: !voice.is_catalog },
+    capabilities: { tts: true, tts_streaming: true, voice_clone: !voice.is_catalog },
   }
 }
 
 function getDefaultVoice(provider: string, context: ProviderContext): TtsVoice {
-  const id = getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+  const id = getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
   return { id, name: 'Gradium Default', provider }
 }
 
 function getApiKey(context: ProviderContext): string {
-  const apiKey = getSecretString(context, 'apiKey')
-  if (!apiKey) throw new Error('gradium apiKey is required in provider settings.')
-  return apiKey
+  const api_key = getSecretString(context, 'api_key')
+  if (!api_key) throw new Error('gradium api_key is required in provider settings.')
+  return api_key
 }
 
 function getBaseUrl(context: ProviderContext): string {
-  return trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
+  return trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
 }
 
 function getWsUrl(context: ProviderContext): string {
-  return trimTrailingSlash(getConfigString(context, 'wsUrl') ?? getBaseUrl(context).replace(/^http/i, 'ws') ?? DEFAULT_WS_URL)
+  return trimTrailingSlash(getConfigString(context, 'ws_url') ?? getBaseUrl(context).replace(/^http/i, 'ws') ?? DEFAULT_WS_URL)
 }
 
 function normalizeOutputFormat(value: string): string {
@@ -358,19 +358,9 @@ function getMimeType(format: string): string {
   return 'audio/wav'
 }
 
-function parseAudioData(value: string, mimeType?: string): { data: Buffer, mimeType: string, fileName: string } {
-  const match = /^data:([^;,]+)?;base64,(.*)$/is.exec(value)
-  const resolvedMimeType = match?.[1] || mimeType || 'audio/wav'
-  return {
-    data: Buffer.from(match?.[2] ?? value, 'base64'),
-    mimeType: resolvedMimeType,
-    fileName: getAudioFileName(resolvedMimeType),
-  }
-}
-
-function getGradiumInputFormat(mimeType: string): string {
-  if (mimeType.includes('opus') || mimeType.includes('ogg')) return 'opus'
-  if (mimeType.includes('pcm')) return 'pcm'
+function getGradiumInputFormat(mime_type: string): string {
+  if (mime_type.includes('opus') || mime_type.includes('ogg')) return 'opus'
+  if (mime_type.includes('pcm')) return 'pcm'
   return 'wav'
 }
 
@@ -378,12 +368,6 @@ function normalizeLanguage(value: string | undefined): string | undefined {
   const normalized = value?.trim()
   if (!normalized || normalized === 'auto') return undefined
   return normalized.split(/[-_]/)[0]
-}
-
-function getAudioFileName(mimeType: string): string {
-  if (mimeType.includes('opus') || mimeType.includes('ogg')) return 'audio.ogg'
-  if (mimeType.includes('pcm')) return 'audio.pcm'
-  return 'audio.wav'
 }
 
 function clearStreamTimer(timer: ReturnType<typeof setTimeout> | undefined): void {

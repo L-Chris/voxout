@@ -30,10 +30,10 @@ interface EdgeVoicePayload {
 export class EdgeTtsProvider implements TtsProvider {
   readonly id: string
   readonly name: string
-  readonly capabilities = { tts: true, ttsStreaming: true }
+  readonly capabilities = { tts: true, tts_streaming: true }
   readonly fields = [
-    { key: 'voicesUrl', label: 'Voice Catalog URL', type: 'url' as const, placeholder: EDGE_VOICES_URL },
-    { key: 'trustedClientToken', label: 'Trusted Client Token', type: 'password' as const, secret: true },
+    { key: 'voices_url', label: 'Voice Catalog URL', type: 'url' as const, placeholder: EDGE_VOICES_URL },
+    { key: 'trusted_client_token', label: 'Trusted Client Token', type: 'password' as const, secret: true },
     { key: 'proxy', label: 'HTTP Proxy', type: 'url' as const, placeholder: 'http://host.docker.internal:7890' },
   ]
   private voiceCache: { expiresAt: number, voices: TtsVoice[] } | null = null
@@ -48,7 +48,7 @@ export class EdgeTtsProvider implements TtsProvider {
     if (this.voiceCache && this.voiceCache.expiresAt > now) return this.voiceCache.voices
 
     const voices = await this.fetchVoices(context).catch(() => fallbackEdgeVoices(this.id))
-    const cacheMs = Math.max(0, getConfigNumber(context, 'voicesCacheMs') ?? DEFAULT_VOICE_CACHE_MS)
+    const cacheMs = Math.max(0, getConfigNumber(context, 'voices_cache_ms') ?? DEFAULT_VOICE_CACHE_MS)
     if (cacheMs > 0) {
       this.voiceCache = {
         expiresAt: now + cacheMs,
@@ -59,13 +59,13 @@ export class EdgeTtsProvider implements TtsProvider {
   }
 
   private async fetchVoices(context: ProviderContext): Promise<TtsVoice[]> {
-    const url = new URL(getConfigString(context, 'voicesUrl') ?? EDGE_VOICES_URL)
+    const url = new URL(getConfigString(context, 'voices_url') ?? EDGE_VOICES_URL)
     if (!url.searchParams.has('trustedclienttoken')) {
-      url.searchParams.set('trustedclienttoken', getSecretString(context, 'trustedClientToken') ?? EDGE_TRUSTED_CLIENT_TOKEN)
+      url.searchParams.set('trustedclienttoken', getSecretString(context, 'trusted_client_token') ?? EDGE_TRUSTED_CLIENT_TOKEN)
     }
-    const timeoutMs = getConfigNumber(context, 'voicesTimeoutMs') ?? 10000
+    const timeout_ms = getConfigNumber(context, 'voices_timeout_ms') ?? 10000
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = setTimeout(() => controller.abort(), timeout_ms)
     try {
       const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) throw new Error(`Edge voices request failed: ${response.status}`)
@@ -88,16 +88,16 @@ export class EdgeTtsProvider implements TtsProvider {
     const audioPath = join(tempDir, 'speech.mp3')
     try {
       const voice = request.voice ?? DEFAULT_VOICE
-      const outputFormat = normalizeEdgeOutputFormat(request.outputFormat)
+      const output_format = normalizeEdgeOutputFormat(request.output_format)
       const tts = new EdgeTTS({
         voice,
         lang: request.lang ?? inferLangFromVoice(voice),
-        outputFormat,
+        outputFormat: output_format,
         saveSubtitles: false,
         pitch: request.pitch ?? 'default',
         rate: normalizeEdgeRate(request.speed),
         volume: request.volume ?? 'default',
-        timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+        timeout: getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         proxy: getConfigString(context, 'proxy'),
       })
 
@@ -105,8 +105,8 @@ export class EdgeTtsProvider implements TtsProvider {
       const audio = await readFile(audioPath)
       return {
         audio,
-        mimeType: getEdgeMimeType(outputFormat),
-        durationMs: 0,
+        mime_type: getEdgeMimeType(output_format),
+        duration_ms: 0,
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true })
@@ -114,45 +114,45 @@ export class EdgeTtsProvider implements TtsProvider {
   }
 
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const outputFormat = normalizeEdgeOutputFormat(request.outputFormat)
+    const output_format = normalizeEdgeOutputFormat(request.output_format)
     const stream = await createEdgeSpeechStream(request, context)
-    if (request.streamFormat === 'sse') {
+    if (request.stream_format === 'sse') {
       return {
         stream: wrapAudioStreamAsSse(stream),
-        mimeType: 'text/event-stream',
+        mime_type: 'text/event-stream',
       }
     }
     return {
       stream,
-      mimeType: getEdgeMimeType(outputFormat),
+      mime_type: getEdgeMimeType(output_format),
     }
   }
 }
 
 async function createEdgeSpeechStream(request: SynthesizeRequest, context: ProviderContext): Promise<ReadableStream<Uint8Array>> {
   const voice = request.voice ?? DEFAULT_VOICE
-  const outputFormat = normalizeEdgeOutputFormat(request.outputFormat)
+  const output_format = normalizeEdgeOutputFormat(request.output_format)
   const tts = new EdgeTTS({
     voice,
     lang: request.lang ?? inferLangFromVoice(voice),
-    outputFormat,
+    outputFormat: output_format,
     saveSubtitles: false,
     pitch: request.pitch ?? 'default',
     rate: normalizeEdgeRate(request.speed),
     volume: request.volume ?? 'default',
-    timeout: getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+    timeout: getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
     proxy: getConfigString(context, 'proxy'),
   })
   const ws = await tts._connectWebSocket()
-  const timeoutMs = getConfigNumber(context, 'timeoutMs') ?? DEFAULT_PROVIDER_TIMEOUT_MS
+  const timeout_ms = getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS
 
   let cancelStream: (() => void) | undefined
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false
       const timeout = setTimeout(() => {
-        fail(new Error(`Edge TTS stream timed out after ${timeoutMs}ms`))
-      }, timeoutMs)
+        fail(new Error(`Edge TTS stream timed out after ${timeout_ms}ms`))
+      }, timeout_ms)
       const close = () => {
         if (closed) return
         closed = true
@@ -293,9 +293,9 @@ function normalizeEdgeOutputFormat(value: string | undefined): string {
   return DEFAULT_OUTPUT_FORMAT
 }
 
-function getEdgeMimeType(outputFormat: string): string {
-  if (outputFormat.startsWith('riff-')) return 'audio/wav'
-  if (outputFormat.startsWith('raw-')) return 'audio/pcm'
-  if (outputFormat.includes('webm')) return 'audio/webm'
+function getEdgeMimeType(output_format: string): string {
+  if (output_format.startsWith('riff-')) return 'audio/wav'
+  if (output_format.startsWith('raw-')) return 'audio/pcm'
+  if (output_format.includes('webm')) return 'audio/webm'
   return 'audio/mpeg'
 }

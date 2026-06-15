@@ -20,6 +20,7 @@ import {
   getConfigBooleanWithFallback as getBooleanConfig,
   getConfigString,
   getSecretString,
+  mergeJsonBody,
   trimTrailingSlash,
 } from './provider-utils.js'
 
@@ -63,14 +64,14 @@ interface MimoCompletionChunk {
 export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'mimo'
   readonly name = 'Xiaomi MiMo'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, asrStreaming: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, asr: true, asr_streaming: true, voice_design: true, voice_clone: true }
   readonly fields = [
-    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
-    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
-    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: MIMO_TTS_MODELS },
-    { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: MIMO_ASR_MODELS },
-    { key: 'voiceDesignModel', label: 'Voice Design Model', type: 'text' as const, placeholder: DEFAULT_VOICE_DESIGN_MODEL },
-    { key: 'voiceCloneModel', label: 'Voice Clone Model', type: 'text' as const, placeholder: DEFAULT_VOICE_CLONE_MODEL },
+    { key: 'api_key', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'base_url', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: MIMO_TTS_MODELS },
+    { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: MIMO_ASR_MODELS },
+    { key: 'voice_design_model', label: 'Voice Design Model', type: 'text' as const, placeholder: DEFAULT_VOICE_DESIGN_MODEL },
+    { key: 'voice_clone_model', label: 'Voice Clone Model', type: 'text' as const, placeholder: DEFAULT_VOICE_CLONE_MODEL },
     { key: 'format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_FORMAT },
   ]
   private readonly designedVoiceSamples = new Map<string, Promise<string>>()
@@ -83,47 +84,47 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
   }
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const { body, format } = await this.buildSynthesisBody(apiKey, request, context)
-    const response = await postMimoCompletion(apiKey, body, context)
+    const { body, format } = await this.buildSynthesisBody(api_key, request, context)
+    const response = await postMimoCompletion(api_key, body, context)
     const audioData = response.choices?.[0]?.message?.audio?.data
     if (!audioData) throw new Error('MiMo TTS response did not include audio data.')
     const audio = Buffer.from(stripDataUrlPrefix(audioData), 'base64')
     if (audio.length < 128) throw new Error('MiMo TTS response audio was empty.')
     return {
       audio,
-      mimeType: getMimeType(format),
-      durationMs: 0,
+      mime_type: getMimeType(format),
+      duration_ms: 0,
     }
   }
 
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const streamFormat = request.streamFormat ?? 'audio'
-    const { body, format } = await this.buildSynthesisBody(apiKey, request, context, true)
-    const response = await postMimoCompletionStream(apiKey, { ...body, stream: true }, context)
+    const stream_format = request.stream_format ?? 'audio'
+    const { body, format } = await this.buildSynthesisBody(api_key, request, context, true)
+    const response = await postMimoCompletionStream(api_key, { ...body, stream: true }, context)
     if (!response.body) throw new Error('MiMo TTS stream response was empty.')
-    if (streamFormat === 'sse') {
+    if (stream_format === 'sse') {
       return {
         stream: response.body,
-        mimeType: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
+        mime_type: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
       }
     }
     return {
       stream: decodeMimoAudioSseStream(response.body),
-      mimeType: getMimeType(format),
+      mime_type: getMimeType(format),
     }
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const response = await postMimoCompletion(apiKey, buildAsrBody(request, context), context)
+    const response = await postMimoCompletion(api_key, buildAsrBody(request, context), context)
     const text = response.choices?.[0]?.message?.content?.trim()
     if (!text) throw new Error('MiMo ASR response did not include transcribed text.')
     return {
@@ -135,55 +136,55 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
   }
 
   async streamTranscribe(request: TranscribeRequest, context: ProviderContext = {}) {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const response = await postMimoCompletionStream(apiKey, { ...buildAsrBody(request, context), stream: true }, context)
+    const response = await postMimoCompletionStream(api_key, mergeJsonBody(buildAsrBody(request, context), { ...(request.extra_params ?? {}), stream: true }), context)
     if (!response.body) throw new Error('MiMo ASR stream response was empty.')
     return {
       stream: decodeMimoTranscriptionSseStream(response.body),
-      mimeType: 'text/event-stream',
+      mime_type: 'text/event-stream',
     }
   }
 
   async designVoice(request: VoiceDesignRequest, context: ProviderContext = {}): Promise<VoiceDesignResult> {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) throw new Error('mimo apiKey is required in provider settings.')
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const sampleText = normalizePrompt(request.text) ?? normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
+    const sampleText = normalizePrompt(request.text) ?? normalizePrompt(getConfigString(context, 'voice_sample_text')) ?? DEFAULT_VOICE_SAMPLE_TEXT
     const voiceDescription = normalizePrompt(request.input)
     if (!voiceDescription) throw new Error('input is required')
-    const sample = await this.createDesignedVoiceSample(apiKey, voiceDescription, sampleText, context)
-    const voiceId = `mimo_${randomUUID()}`
+    const sample = await this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, context, request.extra_params)
+    const voice_id = `mimo_${randomUUID()}`
     return {
       provider: this.id,
       text: sampleText,
       voices: [{
-        voiceId,
+        voice_id,
         name: request.name ?? voiceDescription.slice(0, 48),
         description: voiceDescription,
         language: 'zh-CN',
-        previewAudioData: sample,
-        previewMimeType: 'audio/wav',
+        preview_audio_data: sample,
+        preview_mime_type: 'audio/wav',
         metadata: {
-          model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
+          model: getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
         },
       }],
     }
   }
 
   async cloneVoice(request: VoiceCloneRequest): Promise<VoiceCloneResult> {
-    const audio = normalizeAudioDataUrl(request.audioData, request.mimeType)
-    const voiceId = `mimo_${randomUUID()}`
+    const audio = fileToAudioDataUrl(request.audio_sample)
+    const voice_id = `mimo_${randomUUID()}`
     return {
       provider: this.id,
       voice: {
-        voiceId,
+        voice_id,
         name: request.name,
         description: request.description,
         language: request.language,
-        previewAudioData: audio,
-        previewMimeType: getDataUrlMimeType(audio) ?? request.mimeType ?? 'audio/wav',
+        preview_audio_data: audio,
+        preview_mime_type: getDataUrlMimeType(audio) ?? request.audio_sample.mime_type,
         metadata: {
           cloned_from_audio_sample: true,
           provider_voice_id: null,
@@ -192,18 +193,18 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     }
   }
 
-  private getDesignedVoiceSample(apiKey: string, voiceDescription: string, context: ProviderContext): Promise<string> {
-    const sampleText = normalizePrompt(getConfigString(context, 'voiceSampleText')) ?? DEFAULT_VOICE_SAMPLE_TEXT
+  private getDesignedVoiceSample(api_key: string, voiceDescription: string, context: ProviderContext): Promise<string> {
+    const sampleText = normalizePrompt(getConfigString(context, 'voice_sample_text')) ?? DEFAULT_VOICE_SAMPLE_TEXT
     const sampleKey = JSON.stringify({
-      baseUrl: getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL,
-      model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
-      optimize: getBooleanConfig(context, 'optimizeTextPreview', true),
+      base_url: getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL,
+      model: getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
+      optimize: getBooleanConfig(context, 'optimize_text_preview', true),
       voiceDescription,
       sampleText,
     })
     const cached = this.designedVoiceSamples.get(sampleKey)
     if (cached) return cached
-    const promise = this.createDesignedVoiceSample(apiKey, voiceDescription, sampleText, context)
+    const promise = this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, context)
       .catch(error => {
         this.designedVoiceSamples.delete(sampleKey)
         throw error
@@ -212,15 +213,15 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     return promise
   }
 
-  private async createDesignedVoiceSample(apiKey: string, voiceDescription: string, sampleText: string, context: ProviderContext): Promise<string> {
-    const response = await postMimoCompletion(apiKey, {
-      model: getConfigString(context, 'voiceDesignModel') ?? DEFAULT_VOICE_DESIGN_MODEL,
+  private async createDesignedVoiceSample(api_key: string, voiceDescription: string, sampleText: string, context: ProviderContext, extra_params?: SynthesizeRequest['extra_params']): Promise<string> {
+    const response = await postMimoCompletion(api_key, mergeJsonBody({
+      model: getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
       messages: buildMessages(sampleText, voiceDescription),
       audio: {
         format: 'wav',
-        optimize_text_preview: getBooleanConfig(context, 'optimizeTextPreview', true),
+        optimize_text_preview: getBooleanConfig(context, 'optimize_text_preview', true),
       },
-    }, context)
+    }, extra_params), context)
     const audioData = response.choices?.[0]?.message?.audio?.data
     if (!audioData) throw new Error('MiMo voice design response did not include audio data.')
     const base64 = stripDataUrlPrefix(audioData)
@@ -229,26 +230,26 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     return `data:audio/wav;base64,${base64}`
   }
 
-  private async buildSynthesisBody(apiKey: string, request: SynthesizeRequest, context: ProviderContext, streaming = false) {
+  private async buildSynthesisBody(api_key: string, request: SynthesizeRequest, context: ProviderContext, streaming = false) {
     const text = request.text.trim()
     const instructions = normalizePrompt(request.instructions)
-    const format = normalizeAudioFormat(request.outputFormat ?? getConfigString(context, 'format') ?? (streaming ? 'pcm16' : DEFAULT_FORMAT))
+    const format = normalizeAudioFormat(request.output_format ?? getConfigString(context, 'format') ?? (streaming ? 'pcm16' : DEFAULT_FORMAT))
     const designedVoice = request.voice?.startsWith('data:')
       ? request.voice
       : undefined
     const voice = designedVoice ?? request.voice ?? DEFAULT_VOICE
     return {
       format,
-      body: {
+      body: mergeJsonBody({
         model: designedVoice
-          ? getConfigString(context, 'voiceCloneModel') ?? DEFAULT_VOICE_CLONE_MODEL
-          : request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+          ? getConfigString(context, 'voice_clone_model') ?? DEFAULT_VOICE_CLONE_MODEL
+          : request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
         messages: buildMessages(text, undefined, instructions),
         audio: {
           format,
           voice,
         },
-      },
+      }, request.extra_params),
     }
   }
 }
@@ -277,8 +278,8 @@ function buildMessages(text: string, voiceDescription?: string, instructions?: s
 }
 
 function buildAsrBody(request: TranscribeRequest, context: ProviderContext) {
-  return {
-    model: request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL,
+  return mergeJsonBody({
+    model: request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_ASR_MODEL,
     messages: [
       {
         role: 'user',
@@ -295,22 +296,22 @@ function buildAsrBody(request: TranscribeRequest, context: ProviderContext) {
     asr_options: {
       language: request.language?.trim() || 'auto',
     },
-  }
+  }, request.extra_params)
 }
 
-async function postMimoCompletion(apiKey: string, body: unknown, context: ProviderContext): Promise<MimoCompletionResponse> {
-  const baseUrl = trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
-  const url = `${baseUrl}/chat/completions`
-  const timeoutMs = getProviderTimeoutMs(context)
+async function postMimoCompletion(api_key: string, body: unknown, context: ProviderContext): Promise<MimoCompletionResponse> {
+  const base_url = trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
+  const url = `${base_url}/chat/completions`
+  const timeout_ms = getProviderTimeoutMs(context)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const timer = setTimeout(() => controller.abort(), timeout_ms)
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'api-key': apiKey,
-        'authorization': `Bearer ${apiKey}`,
+        'api-key': api_key,
+        'authorization': `Bearer ${api_key}`,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -332,19 +333,19 @@ async function postMimoCompletion(apiKey: string, body: unknown, context: Provid
   }
 }
 
-async function postMimoCompletionStream(apiKey: string, body: unknown, context: ProviderContext): Promise<Response> {
-  const baseUrl = trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
-  const timeoutMs = getProviderTimeoutMs(context)
+async function postMimoCompletionStream(api_key: string, body: unknown, context: ProviderContext): Promise<Response> {
+  const base_url = trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
+  const timeout_ms = getProviderTimeoutMs(context)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const timer = setTimeout(() => controller.abort(), timeout_ms)
   let response: Response
   try {
-    response = await fetch(`${baseUrl}/chat/completions`, {
+    response = await fetch(`${base_url}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'api-key': apiKey,
-        'authorization': `Bearer ${apiKey}`,
+        'api-key': api_key,
+        'authorization': `Bearer ${api_key}`,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -381,22 +382,17 @@ function stripDataUrlPrefix(value: string): string {
   return value.startsWith('data:') && comma >= 0 ? value.slice(comma + 1) : value
 }
 
-function normalizeAudioDataUrl(value: string, mimeType = 'audio/wav'): string {
-  if (value.startsWith('data:')) return value
-  return `data:${mimeType};base64,${value}`
-}
-
 function getDataUrlMimeType(value: string): string | undefined {
   return /^data:([^;,]+)/.exec(value)?.[1]
 }
 
 function fileToAudioDataUrl(file: TranscribeRequest['file']): string {
-  return `data:${normalizeMimeType(file.mimeType)};base64,${file.data.toString('base64')}`
+  return `data:${normalizeMimeType(file.mime_type)};base64,${file.data.toString('base64')}`
 }
 
 function normalizeMimeType(value?: string): string {
-  const mimeType = value?.split(';')[0]?.trim()
-  return mimeType || 'audio/mpeg'
+  const mime_type = value?.split(';')[0]?.trim()
+  return mime_type || 'audio/mpeg'
 }
 
 function decodeMimoAudioSseStream(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {

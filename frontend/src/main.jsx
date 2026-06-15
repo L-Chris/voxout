@@ -66,8 +66,8 @@ function App() {
       .then(options => {
         if (cancelled) return
         setVoiceOptions(options)
-        const defaultVoice = getDefaultVoiceValue(options)
-        setSpeechForm(current => current.voice || !defaultVoice ? current : { ...current, voice: defaultVoice })
+        const default_voice = getDefaultVoiceValue(options)
+        setSpeechForm(current => current.voice || !default_voice ? current : { ...current, voice: default_voice })
       })
       .catch(() => {
         if (!cancelled) setVoiceOptions([])
@@ -190,18 +190,18 @@ function App() {
         model: speechForm.model || undefined,
         input: speechForm.input,
         voice: speechForm.voice || undefined,
-        response_format: speechForm.responseFormat,
-        stream_format: speechForm.streamFormat || undefined,
+        response_format: speechForm.response_format,
+        stream_format: speechForm.stream_format || undefined,
         speed: Number(speechForm.speed) || undefined,
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
-    if (speechForm.streamFormat === 'sse') {
+    if (speechForm.stream_format === 'sse') {
       const text = await response.text()
       setTestResult({
         kind: 'json',
         content: text,
-        mimeType: response.headers.get('content-type') || 'text/event-stream',
+        mime_type: response.headers.get('content-type') || 'text/event-stream',
         endpoint: 'POST /v1/audio/speech',
       })
       return
@@ -211,7 +211,7 @@ function App() {
     setTestResult({
       kind: 'audio',
       objectUrl,
-      mimeType: response.headers.get('content-type') || blob.type,
+      mime_type: response.headers.get('content-type') || blob.type,
       size: blob.size,
       endpoint: 'POST /v1/audio/speech',
     })
@@ -220,7 +220,7 @@ function App() {
   async function runTranscriptionTest() {
     const form = new FormData()
     form.set('provider', selectedProvider.id)
-    form.set('response_format', transcriptionForm.responseFormat)
+    form.set('response_format', transcriptionForm.response_format)
     if (transcriptionForm.model.trim()) form.set('model', transcriptionForm.model.trim())
     if (transcriptionForm.language.trim()) form.set('language', transcriptionForm.language.trim())
     if (!transcriptionFile) throw new Error('Choose an audio file.')
@@ -238,7 +238,7 @@ function App() {
     setTestResult({
       kind: contentType.includes('application/json') ? 'json' : 'text',
       content: body,
-      mimeType: contentType,
+      mime_type: contentType,
       endpoint: 'POST /v1/audio/transcriptions',
     })
   }
@@ -250,9 +250,9 @@ function App() {
       body: JSON.stringify({
         provider: selectedProvider.id,
         input: effectForm.input,
-        response_format: effectForm.responseFormat,
-        duration_seconds: Number(effectForm.durationSeconds) || undefined,
-        prompt_influence: Number(effectForm.promptInfluence) || undefined,
+        response_format: effectForm.response_format,
+        duration_seconds: Number(effectForm.duration_seconds) || undefined,
+        prompt_influence: Number(effectForm.prompt_influence) || undefined,
         loop: effectForm.loop,
       }),
     })
@@ -262,7 +262,7 @@ function App() {
     setTestResult({
       kind: 'audio',
       objectUrl,
-      mimeType: response.headers.get('content-type') || blob.type,
+      mime_type: response.headers.get('content-type') || blob.type,
       size: blob.size,
       endpoint: 'POST /v1/audio/effect',
     })
@@ -271,7 +271,7 @@ function App() {
   async function runIsolationTest() {
     const form = new FormData()
     form.set('provider', selectedProvider.id)
-    form.set('file_format', isolationForm.fileFormat)
+    form.set('file_format', isolationForm.file_format)
     if (!isolationFile) throw new Error('Choose an audio file.')
     form.set('file', isolationFile)
 
@@ -285,7 +285,7 @@ function App() {
     setTestResult({
       kind: 'audio',
       objectUrl,
-      mimeType: response.headers.get('content-type') || blob.type,
+      mime_type: response.headers.get('content-type') || blob.type,
       size: blob.size,
       endpoint: 'POST /v1/audio/isolation',
     })
@@ -300,7 +300,7 @@ function App() {
         input: designForm.voiceDescription,
         name: designForm.name || undefined,
         text: designForm.text || undefined,
-        response_format: designForm.responseFormat,
+        response_format: designForm.response_format,
         model: designForm.model || undefined,
         auto_generate_text: designForm.autoGenerateText,
         guidance_scale: Number(designForm.guidanceScale) || undefined,
@@ -312,7 +312,7 @@ function App() {
     setTestResult({
       kind: 'json',
       content: JSON.stringify(payload, null, 2),
-      mimeType: 'application/json',
+      mime_type: 'application/json',
       endpoint: 'POST /v1/audio/design',
     })
     if (selectedProvider?.capabilities?.tts) {
@@ -342,7 +342,7 @@ function App() {
     setTestResult({
       kind: 'json',
       content: JSON.stringify(payload, null, 2),
-      mimeType: 'application/json',
+      mime_type: 'application/json',
       endpoint: 'POST /v1/audio/voices',
     })
     if (selectedProvider?.capabilities?.tts) {
@@ -443,7 +443,7 @@ function App() {
                       <TranscriptionTestForm
                         file={transcriptionFile}
                         form={transcriptionForm}
-                        modelField={getProviderField(selectedProvider, 'asrModel')}
+                        modelField={getProviderField(selectedProvider, 'asr_model')}
                         onFileChange={setTranscriptionFile}
                         onFormChange={setTranscriptionForm}
                       />
@@ -451,7 +451,7 @@ function App() {
                       <SpeechTestForm
                         form={speechForm}
                         onFormChange={setSpeechForm}
-                        supportsStreaming={Boolean(selectedProvider.capabilities?.ttsStreaming)}
+                        supportsStreaming={Boolean(selectedProvider.capabilities?.tts_streaming)}
                         voiceOptions={voiceOptions}
                         voiceTree={voiceTree}
                       />
@@ -599,8 +599,8 @@ function SpeechTestForm({
         Response format
         <select
           className="input"
-          value={form.responseFormat}
-          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+          value={form.response_format}
+          onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
           <option value="wav">wav</option>
           <option value="mp3">mp3</option>
@@ -611,8 +611,8 @@ function SpeechTestForm({
           Stream format
           <select
             className="input"
-            value={form.streamFormat}
-            onChange={event => onFormChange({ ...form, streamFormat: event.target.value })}
+            value={form.stream_format}
+            onChange={event => onFormChange({ ...form, stream_format: event.target.value })}
           >
             <option value="">off</option>
             <option value="audio">audio</option>
@@ -739,8 +739,8 @@ function IsolationTestForm({ file, form, onFileChange, onFormChange }) {
         File format
         <select
           className="input"
-          value={form.fileFormat}
-          onChange={event => onFormChange({ ...form, fileFormat: event.target.value })}
+          value={form.file_format}
+          onChange={event => onFormChange({ ...form, file_format: event.target.value })}
         >
           <option value="other">other</option>
           <option value="pcm_s16le_16">pcm_s16le_16</option>
@@ -791,8 +791,8 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         Response format
         <select
           className="input"
-          value={form.responseFormat}
-          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+          value={form.response_format}
+          onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
           <option value="json">json</option>
           <option value="text">text</option>
@@ -849,8 +849,8 @@ function EffectTestForm({ form, onFormChange }) {
           max="30"
           step="0.1"
           type="number"
-          value={form.durationSeconds}
-          onChange={event => onFormChange({ ...form, durationSeconds: event.target.value })}
+          value={form.duration_seconds}
+          onChange={event => onFormChange({ ...form, duration_seconds: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -861,16 +861,16 @@ function EffectTestForm({ form, onFormChange }) {
           max="1"
           step="0.05"
           type="number"
-          value={form.promptInfluence}
-          onChange={event => onFormChange({ ...form, promptInfluence: event.target.value })}
+          value={form.prompt_influence}
+          onChange={event => onFormChange({ ...form, prompt_influence: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
         Response format
         <select
           className="input"
-          value={form.responseFormat}
-          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+          value={form.response_format}
+          onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
           <option value="mp3_44100_128">mp3_44100_128</option>
           <option value="mp3_44100_192">mp3_44100_192</option>
@@ -930,8 +930,8 @@ function DesignTestForm({ form, onFormChange }) {
         Response format
         <select
           className="input"
-          value={form.responseFormat}
-          onChange={event => onFormChange({ ...form, responseFormat: event.target.value })}
+          value={form.response_format}
+          onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
           <option value="mp3_44100_128">mp3_44100_128</option>
           <option value="mp3_44100_192">mp3_44100_192</option>
@@ -1022,7 +1022,7 @@ function ResultPreview({ result }) {
   if (result.kind === 'audio') {
     return (
       <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-        <div className="text-sm text-slate-500">{result.endpoint} · {result.mimeType} · {formatBytes(result.size)}</div>
+        <div className="text-sm text-slate-500">{result.endpoint} · {result.mime_type} · {formatBytes(result.size)}</div>
         <audio className="w-full" controls src={result.objectUrl} />
         <div>
           <a className="link" href={result.objectUrl} rel="noreferrer" target="_blank">Open audio preview</a>
@@ -1032,7 +1032,7 @@ function ResultPreview({ result }) {
   }
   return (
     <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="text-sm text-slate-500">{result.endpoint} · {result.mimeType}</div>
+      <div className="text-sm text-slate-500">{result.endpoint} · {result.mime_type}</div>
       <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-sm text-slate-100">{result.content}</pre>
     </div>
   )
@@ -1064,20 +1064,20 @@ function getProviderFormValues(provider) {
 function supportsTestMode(provider, mode) {
   if (!provider) return false
   if (mode === 'asr') return Boolean(provider.capabilities?.asr)
-  if (mode === 'effect') return Boolean(provider.capabilities?.soundEffects)
+  if (mode === 'effect') return Boolean(provider.capabilities?.sound_effects)
   if (mode === 'isolation') return Boolean(provider.capabilities?.isolation)
-  if (mode === 'design') return Boolean(provider.capabilities?.voiceDesign)
-  if (mode === 'clone') return Boolean(provider.capabilities?.voiceClone)
+  if (mode === 'design') return Boolean(provider.capabilities?.voice_design)
+  if (mode === 'clone') return Boolean(provider.capabilities?.voice_clone)
   return Boolean(provider.capabilities?.tts)
 }
 
 function getDefaultTestMode(provider) {
   if (provider?.capabilities?.tts) return 'tts'
   if (provider?.capabilities?.asr) return 'asr'
-  if (provider?.capabilities?.soundEffects) return 'effect'
+  if (provider?.capabilities?.sound_effects) return 'effect'
   if (provider?.capabilities?.isolation) return 'isolation'
-  if (provider?.capabilities?.voiceDesign) return 'design'
-  if (provider?.capabilities?.voiceClone) return 'clone'
+  if (provider?.capabilities?.voice_design) return 'design'
+  if (provider?.capabilities?.voice_clone) return 'clone'
   return 'tts'
 }
 
@@ -1094,8 +1094,8 @@ function defaultSpeechForm(provider) {
   return {
     input: '你好，voxout。',
     voice: '',
-    responseFormat: provider?.id === 'mimo' ? 'wav' : 'mp3',
-    streamFormat: '',
+    response_format: provider?.id === 'mimo' ? 'wav' : 'mp3',
+    stream_format: '',
     speed: '1',
   }
 }
@@ -1103,16 +1103,16 @@ function defaultSpeechForm(provider) {
 function defaultEffectForm() {
   return {
     input: 'a short cinematic whoosh',
-    durationSeconds: '1.5',
-    promptInfluence: '0.3',
-    responseFormat: 'mp3_44100_128',
+    duration_seconds: '1.5',
+    prompt_influence: '0.3',
+    response_format: 'mp3_44100_128',
     loop: false,
   }
 }
 
 function defaultIsolationForm() {
   return {
-    fileFormat: 'other',
+    file_format: 'other',
   }
 }
 
@@ -1122,7 +1122,7 @@ function defaultDesignForm() {
     name: '',
     text: '',
     model: '',
-    responseFormat: 'mp3_44100_128',
+    response_format: 'mp3_44100_128',
     autoGenerateText: true,
     guidanceScale: '',
     seed: '',
@@ -1138,9 +1138,9 @@ function defaultCloneForm() {
 
 function defaultTranscriptionForm(provider) {
   return {
-    model: getProviderField(provider, 'asrModel') ? provider?.config?.asrModel ?? '' : '',
+    model: getProviderField(provider, 'asr_model') ? provider?.config?.asr_model ?? '' : '',
     language: 'auto',
-    responseFormat: 'json',
+    response_format: 'json',
   }
 }
 

@@ -94,38 +94,39 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
   const context = await getRuntimeConfig(provider.id)
   ensureEnabled(provider.id, context)
   const speechFormat = resolveSpeechResponseFormat(provider.id, typeof body.response_format === 'string' ? body.response_format : undefined)
-  const streamFormat = normalizeSpeechStreamFormat(body.stream_format)
-  if (streamFormat && speechFormat.conversion) {
-    throw new Error(`response_format "${speechFormat.responseFormat}" requires buffered conversion and is not supported with stream_format`)
+  const stream_format = normalizeSpeechStreamFormat(body.stream_format)
+  if (stream_format && speechFormat.conversion) {
+    throw new Error(`response_format "${speechFormat.response_format}" requires buffered conversion and is not supported with stream_format`)
   }
   const request = normalizeOpenAiSpeechInput(provider.id, {
     model: target.model,
     input,
     voice: body.voice,
-    outputFormat: speechFormat.providerFormat,
-    streamFormat,
+    output_format: speechFormat.providerFormat,
+    stream_format,
     speed: typeof body.speed === 'number' ? body.speed : undefined,
     instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+    extra_params: normalizeExtraParams(body.extra_params),
   })
   await resolveVoiceForSynthesis(provider.id, request)
-  const timeoutMs = getProviderTimeoutMs(context)
-  if (streamFormat) {
+  const timeout_ms = getProviderTimeoutMs(context)
+  if (stream_format) {
     if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
     const result = await withTimeout(
       provider.streamSynthesize(request, context),
-      timeoutMs,
-      `Speech stream creation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+      timeout_ms,
+      `Speech stream creation timed out after ${timeout_ms}ms for provider ${provider.id}`,
     )
-    sendStream(res, result.stream, streamFormat === 'sse' ? result.mimeType : normalizeSpeechMimeType(speechFormat.responseFormat, result.mimeType))
+    sendStream(res, result.stream, stream_format === 'sse' ? result.mime_type : normalizeSpeechMimeType(speechFormat.response_format, result.mime_type))
     return
   }
   const result = await withTimeout(
     provider.synthesize(request, context),
-    timeoutMs,
-    `Speech generation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Speech generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  const output = convertSpeechAudio(result.audio, result.mimeType, speechFormat)
-  sendBinary(res, output.audio, output.mimeType)
+  const output = convertSpeechAudio(result.audio, result.mime_type, speechFormat)
+  sendBinary(res, output.audio, output.mime_type)
 }
 
 async function handleAudioEffect(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
@@ -136,13 +137,13 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
   ensureEnabled(provider.id, context)
 
   const request = normalizeSoundEffectInput(provider.id, body)
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.createSoundEffect(request, context),
-    timeoutMs,
-    `Sound effect generation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Sound effect generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  sendBinary(res, result.audio, result.mimeType)
+  sendBinary(res, result.audio, result.mime_type)
 }
 
 async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -154,13 +155,13 @@ async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): 
   ensureEnabled(provider.id, context)
 
   const request = await normalizeAudioIsolationInput(provider.id, form)
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.isolateAudio(request, context),
-    timeoutMs,
-    `Audio isolation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Audio isolation timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  sendBinary(res, result.audio, result.mimeType)
+  sendBinary(res, result.audio, result.mime_type)
 }
 
 async function handleVoiceDesign(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
@@ -171,11 +172,11 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
   ensureEnabled(provider.id, context)
 
   const request = normalizeVoiceDesignInput(provider.id, body)
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.designVoice(request, context),
-    timeoutMs,
-    `Voice design timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Voice design timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
   const voices = []
   for (const voice of result.voices) {
@@ -199,11 +200,11 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
   ensureEnabled(provider.id, context)
 
   const request = await normalizeVoiceCloneInput(provider.id, form)
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.cloneVoice(request, context),
-    timeoutMs,
-    `Voice cloning timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Voice cloning timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
   const voice = await persistProviderVoice(provider.id, context, result.voice, {
     requestedConsent: request.consent ?? null,
@@ -228,20 +229,21 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
 
   const file = form.files.file
   if (!file) throw new Error('file is required')
-  const responseFormat = normalizeTranscriptionResponseFormat(form.fields.response_format)
-  const providerResponseFormat = normalizeProviderTranscriptionResponseFormat(provider.id, responseFormat)
+  const response_format = normalizeTranscriptionResponseFormat(form.fields.response_format)
+  const providerResponseFormat = normalizeProviderTranscriptionResponseFormat(provider.id, response_format)
   const stream = normalizeBoolean(form.fields.stream)
   const request: TranscribeRequest = {
     model: target.model,
     file: {
       data: file.data,
-      mimeType: normalizeMimeType(file.contentType),
-      fileName: file.fileName,
+      mime_type: normalizeMimeType(file.contentType),
+      file_name: file.fileName,
     },
     language: form.fields.language,
     prompt: form.fields.prompt,
-    responseFormat: providerResponseFormat,
+    response_format: providerResponseFormat,
     stream,
+    extra_params: normalizeExtraParams(form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined),
     format: providerResponseFormat === 'srt'
       ? 'srt'
       : providerResponseFormat === 'vtt'
@@ -253,27 +255,27 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
             : 'txt',
   }
 
-  const timeoutMs = getProviderTimeoutMs(context)
+  const timeout_ms = getProviderTimeoutMs(context)
   if (stream) {
     if (!provider.streamTranscribe) throw new Error(`Provider does not support streaming transcription: ${provider.id}`)
     const result = await withTimeout(
       provider.streamTranscribe(request, context),
-      timeoutMs,
-      `Transcription stream creation timed out after ${timeoutMs}ms for provider ${provider.id}`,
+      timeout_ms,
+      `Transcription stream creation timed out after ${timeout_ms}ms for provider ${provider.id}`,
     )
-    return sendStream(res, result.stream, result.mimeType)
+    return sendStream(res, result.stream, result.mime_type)
   }
 
   const result = await withTimeout(
     provider.transcribe(request, context),
-    timeoutMs,
-    `Transcription timed out after ${timeoutMs}ms for provider ${provider.id}`,
+    timeout_ms,
+    `Transcription timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
   const text = result.text ?? ''
-  if (responseFormat === 'text' || responseFormat === 'srt' || responseFormat === 'vtt') {
-    return sendText(res, formatTranscriptionText(responseFormat, result), transcriptionTextContentType(responseFormat))
+  if (response_format === 'text' || response_format === 'srt' || response_format === 'vtt') {
+    return sendText(res, formatTranscriptionText(response_format, result), transcriptionTextContentType(response_format))
   }
-  if (responseFormat === 'verbose_json' || responseFormat === 'diarized_json') {
+  if (response_format === 'verbose_json' || response_format === 'diarized_json') {
     return sendJson(res, {
       text,
       segments: result.segments,
@@ -287,10 +289,11 @@ function normalizeOpenAiSpeechInput(providerId: string, input: {
   model?: string
   input: string
   voice?: unknown
-  outputFormat?: string
-  streamFormat?: 'audio' | 'sse'
+  output_format?: string
+  stream_format?: 'audio' | 'sse'
   speed?: number
   instructions?: string
+  extra_params?: JsonObject
 }): SynthesizeRequest {
   const voice = typeof input.voice === 'string' ? input.voice : undefined
   return {
@@ -299,10 +302,11 @@ function normalizeOpenAiSpeechInput(providerId: string, input: {
     id: randomUUID(),
     text: input.input,
     voice,
-    outputFormat: input.outputFormat,
-    streamFormat: input.streamFormat,
+    output_format: input.output_format,
+    stream_format: input.stream_format,
     speed: input.speed,
     instructions: input.instructions,
+    extra_params: input.extra_params,
   }
 }
 
@@ -313,11 +317,11 @@ function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnTy
     provider: providerId,
     file: {
       data: file.data,
-      mimeType: normalizeMimeType(file.contentType),
-      fileName: file.fileName,
+      mime_type: normalizeMimeType(file.contentType),
+      file_name: file.fileName,
     },
-    fileFormat: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
-    previewBase64: form.fields.preview_b64,
+    file_format: form.fields.file_format === 'pcm_s16le_16' ? 'pcm_s16le_16' : 'other',
+    preview_b64: form.fields.preview_b64,
   }
 }
 
@@ -329,10 +333,11 @@ function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEff
     provider: providerId,
     model: typeof value.model === 'string' ? value.model : undefined,
     prompt,
-    outputFormat: typeof value.response_format === 'string' ? value.response_format : undefined,
-    durationSeconds: typeof value.duration_seconds === 'number' ? value.duration_seconds : undefined,
-    promptInfluence: typeof value.prompt_influence === 'number' ? value.prompt_influence : undefined,
+    output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
+    duration_seconds: typeof value.duration_seconds === 'number' ? value.duration_seconds : undefined,
+    prompt_influence: typeof value.prompt_influence === 'number' ? value.prompt_influence : undefined,
     loop: typeof value.loop === 'boolean' ? value.loop : undefined,
+    extra_params: normalizeExtraParams(value.extra_params),
   }
 }
 
@@ -345,9 +350,9 @@ function normalizeVoiceDesignInput(providerId: string, input: unknown): VoiceDes
     input: prompt,
     name: typeof value.name === 'string' ? value.name : undefined,
     text: typeof value.text === 'string' ? value.text : undefined,
-    outputFormat: typeof value.response_format === 'string' ? value.response_format : undefined,
+    output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,
-    providerOptions: getProviderOptions(value, ['provider', 'input', 'name', 'text', 'response_format', 'model']),
+    extra_params: normalizeExtraParams(value.extra_params),
   }
 }
 
@@ -359,9 +364,11 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
   return {
     provider: providerId,
     name,
-    audioData: `data:${normalizeMimeType(file.contentType)};base64,${file.data.toString('base64')}`,
-    mimeType: normalizeMimeType(file.contentType),
-    fileName: file.fileName,
+    audio_sample: {
+      data: file.data,
+      mime_type: normalizeMimeType(file.contentType),
+      file_name: file.fileName,
+    },
     consent: form.fields.consent,
   }
 }
@@ -389,20 +396,20 @@ async function persistProviderVoice(
   extraMetadata: Record<string, string | number | boolean | null> = {},
 ): Promise<VoiceRecord> {
   return configStore.upsertVoice({
-    voice_id: voice.voiceId,
+    voice_id: voice.voice_id,
     name: voice.name,
     description: voice.description,
     language: voice.language,
-    preview_mime_type: voice.previewMimeType,
-    preview_audio: voice.previewAudioData,
+    preview_mime_type: voice.preview_mime_type,
+    preview_audio: voice.preview_audio_data,
     metadata: voice.metadata,
     provider_link: {
       provider_id: providerId,
       provider_account_id: getProviderAccountId(context),
-      provider_voice_id: voice.providerVoiceId,
-      provider_voice_key: voice.providerVoiceId ?? voice.voiceId,
-      preview_mime_type: voice.previewMimeType,
-      preview_audio: voice.previewAudioData,
+      provider_voice_id: voice.provider_voice_id,
+      provider_voice_key: voice.provider_voice_id ?? voice.voice_id,
+      preview_mime_type: voice.preview_mime_type,
+      preview_audio: voice.preview_audio_data,
       metadata: {
         ...(voice.metadata ?? {}),
         ...extraMetadata,
@@ -412,7 +419,7 @@ async function persistProviderVoice(
 }
 
 function getProviderAccountId(context: ProviderRuntimeConfig): string {
-  const value = context.config.accountId ?? context.config.accountName
+  const value = context.config.account_id ?? context.config.account_name
   return typeof value === 'string' && value.trim() ? value.trim() : 'default'
 }
 
@@ -440,21 +447,32 @@ function getRequiredProvider(provider: unknown): string {
   return providerId
 }
 
-function getProviderOptions(value: Record<string, unknown>, reservedKeys: string[]): JsonObject {
-  const reserved = new Set(reservedKeys)
-  const options: JsonObject = {}
-  for (const [key, item] of Object.entries(value)) {
-    if (reserved.has(key) || !isJsonValue(item)) continue
-    options[key] = item
-  }
-  return options
-}
-
 function isJsonValue(value: unknown): value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true
   if (Array.isArray(value)) return value.every(isJsonValue)
   if (typeof value === 'object') return Object.values(value as Record<string, unknown>).every(isJsonValue)
   return false
+}
+
+function normalizeExtraParams(value: unknown): JsonObject | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'object' || Array.isArray(value) || !isJsonValue(value)) {
+    throw new Error('extra_params must be a JSON object')
+  }
+  return value as JsonObject
+}
+
+function parseJsonObjectField(value: string, fieldName: string): JsonObject {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || !isJsonValue(parsed)) {
+      throw new Error(`${fieldName} must be a JSON object`)
+    }
+    return parsed as JsonObject
+  } catch (error) {
+    if (error instanceof Error && error.message === `${fieldName} must be a JSON object`) throw error
+    throw new Error(`${fieldName} must be valid JSON`)
+  }
 }
 
 function resolveOpenAiSpeechTarget(model: unknown, provider: unknown): { providerId: string, model?: string } {
@@ -507,8 +525,8 @@ function hasAsrProvider(id: string): boolean {
   }
 }
 
-function normalizeSpeechMimeType(responseFormat: string | undefined, providerMimeType: string): string {
-  const format = responseFormat?.toLowerCase()
+function normalizeSpeechMimeType(response_format: string | undefined, providerMimeType: string): string {
+  const format = response_format?.toLowerCase()
   if (format === 'mp3') return 'audio/mpeg'
   if (format === 'wav') return 'audio/wav'
   if (format === 'pcm') return 'audio/pcm'
@@ -517,37 +535,37 @@ function normalizeSpeechMimeType(responseFormat: string | undefined, providerMim
 
 function resolveSpeechResponseFormat(providerId: string, value: string | undefined): {
   providerFormat?: string
-  responseFormat?: string
+  response_format?: string
   conversion?: 'pcm-to-wav' | 'wav-to-pcm'
   sampleRate?: number
 } {
   const format = value?.toLowerCase().trim()
   if (!format) return {}
   if (providerId === 'openai') {
-    if (isOpenAiSpeechResponseFormat(format)) return { providerFormat: format, responseFormat: format }
+    if (isOpenAiSpeechResponseFormat(format)) return { providerFormat: format, response_format: format }
     throw new Error(`Unsupported response_format for OpenAI speech: ${format}`)
   }
   if (providerId === 'elevenlabs') {
     if (format.startsWith('mp3_') || format.startsWith('pcm_') || format.startsWith('ulaw_')) return { providerFormat: format }
-    if (format === 'mp3') return { providerFormat: 'mp3_44100_128', responseFormat: 'mp3' }
-    if (format === 'pcm') return { providerFormat: 'pcm_44100', responseFormat: 'pcm' }
-    if (format === 'wav') return { providerFormat: 'pcm_44100', responseFormat: 'wav', conversion: 'pcm-to-wav', sampleRate: 44100 }
+    if (format === 'mp3') return { providerFormat: 'mp3_44100_128', response_format: 'mp3' }
+    if (format === 'pcm') return { providerFormat: 'pcm_44100', response_format: 'pcm' }
+    if (format === 'wav') return { providerFormat: 'pcm_44100', response_format: 'wav', conversion: 'pcm-to-wav', sampleRate: 44100 }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'gradium') {
-    if (format === 'opus' || format === 'wav' || format === 'pcm') return { providerFormat: format, responseFormat: format }
+    if (format === 'opus' || format === 'wav' || format === 'pcm') return { providerFormat: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'mock') {
-    if (format === 'wav') return { providerFormat: 'wav', responseFormat: 'wav' }
-    if (format === 'pcm') return { providerFormat: 'wav', responseFormat: 'pcm', conversion: 'wav-to-pcm' }
+    if (format === 'wav') return { providerFormat: 'wav', response_format: 'wav' }
+    if (format === 'pcm') return { providerFormat: 'wav', response_format: 'pcm', conversion: 'wav-to-pcm' }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   if (providerId === 'cartesia' || providerId === 'mimo' || providerId === 'default') {
-    if (format === 'wav' || format === 'pcm' || format === 'mp3') return { providerFormat: format, responseFormat: format }
+    if (format === 'wav' || format === 'pcm' || format === 'mp3') return { providerFormat: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
-  return { providerFormat: format, responseFormat: format }
+  return { providerFormat: format, response_format: format }
 }
 
 function isOpenAiSpeechResponseFormat(format: string): boolean {
@@ -557,23 +575,23 @@ function isOpenAiSpeechResponseFormat(format: string): boolean {
 function convertSpeechAudio(
   audio: Buffer,
   providerMimeType: string,
-  format: { responseFormat?: string, conversion?: 'pcm-to-wav' | 'wav-to-pcm', sampleRate?: number },
-): { audio: Buffer, mimeType: string } {
+  format: { response_format?: string, conversion?: 'pcm-to-wav' | 'wav-to-pcm', sampleRate?: number },
+): { audio: Buffer, mime_type: string } {
   if (format.conversion === 'pcm-to-wav') {
     return {
       audio: wrapPcmAsWav(audio, format.sampleRate ?? 44100),
-      mimeType: 'audio/wav',
+      mime_type: 'audio/wav',
     }
   }
   if (format.conversion === 'wav-to-pcm') {
     return {
       audio: extractWavData(audio),
-      mimeType: 'audio/pcm',
+      mime_type: 'audio/pcm',
     }
   }
   return {
     audio,
-    mimeType: normalizeSpeechMimeType(format.responseFormat, providerMimeType),
+    mime_type: normalizeSpeechMimeType(format.response_format, providerMimeType),
   }
 }
 
@@ -628,11 +646,11 @@ function normalizeTranscriptionResponseFormat(value: string | undefined): 'json'
 
 function normalizeProviderTranscriptionResponseFormat(
   providerId: string,
-  responseFormat: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
+  response_format: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
 ): 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json' {
-  if (providerId === 'openai') return responseFormat
-  if (responseFormat === 'srt' || responseFormat === 'vtt' || responseFormat === 'verbose_json' || responseFormat === 'diarized_json') return 'verbose_json'
-  return responseFormat
+  if (providerId === 'openai') return response_format
+  if (response_format === 'srt' || response_format === 'vtt' || response_format === 'verbose_json' || response_format === 'diarized_json') return 'verbose_json'
+  return response_format
 }
 
 function transcriptionTextContentType(format: 'text' | 'srt' | 'vtt'): string {

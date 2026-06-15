@@ -26,16 +26,16 @@ test('Gradium provider sends text-to-speech requests', async () => {
   const provider = new GradiumProvider()
   const result = await provider.synthesize({
     voice: 'gradium-voice-1',
-    outputFormat: 'pcm_16000',
+    output_format: 'pcm_16000',
     id: 'tts',
     text: 'Hello from Gradium.',
   }, {
     config: {},
-    secrets: { apiKey: 'test-gradium-key' },
+    secrets: { api_key: 'test-gradium-key' },
   })
 
   assert.equal(result.audio.length, 256)
-  assert.equal(result.mimeType, 'audio/wav')
+  assert.equal(result.mime_type, 'audio/wav')
   assert.equal(captured.url, 'https://api.gradium.ai/api/post/speech/tts')
   assert.equal(captured.headers['x-api-key'], 'test-gradium-key')
   assert.deepEqual(captured.body, {
@@ -69,18 +69,18 @@ test('Gradium provider streams text-to-speech audio over WebSocket', async () =>
     const provider = new GradiumProvider()
     const result = await provider.streamSynthesize({
       voice: 'gradium-voice-1',
-      outputFormat: 'pcm',
+      output_format: 'pcm',
       id: 'tts-stream',
       text: 'Stream from Gradium.',
     }, {
       config: {
-        wsUrl: `ws://127.0.0.1:${address.port}/api`,
+        ws_url: `ws://127.0.0.1:${address.port}/api`,
       },
-      secrets: { apiKey: 'test-gradium-key' },
+      secrets: { api_key: 'test-gradium-key' },
     })
 
     const streamedAudio = await readStreamBuffer(result.stream)
-    assert.equal(result.mimeType, 'audio/pcm')
+    assert.equal(result.mime_type, 'audio/pcm')
     assert.equal(streamedAudio.length, 256)
     assert.equal(streamedAudio[0], 3)
     assert.deepEqual(received[0], {
@@ -119,14 +119,14 @@ test('Gradium provider sends speech-to-text requests', async () => {
     model: 'fast-asr',
     file: {
       data: Buffer.alloc(256, 1),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
     language: 'en-US',
     format: 'raw',
   }, {
     config: {},
-    secrets: { apiKey: 'test-gradium-key' },
+    secrets: { api_key: 'test-gradium-key' },
   })
 
   const url = new URL(captured.url)
@@ -182,14 +182,18 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
     name: 'Narrator',
     description: 'Calm narrator',
     language: 'en-US',
-    audioData: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
+    audio_sample: {
+      data: Buffer.alloc(256, 1),
+      mime_type: 'audio/wav',
+      file_name: 'voice.wav',
+    },
   }, {
-    config: { cloneTimeoutSeconds: 12 },
-    secrets: { apiKey: 'test-gradium-key' },
+    config: { clone_timeout_seconds: 12 },
+    secrets: { api_key: 'test-gradium-key' },
   })
   const voices = await provider.listVoices({
     config: {},
-    secrets: { apiKey: 'test-gradium-key' },
+    secrets: { api_key: 'test-gradium-key' },
   })
 
   const cloneCapture = captures[0]
@@ -199,8 +203,8 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
   assert.equal(cloneCapture.init.body.get('language'), 'en')
   assert.equal(cloneCapture.init.body.get('input_format'), 'wav')
   assert.equal(cloneCapture.init.body.get('timeout_s'), '12')
-  assert.equal(clone.voice.voiceId, 'gradium-clone-1')
-  assert.equal(clone.voice.providerVoiceId, 'gradium-clone-1')
+  assert.equal(clone.voice.voice_id, 'gradium-clone-1')
+  assert.equal(clone.voice.provider_voice_id, 'gradium-clone-1')
   assert.equal(captures[1].url, 'https://api.gradium.ai/api/voices/?skip=0&limit=100&include_catalog=true')
   assert.equal(captures[2].url, 'https://api.gradium.ai/api/voices/?skip=100&limit=100&include_catalog=true')
   assert.deepEqual(voices[0], {
@@ -208,7 +212,7 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
     name: 'Catalog Voice',
     locale: 'en',
     provider: 'gradium',
-    capabilities: { tts: true, ttsStreaming: true, voiceClone: false },
+    capabilities: { tts: true, tts_streaming: true, voice_clone: false },
   })
   assert.equal(voices.length, 101)
   assert.deepEqual(voices[100], {
@@ -216,7 +220,7 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
     name: 'Second Page Voice',
     locale: 'zh',
     provider: 'gradium',
-    capabilities: { tts: true, ttsStreaming: true, voiceClone: false },
+    capabilities: { tts: true, tts_streaming: true, voice_clone: false },
   })
 })
 
@@ -225,11 +229,11 @@ test('Gradium provider exposes metadata', async () => {
   const gradium = providers.find(item => item.id === 'gradium')
   assert.equal(gradium.name, 'Gradium')
   assert.equal(gradium.capabilities.tts, true)
-  assert.equal(gradium.capabilities.ttsStreaming, true)
+  assert.equal(gradium.capabilities.tts_streaming, true)
   assert.equal(gradium.capabilities.asr, true)
-  assert.equal(gradium.capabilities.voiceClone, true)
-  assert.ok(gradium.fields.find(field => field.key === 'ttsModel').options.includes('default'))
-  assert.ok(gradium.fields.find(field => field.key === 'asrModel').options.includes('default'))
+  assert.equal(gradium.capabilities.voice_clone, true)
+  assert.ok(gradium.fields.find(field => field.key === 'tts_model').options.includes('default'))
+  assert.ok(gradium.fields.find(field => field.key === 'asr_model').options.includes('default'))
 })
 
 async function readStreamBuffer(stream) {

@@ -8,7 +8,7 @@ import { createServer } from 'node:net'
 import { after, before, test } from 'node:test'
 
 let serverProcess
-let baseUrl
+let base_url
 let audioDir
 let serverStdout = ''
 let serverStderr = ''
@@ -16,7 +16,7 @@ let serverStderr = ''
 before(async () => {
   const port = await getFreePort()
   audioDir = await mkdtemp(join(tmpdir(), 'voxout-openai-'))
-  baseUrl = `http://127.0.0.1:${port}`
+  base_url = `http://127.0.0.1:${port}`
   serverProcess = spawn(process.execPath, ['dist/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
@@ -46,7 +46,7 @@ after(async () => {
 })
 
 test('GET /v1/models returns OpenAI-style model objects', async () => {
-  const response = await fetch(`${baseUrl}/v1/models`)
+  const response = await fetch(`${base_url}/v1/models`)
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -56,15 +56,15 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(mimo.owned_by, 'voxout')
   assert.equal(mimo.capabilities.tts, true)
   assert.equal(mimo.capabilities.asr, true)
-  assert.equal(mimo.capabilities.asrStreaming, true)
+  assert.equal(mimo.capabilities.asr_streaming, true)
   const openai = payload.data.find(model => model.id === 'openai')
   assert.equal(openai.capabilities.tts, true)
   assert.equal(openai.capabilities.asr, true)
-  assert.equal(openai.capabilities.asrStreaming, true)
-  assert.equal(openai.capabilities.voiceClone, true)
+  assert.equal(openai.capabilities.asr_streaming, true)
+  assert.equal(openai.capabilities.voice_clone, true)
   const defaultProvider = payload.data.find(model => model.id === 'default')
   assert.equal(defaultProvider.capabilities.tts, true)
-  assert.equal(defaultProvider.capabilities.ttsStreaming, true)
+  assert.equal(defaultProvider.capabilities.tts_streaming, true)
   assert.equal(defaultProvider.capabilities.asr, undefined)
   const modelIds = payload.data.map(model => model.id)
   assert.ok(!modelIds.includes('edge'))
@@ -74,7 +74,7 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
 })
 
 test('GET /api/providers does not expose internal test providers', async () => {
-  const response = await fetch(`${baseUrl}/api/providers`)
+  const response = await fetch(`${base_url}/api/providers`)
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -84,7 +84,7 @@ test('GET /api/providers does not expose internal test providers', async () => {
 })
 
 test('GET /api/providers/:id/voices returns provider voices', async () => {
-  const response = await fetch(`${baseUrl}/api/providers/default/voices`)
+  const response = await fetch(`${base_url}/api/providers/default/voices`)
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -93,7 +93,7 @@ test('GET /api/providers/:id/voices returns provider voices', async () => {
 })
 
 test('POST /v1/audio/speech returns generated audio bytes', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -112,7 +112,7 @@ test('POST /v1/audio/speech returns generated audio bytes', async () => {
 })
 
 test('POST /v1/audio/speech accepts provider extension with OpenAI-style model', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -133,7 +133,7 @@ test('POST /v1/audio/speech accepts provider extension with OpenAI-style model',
 })
 
 test('POST /v1/audio/speech treats OpenAI speech models as models, not providers', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -145,11 +145,11 @@ test('POST /v1/audio/speech treats OpenAI speech models as models, not providers
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /openai apiKey is required/)
+  assert.match(payload.error, /openai api_key is required/)
 })
 
 test('POST /v1/audio/speech streams generated audio bytes', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -169,7 +169,7 @@ test('POST /v1/audio/speech streams generated audio bytes', async () => {
 })
 
 test('POST /v1/audio/speech streams SSE events', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -189,7 +189,7 @@ test('POST /v1/audio/speech streams SSE events', async () => {
 })
 
 test('POST /v1/audio/speech converts WAV provider output to PCM', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -208,7 +208,7 @@ test('POST /v1/audio/speech converts WAV provider output to PCM', async () => {
 })
 
 test('POST /v1/audio/speech rejects unsupported provider response formats', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/speech`, {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -225,7 +225,7 @@ test('POST /v1/audio/speech rejects unsupported provider response formats', asyn
 })
 
 test('POST /v1/audio/effect returns generated audio bytes', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/effect`, {
+  const response = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -245,7 +245,7 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
 })
 
 test('POST /v1/audio/effect requires provider and OpenAI-style field names', async () => {
-  const legacyProviderResponse = await fetch(`${baseUrl}/v1/audio/effect`, {
+  const legacyProviderResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -256,7 +256,7 @@ test('POST /v1/audio/effect requires provider and OpenAI-style field names', asy
   })
   assert.equal(legacyProviderResponse.status, 400)
 
-  const legacyInputResponse = await fetch(`${baseUrl}/v1/audio/effect`, {
+  const legacyInputResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -273,7 +273,7 @@ test('POST /v1/audio/isolation returns processed audio bytes', async () => {
   form.set('model', 'mock')
   form.set('file', new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/isolation`, {
+  const response = await fetch(`${base_url}/v1/audio/isolation`, {
     method: 'POST',
     body: form,
   })
@@ -302,13 +302,13 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
       const form = new FormData()
       form.set('model', 'mock')
       form.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
-      form.set('mimeType', 'audio/wav')
+      form.set('mime_type', 'audio/wav')
       return form
     })(),
   ]
 
   for (const form of legacyForms) {
-    const response = await fetch(`${baseUrl}/v1/audio/isolation`, {
+    const response = await fetch(`${base_url}/v1/audio/isolation`, {
       method: 'POST',
       body: form,
     })
@@ -320,7 +320,7 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
 })
 
 test('POST /v1/audio/design persists generated voices', async () => {
-  const response = await fetch(`${baseUrl}/v1/audio/design`, {
+  const response = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -340,14 +340,14 @@ test('POST /v1/audio/design persists generated voices', async () => {
   assert.equal(payload.voices[0].provider_links[0].provider, 'mock')
   assert.equal(payload.voices[0].provider_links[0].provider_voice_key, payload.voices[0].voice_id)
 
-  const voicesResponse = await fetch(`${baseUrl}/api/voices?provider=mock`)
+  const voicesResponse = await fetch(`${base_url}/api/voices?provider=mock`)
   const voicesPayload = await voicesResponse.json()
   assert.equal(voicesResponse.status, 200)
   assert.ok(voicesPayload.voices.some(voice => voice.voice_id === payload.voices[0].voice_id))
 })
 
 test('POST /v1/audio/design requires provider and input fields', async () => {
-  const legacyProviderResponse = await fetch(`${baseUrl}/v1/audio/design`, {
+  const legacyProviderResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -358,7 +358,7 @@ test('POST /v1/audio/design requires provider and input fields', async () => {
   })
   assert.equal(legacyProviderResponse.status, 400)
 
-  const legacyInputResponse = await fetch(`${baseUrl}/v1/audio/design`, {
+  const legacyInputResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -376,7 +376,7 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   form.set('name', 'Uploaded Mock')
   form.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/voices`, {
+  const response = await fetch(`${base_url}/v1/audio/voices`, {
     method: 'POST',
     body: form,
   })
@@ -390,7 +390,7 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   assert.equal(payload.provider, undefined)
   assert.equal(payload.voice, undefined)
 
-  const voicesResponse = await fetch(`${baseUrl}/api/voices?provider=mock`)
+  const voicesResponse = await fetch(`${base_url}/api/voices?provider=mock`)
   const voicesPayload = await voicesResponse.json()
   assert.equal(voicesResponse.status, 200)
   assert.ok(voicesPayload.voices.some(voice => voice.voice_id === payload.id))
@@ -401,20 +401,20 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   legacyProvider.set('model', 'mock')
   legacyProvider.set('name', 'Legacy Provider')
   legacyProvider.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
-  const legacyProviderResponse = await fetch(`${baseUrl}/v1/audio/voices`, {
+  const legacyProviderResponse = await fetch(`${base_url}/v1/audio/voices`, {
     method: 'POST',
     body: legacyProvider,
   })
   const legacyProviderPayload = await legacyProviderResponse.json()
   assert.equal(legacyProviderResponse.status, 400)
-  assert.match(legacyProviderPayload.error, /Provider is disabled: openai|openai apiKey is required|Unknown provider/)
+  assert.match(legacyProviderPayload.error, /Provider is disabled: openai|openai api_key is required|Unknown provider/)
 
   for (const field of ['file', 'audio']) {
     const form = new FormData()
     form.set('provider', 'mock')
     form.set('name', `Legacy ${field}`)
     form.set(field, new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
-    const response = await fetch(`${baseUrl}/v1/audio/voices`, {
+    const response = await fetch(`${base_url}/v1/audio/voices`, {
       method: 'POST',
       body: form,
     })
@@ -427,7 +427,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   urlForm.set('provider', 'mock')
   urlForm.set('name', 'Legacy URL')
   urlForm.set('url', 'https://example.com/sample.wav')
-  const urlResponse = await fetch(`${baseUrl}/v1/audio/voices`, {
+  const urlResponse = await fetch(`${base_url}/v1/audio/voices`, {
     method: 'POST',
     body: urlForm,
   })
@@ -439,7 +439,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   audioDataForm.set('provider', 'mock')
   audioDataForm.set('name', 'Legacy Audio Data')
   audioDataForm.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
-  const audioDataResponse = await fetch(`${baseUrl}/v1/audio/voices`, {
+  const audioDataResponse = await fetch(`${base_url}/v1/audio/voices`, {
     method: 'POST',
     body: audioDataForm,
   })
@@ -455,7 +455,7 @@ test('POST /v1/audio/transcriptions accepts multipart file uploads', async () =>
   form.set('response_format', 'json')
   form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
     method: 'POST',
     body: form,
   })
@@ -474,7 +474,7 @@ test('POST /v1/audio/transcriptions only accepts multipart file input', async ()
       ? 'https://example.com/audio.wav'
       : `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
 
-    const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+    const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
       method: 'POST',
       body: form,
     })
@@ -486,13 +486,13 @@ test('POST /v1/audio/transcriptions only accepts multipart file input', async ()
 })
 
 test('POST /v1/audio/transcriptions ignores legacy model aliases', async () => {
-  for (const field of ['model_id', 'asr_model', 'asrModel']) {
+  for (const field of ['model_id', 'asr_model']) {
     const form = new FormData()
     form.set(field, 'gpt-4o-transcribe')
     form.set('response_format', 'json')
     form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-    const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+    const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
       method: 'POST',
       body: form,
     })
@@ -510,7 +510,7 @@ test('POST /v1/audio/transcriptions supports text response format', async () => 
   form.set('response_format', 'text')
   form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
     method: 'POST',
     body: form,
   })
@@ -528,7 +528,7 @@ test('POST /v1/audio/transcriptions rejects unsupported streaming providers', as
   form.set('stream', 'true')
   form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
     method: 'POST',
     body: form,
   })
@@ -545,7 +545,7 @@ test('POST /v1/audio/transcriptions converts provider segments to VTT', async ()
   form.set('response_format', 'vtt')
   form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
     method: 'POST',
     body: form,
   })
@@ -563,14 +563,14 @@ test('POST /v1/audio/transcriptions treats OpenAI ASR models as models, not prov
   form.set('model', 'gpt-4o-transcribe')
   form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
 
-  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
     method: 'POST',
     body: form,
   })
   const payload = await response.json()
 
   assert.equal(response.status, 400)
-  assert.match(payload.error, /openai apiKey is required/)
+  assert.match(payload.error, /openai api_key is required/)
 })
 
 function waitForServer(child) {

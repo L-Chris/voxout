@@ -56,17 +56,17 @@ test('Mimo provider streams preset voice synthesis audio chunks', async () => {
   const provider = new MimoTtsProvider()
   const result = await provider.streamSynthesize({
     voice: 'Chloe',
-    outputFormat: 'pcm',
-    streamFormat: 'audio',
+    output_format: 'pcm',
+    stream_format: 'audio',
     id: 'preset-stream',
     text: '你好，voxout。',
   }, {
     config: {},
-    secrets: { apiKey: 'test-key' },
+    secrets: { api_key: 'test-key' },
   })
 
   const streamedAudio = await readStreamBuffer(result.stream)
-  assert.equal(result.mimeType, 'audio/pcm')
+  assert.equal(result.mime_type, 'audio/pcm')
   assert.equal(streamedAudio.length, 256)
   assert.equal(streamedAudio[0], 2)
   assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
@@ -108,14 +108,14 @@ test('Mimo provider designs a reusable voice preview', async () => {
     name: '冷静男声',
   }, {
     config: {},
-    secrets: { apiKey: 'test-key' },
+    secrets: { api_key: 'test-key' },
   })
 
   assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
   assert.equal(captured.body.model, 'mimo-v2.5-tts-voicedesign')
   assert.equal(result.voices[0].name, '冷静男声')
-  assert.match(result.voices[0].voiceId, /^mimo_/)
-  assert.match(result.voices[0].previewAudioData, /^data:audio\/wav;base64,/)
+  assert.match(result.voices[0].voice_id, /^mimo_/)
+  assert.match(result.voices[0].preview_audio_data, /^data:audio\/wav;base64,/)
 })
 
 test('Mimo provider uses voice data URLs with the voice clone model', async () => {
@@ -135,36 +135,39 @@ test('Mimo provider clones a local audio sample without provider voice id', asyn
   const provider = new MimoTtsProvider()
   const result = await provider.cloneVoice({
     name: 'Local sample',
-    audioData: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
-    mimeType: 'audio/wav',
+    audio_sample: {
+      data: Buffer.alloc(256, 1),
+      mime_type: 'audio/wav',
+      file_name: 'voice.wav',
+    },
   })
 
   assert.equal(result.provider, 'mimo')
-  assert.match(result.voice.voiceId, /^mimo_/)
-  assert.equal(result.voice.providerVoiceId, undefined)
-  assert.match(result.voice.previewAudioData, /^data:audio\/wav;base64,/)
+  assert.match(result.voice.voice_id, /^mimo_/)
+  assert.equal(result.voice.provider_voice_id, undefined)
+  assert.match(result.voice.preview_audio_data, /^data:audio\/wav;base64,/)
   assert.equal(result.voice.metadata.provider_voice_id, null)
 })
 
 test('Mimo provider exposes voice design capability metadata', async () => {
   const provider = new MimoTtsProvider()
   const voices = await provider.listVoices()
-  assert.equal(provider.capabilities.voiceDesign, true)
-  assert.equal(provider.capabilities.voiceClone, true)
+  assert.equal(provider.capabilities.voice_design, true)
+  assert.equal(provider.capabilities.voice_clone, true)
   assert.equal(provider.capabilities.asr, true)
-  assert.equal(provider.capabilities.asrStreaming, true)
+  assert.equal(provider.capabilities.asr_streaming, true)
   assert.ok(voices.length > 0)
   assert.equal(voices.find(voice => voice.id === 'mimo_default').gender, 'Female')
-  assert.equal(voices[0].capabilities.voiceDesign, true)
+  assert.equal(voices[0].capabilities.voice_design, true)
 
   const providers = listProviderDefinitions()
   const mimoProviders = providers.filter(item => item.id === 'mimo')
   assert.equal(mimoProviders.length, 1)
   const [mimo] = mimoProviders
-  assert.equal(mimo.capabilities.voiceDesign, true)
-  assert.equal(mimo.capabilities.voiceClone, true)
+  assert.equal(mimo.capabilities.voice_design, true)
+  assert.equal(mimo.capabilities.voice_clone, true)
   assert.equal(mimo.capabilities.asr, true)
-  assert.equal(mimo.capabilities.asrStreaming, true)
+  assert.equal(mimo.capabilities.asr_streaming, true)
 })
 
 test('Mimo provider sends speech recognition requests', async () => {
@@ -194,14 +197,14 @@ test('Mimo provider sends speech recognition requests', async () => {
     model: 'mimo-custom-asr',
     file: {
       data: Buffer.from('audio'),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
     language: 'zh',
     format: 'raw',
   }, {
     config: {},
-    secrets: { apiKey: 'test-key' },
+    secrets: { api_key: 'test-key' },
   })
 
   assert.equal(captured.length, 1)
@@ -253,18 +256,18 @@ test('Mimo provider streams speech recognition as OpenAI transcription events', 
     model: 'mimo-v2.5-asr',
     file: {
       data: Buffer.from('audio'),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
     language: 'auto',
     stream: true,
   }, {
     config: {},
-    secrets: { apiKey: 'test-key' },
+    secrets: { api_key: 'test-key' },
   })
 
   const streamText = await readStreamText(result.stream)
-  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(result.mime_type, 'text/event-stream')
   assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
   assert.equal(captured.headers['api-key'], 'test-key')
   assert.equal(captured.body.stream, true)
@@ -302,10 +305,10 @@ async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = 
   const provider = new MimoTtsProvider()
   const result = await provider.synthesize(providerRequest, {
     config: {},
-    secrets: { apiKey: 'test-key' },
+    secrets: { api_key: 'test-key' },
   })
   assert.equal(result.audio.length, 256)
-  assert.equal(result.mimeType, providerRequest.outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav')
+  assert.equal(result.mime_type, providerRequest.output_format === 'mp3' ? 'audio/mpeg' : 'audio/wav')
   return returnAllCaptures ? captures : captures[0]
 }
 

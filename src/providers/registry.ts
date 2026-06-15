@@ -18,8 +18,8 @@ import type {
 } from '../types.js'
 
 const COMMON_PROVIDER_FIELDS: ProviderFieldDefinition[] = [
-  { key: 'accountId', label: 'Provider Account ID', type: 'text', placeholder: 'default' },
-  { key: 'timeoutMs', label: 'Timeout (ms)', type: 'number', placeholder: '45000' },
+  { key: 'account_id', label: 'Provider Account ID', type: 'text', placeholder: 'default' },
+  { key: 'timeout_ms', label: 'Timeout (ms)', type: 'number', placeholder: '45000' },
 ]
 const INTERNAL_PROVIDER_IDS = new Set(['mock', 'mock-asr'])
 

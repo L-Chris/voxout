@@ -25,18 +25,18 @@ test('Cartesia provider sends text-to-speech requests', async () => {
   const provider = new CartesiaProvider()
   const result = await provider.synthesize({
     voice: 'cartesia-voice-1',
-    outputFormat: 'mp3',
+    output_format: 'mp3',
     lang: 'en-US',
     speed: 1.1,
     id: 'tts',
     text: 'Hello from Cartesia.',
   }, {
-    config: { ttsModel: 'sonic-3.5' },
-    secrets: { apiKey: 'test-cartesia-key' },
+    config: { tts_model: 'sonic-3.5' },
+    secrets: { api_key: 'test-cartesia-key' },
   })
 
   assert.equal(result.audio.length, 256)
-  assert.equal(result.mimeType, 'audio/mpeg')
+  assert.equal(result.mime_type, 'audio/mpeg')
   assert.equal(captured.url, 'https://api.cartesia.ai/tts/bytes')
   assert.equal(captured.headers.authorization, 'Bearer test-cartesia-key')
   assert.equal(captured.headers['Cartesia-Version'], '2026-03-01')
@@ -67,17 +67,17 @@ test('Cartesia provider decodes SSE text-to-speech audio streams', async () => {
 
   const provider = new CartesiaProvider()
   const result = await provider.streamSynthesize({
-    outputFormat: 'wav',
-    streamFormat: 'audio',
+    output_format: 'wav',
+    stream_format: 'audio',
     id: 'tts-stream',
     text: 'Stream from Cartesia.',
   }, {
     config: {},
-    secrets: { apiKey: 'test-cartesia-key' },
+    secrets: { api_key: 'test-cartesia-key' },
   })
 
   const streamedAudio = await readStreamBuffer(result.stream)
-  assert.equal(result.mimeType, 'audio/wav')
+  assert.equal(result.mime_type, 'audio/wav')
   assert.equal(streamedAudio.length, 256)
   assert.equal(streamedAudio[0], 2)
   assert.equal(captured.url, 'https://api.cartesia.ai/tts/sse')
@@ -109,14 +109,14 @@ test('Cartesia provider sends speech-to-text requests', async () => {
     model: 'ink-whisper',
     file: {
       data: Buffer.alloc(256, 1),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
     language: 'en-US',
     format: 'raw',
   }, {
     config: {},
-    secrets: { apiKey: 'test-cartesia-key' },
+    secrets: { api_key: 'test-cartesia-key' },
   })
 
   assert.equal(captured.url, 'https://api.cartesia.ai/stt')
@@ -179,14 +179,18 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
     name: 'Narrator',
     description: 'Calm narrator',
     language: 'en-US',
-    audioData: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
+    audio_sample: {
+      data: Buffer.alloc(256, 1),
+      mime_type: 'audio/wav',
+      file_name: 'voice.wav',
+    },
   }, {
     config: {},
-    secrets: { apiKey: 'test-cartesia-key' },
+    secrets: { api_key: 'test-cartesia-key' },
   })
   const voices = await provider.listVoices({
     config: {},
-    secrets: { apiKey: 'test-cartesia-key' },
+    secrets: { api_key: 'test-cartesia-key' },
   })
 
   const cloneCapture = captures[0]
@@ -194,8 +198,8 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
   assert.equal(cloneCapture.init.body.get('name'), 'Narrator')
   assert.equal(cloneCapture.init.body.get('language'), 'en')
   assert.equal(cloneCapture.init.body.get('clip').type, 'audio/wav')
-  assert.equal(clone.voice.voiceId, 'cartesia-clone-1')
-  assert.equal(clone.voice.providerVoiceId, 'cartesia-clone-1')
+  assert.equal(clone.voice.voice_id, 'cartesia-clone-1')
+  assert.equal(clone.voice.provider_voice_id, 'cartesia-clone-1')
   assert.equal(captures[1].url, 'https://api.cartesia.ai/voices?limit=100')
   assert.equal(captures[2].url, 'https://api.cartesia.ai/voices?limit=100&starting_after=cartesia-page-2')
   assert.deepEqual(voices[0], {
@@ -219,11 +223,11 @@ test('Cartesia provider exposes metadata', async () => {
   const cartesia = providers.find(item => item.id === 'cartesia')
   assert.equal(cartesia.name, 'Cartesia')
   assert.equal(cartesia.capabilities.tts, true)
-  assert.equal(cartesia.capabilities.ttsStreaming, true)
+  assert.equal(cartesia.capabilities.tts_streaming, true)
   assert.equal(cartesia.capabilities.asr, true)
-  assert.equal(cartesia.capabilities.voiceClone, true)
-  assert.ok(cartesia.fields.find(field => field.key === 'ttsModel').options.includes('sonic-3.5'))
-  assert.ok(cartesia.fields.find(field => field.key === 'asrModel').options.includes('ink-whisper'))
+  assert.equal(cartesia.capabilities.voice_clone, true)
+  assert.ok(cartesia.fields.find(field => field.key === 'tts_model').options.includes('sonic-3.5'))
+  assert.ok(cartesia.fields.find(field => field.key === 'asr_model').options.includes('ink-whisper'))
 })
 
 async function readStreamBuffer(stream) {

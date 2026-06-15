@@ -146,7 +146,7 @@ curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
 ```bash
 curl -X PUT http://127.0.0.1:4177/api/providers/mimo/config \
   -H 'content-type: application/json' \
-  --data '{"enabled":true,"config":{"baseUrl":"https://api.xiaomimimo.com/v1"},"secrets":{"apiKey":"..."} }'
+  --data '{"enabled":true,"config":{"base_url":"https://api.xiaomimimo.com/v1"},"secrets":{"api_key":"..."} }'
 ```
 
 The web console at `/` provides the same configuration and invocation workflow.

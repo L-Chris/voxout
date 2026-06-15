@@ -26,17 +26,20 @@ test('OpenAI provider sends text-to-speech requests', async () => {
   const result = await provider.synthesize({
     model: 'tts-1-hd',
     voice: 'voice_custom_1',
-    outputFormat: 'mp3',
+    output_format: 'mp3',
     instructions: 'Speak with a warm narration style.',
+    extra_params: {
+      seed: 42,
+    },
     id: 'tts',
     text: 'Hello from OpenAI.',
   }, {
-    config: { ttsModel: 'gpt-4o-mini-tts' },
-    secrets: { apiKey: 'test-openai-key' },
+    config: { tts_model: 'gpt-4o-mini-tts' },
+    secrets: { api_key: 'test-openai-key' },
   })
 
   assert.equal(result.audio.length, 256)
-  assert.equal(result.mimeType, 'audio/mpeg')
+  assert.equal(result.mime_type, 'audio/mpeg')
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/speech')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
   assert.deepEqual(captured.body, {
@@ -45,6 +48,7 @@ test('OpenAI provider sends text-to-speech requests', async () => {
     voice: 'voice_custom_1',
     response_format: 'mp3',
     instructions: 'Speak with a warm narration style.',
+    seed: 42,
   })
 })
 
@@ -65,17 +69,17 @@ test('OpenAI provider streams text-to-speech requests', async () => {
   const provider = new OpenAiProvider()
   const result = await provider.streamSynthesize({
     model: 'gpt-4o-mini-tts',
-    outputFormat: 'mp3',
-    streamFormat: 'sse',
+    output_format: 'mp3',
+    stream_format: 'sse',
     id: 'tts',
     text: 'Hello from OpenAI.',
     instructions: 'Sound calm.',
   }, {
-    config: { ttsModel: 'gpt-4o-mini-tts' },
-    secrets: { apiKey: 'test-openai-key' },
+    config: { tts_model: 'gpt-4o-mini-tts' },
+    secrets: { api_key: 'test-openai-key' },
   })
 
-  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(result.mime_type, 'text/event-stream')
   assert.equal(await readStreamText(result.stream), 'data: {"type":"audio.delta"}\n\n')
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/speech')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
@@ -97,7 +101,7 @@ test('OpenAI provider sends voice clone requests', async () => {
       headers: init.headers,
       name: init.body.get('name'),
       consent: init.body.get('consent'),
-      audioSample: init.body.get('audio_sample'),
+      audio_sample: init.body.get('audio_sample'),
     }
     return new Response(JSON.stringify({
       id: 'voice_openai_1',
@@ -114,20 +118,23 @@ test('OpenAI provider sends voice clone requests', async () => {
   const result = await provider.cloneVoice({
     name: 'Narrator',
     consent: 'cons_1234',
-    audioData: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
-    mimeType: 'audio/wav',
+    audio_sample: {
+      data: Buffer.alloc(256, 1),
+      mime_type: 'audio/wav',
+      file_name: 'voice.wav',
+    },
   }, {
     config: {},
-    secrets: { apiKey: 'test-openai-key' },
+    secrets: { api_key: 'test-openai-key' },
   })
 
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/voices')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
   assert.equal(captured.name, 'Narrator')
   assert.equal(captured.consent, 'cons_1234')
-  assert.equal(captured.audioSample.type, 'audio/wav')
-  assert.equal(result.voice.voiceId, 'voice_openai_1')
-  assert.equal(result.voice.providerVoiceId, 'voice_openai_1')
+  assert.equal(captured.audio_sample.type, 'audio/wav')
+  assert.equal(result.voice.voice_id, 'voice_openai_1')
+  assert.equal(result.voice.provider_voice_id, 'voice_openai_1')
 })
 
 test('OpenAI provider sends speech-to-text requests', async () => {
@@ -137,7 +144,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
       url: String(url),
       headers: init.headers,
       model: init.body.get('model'),
-      responseFormat: init.body.get('response_format'),
+      response_format: init.body.get('response_format'),
       language: init.body.get('language'),
       prompt: init.body.get('prompt'),
       file: init.body.get('file'),
@@ -156,21 +163,21 @@ test('OpenAI provider sends speech-to-text requests', async () => {
     model: 'whisper-1',
     file: {
       data: Buffer.alloc(256, 1),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
     language: 'en',
     prompt: 'Technical vocabulary appears in this recording.',
     format: 'raw',
   }, {
-    config: { asrModel: 'gpt-4o-transcribe' },
-    secrets: { apiKey: 'test-openai-key' },
+    config: { asr_model: 'gpt-4o-transcribe' },
+    secrets: { api_key: 'test-openai-key' },
   })
 
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
   assert.equal(captured.model, 'whisper-1')
-  assert.equal(captured.responseFormat, 'verbose_json')
+  assert.equal(captured.response_format, 'verbose_json')
   assert.equal(captured.language, 'en')
   assert.equal(captured.prompt, 'Technical vocabulary appears in this recording.')
   assert.equal(captured.file.type, 'audio/wav')
@@ -186,7 +193,7 @@ test('OpenAI provider streams speech-to-text requests', async () => {
       url: String(url),
       headers: init.headers,
       model: init.body.get('model'),
-      responseFormat: init.body.get('response_format'),
+      response_format: init.body.get('response_format'),
       stream: init.body.get('stream'),
       file: init.body.get('file'),
     }
@@ -201,22 +208,22 @@ test('OpenAI provider streams speech-to-text requests', async () => {
     model: 'gpt-4o-mini-transcribe',
     file: {
       data: Buffer.alloc(256, 1),
-      mimeType: 'audio/wav',
-      fileName: 'sample.wav',
+      mime_type: 'audio/wav',
+      file_name: 'sample.wav',
     },
-    responseFormat: 'text',
+    response_format: 'text',
     stream: true,
   }, {
     config: {},
-    secrets: { apiKey: 'test-openai-key' },
+    secrets: { api_key: 'test-openai-key' },
   })
 
-  assert.equal(result.mimeType, 'text/event-stream')
+  assert.equal(result.mime_type, 'text/event-stream')
   assert.equal(await readStreamText(result.stream), 'data: {"type":"transcript.text.delta","delta":"Hello"}\n\ndata: [DONE]\n\n')
   assert.equal(captured.url, 'https://api.openai.com/v1/audio/transcriptions')
   assert.equal(captured.headers.authorization, 'Bearer test-openai-key')
   assert.equal(captured.model, 'gpt-4o-mini-transcribe')
-  assert.equal(captured.responseFormat, 'text')
+  assert.equal(captured.response_format, 'text')
   assert.equal(captured.stream, 'true')
   assert.equal(captured.file.type, 'audio/wav')
 })
@@ -226,7 +233,7 @@ test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   const voices = await provider.listVoices()
   assert.equal(provider.capabilities.tts, true)
   assert.equal(provider.capabilities.asr, true)
-  assert.equal(provider.capabilities.voiceClone, true)
+  assert.equal(provider.capabilities.voice_clone, true)
   assert.ok(voices.some(voice => voice.id === 'alloy'))
   assert.equal(voices.find(voice => voice.id === 'marin').gender, 'Female')
   assert.equal(voices.find(voice => voice.id === 'cedar').gender, 'Male')
@@ -236,10 +243,10 @@ test('OpenAI provider exposes TTS, ASR, and voice clone metadata', async () => {
   assert.equal(openai.name, 'OpenAI')
   assert.equal(openai.capabilities.tts, true)
   assert.equal(openai.capabilities.asr, true)
-  assert.equal(openai.capabilities.asrStreaming, true)
-  assert.equal(openai.capabilities.voiceClone, true)
-  assert.ok(openai.fields.find(field => field.key === 'ttsModel').options.includes('gpt-4o-mini-tts'))
-  assert.ok(openai.fields.find(field => field.key === 'asrModel').options.includes('gpt-4o-transcribe'))
+  assert.equal(openai.capabilities.asr_streaming, true)
+  assert.equal(openai.capabilities.voice_clone, true)
+  assert.ok(openai.fields.find(field => field.key === 'tts_model').options.includes('gpt-4o-mini-tts'))
+  assert.ok(openai.fields.find(field => field.key === 'asr_model').options.includes('gpt-4o-transcribe'))
 })
 
 async function readStreamText(stream) {

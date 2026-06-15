@@ -21,7 +21,7 @@ const SAMPLE_RATE = 24_000
 export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'mock'
   readonly name = 'Mock WAV Provider'
-  readonly capabilities = { tts: true, ttsStreaming: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, sound_effects: true, isolation: true, voice_design: true, voice_clone: true }
 
   async listVoices(): Promise<TtsVoice[]> {
     return [
@@ -32,70 +32,69 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
 
   async synthesize(request: SynthesizeRequest) {
     const text = request.text.trim()
-    const durationMs = Math.min(5000, Math.max(700, text.length * 80))
-    const audio = createToneWav(durationMs, getFrequency(request.voice))
-    return { audio, mimeType: 'audio/wav', durationMs }
+    const duration_ms = Math.min(5000, Math.max(700, text.length * 80))
+    const audio = createToneWav(duration_ms, getFrequency(request.voice))
+    return { audio, mime_type: 'audio/wav', duration_ms }
   }
 
   async streamSynthesize(request: SynthesizeRequest) {
     const result = await this.synthesize(request)
-    if (request.streamFormat === 'sse') {
+    if (request.stream_format === 'sse') {
       const payload = {
         type: 'audio.delta',
         audio: result.audio.toString('base64'),
       }
       return {
         stream: createStreamFromBuffer(Buffer.from(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`)),
-        mimeType: 'text/event-stream',
+        mime_type: 'text/event-stream',
       }
     }
     return {
       stream: createStreamFromBuffer(result.audio),
-      mimeType: result.mimeType,
+      mime_type: result.mime_type,
     }
   }
 
   async createSoundEffect(request: SoundEffectRequest) {
-    const durationMs = Math.min(30_000, Math.max(500, Math.round((request.durationSeconds ?? 1) * 1000)))
-    const audio = createToneWav(durationMs, getFrequency(request.prompt))
-    return { audio, mimeType: 'audio/wav', durationMs }
+    const duration_ms = Math.min(30_000, Math.max(500, Math.round((request.duration_seconds ?? 1) * 1000)))
+    const audio = createToneWav(duration_ms, getFrequency(request.prompt))
+    return { audio, mime_type: 'audio/wav', duration_ms }
   }
 
   async isolateAudio(request: AudioIsolationRequest) {
-    return { audio: request.file.data, mimeType: request.file.mimeType, durationMs: 0 }
+    return { audio: request.file.data, mime_type: request.file.mime_type, duration_ms: 0 }
   }
 
   async designVoice(request: VoiceDesignRequest): Promise<VoiceDesignResult> {
-    const voiceId = `mock-${getFrequency(request.input)}`
+    const voice_id = `mock-${getFrequency(request.input)}`
     const audio = createToneWav(700, getFrequency(request.input)).toString('base64')
     return {
       provider: this.id,
       text: request.text ?? 'mock voice preview',
       voices: [{
-        voiceId,
+        voice_id,
         name: request.name ?? 'Mock Designed Voice',
         description: request.input,
-        previewAudioData: `data:audio/wav;base64,${audio}`,
-        previewMimeType: 'audio/wav',
+        preview_audio_data: `data:audio/wav;base64,${audio}`,
+        preview_mime_type: 'audio/wav',
         metadata: {},
       }],
     }
   }
 
   async cloneVoice(request: VoiceCloneRequest): Promise<VoiceCloneResult> {
-    const voiceId = `mock-clone-${getFrequency(request.name)}`
+    const voice_id = `mock-clone-${getFrequency(request.name)}`
+    const audioData = request.audio_sample.data.toString('base64')
     return {
       provider: this.id,
       voice: {
-        voiceId,
-        providerVoiceId: voiceId,
+        voice_id,
+        provider_voice_id: voice_id,
         name: request.name,
         description: request.description,
         language: request.language,
-        previewAudioData: request.audioData.startsWith('data:')
-          ? request.audioData
-          : `data:${request.mimeType ?? 'audio/wav'};base64,${request.audioData}`,
-        previewMimeType: request.mimeType ?? 'audio/wav',
+        preview_audio_data: `data:${request.audio_sample.mime_type};base64,${audioData}`,
+        preview_mime_type: request.audio_sample.mime_type,
         metadata: {},
       },
     }
@@ -128,8 +127,8 @@ function getFrequency(seed = 'mock-narrator'): number {
   return 320 + (hash % 220)
 }
 
-function createToneWav(durationMs: number, frequency: number): Buffer {
-  const sampleCount = Math.floor(SAMPLE_RATE * durationMs / 1000)
+function createToneWav(duration_ms: number, frequency: number): Buffer {
+  const sampleCount = Math.floor(SAMPLE_RATE * duration_ms / 1000)
   const dataSize = sampleCount * 2
   const buffer = Buffer.alloc(44 + dataSize)
 

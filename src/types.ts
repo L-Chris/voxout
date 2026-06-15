@@ -9,12 +9,12 @@ export interface TtsVoice {
 
 export interface TtsProviderCapabilities {
   tts?: boolean
-  ttsStreaming?: boolean
+  tts_streaming?: boolean
   asr?: boolean
-  asrStreaming?: boolean
-  voiceDesign?: boolean
-  voiceClone?: boolean
-  soundEffects?: boolean
+  asr_streaming?: boolean
+  voice_design?: boolean
+  voice_clone?: boolean
+  sound_effects?: boolean
   isolation?: boolean
 }
 
@@ -60,12 +60,13 @@ export interface SynthesizeRequest {
   text: string
   voice?: string
   lang?: string
-  outputFormat?: string
-  streamFormat?: 'audio' | 'sse'
+  output_format?: string
+  stream_format?: 'audio' | 'sse'
   speed?: number
   pitch?: string
   volume?: string
   instructions?: string
+  extra_params?: JsonObject
 }
 
 export interface TtsProvider {
@@ -76,12 +77,12 @@ export interface TtsProvider {
   listVoices(context?: ProviderContext): Promise<TtsVoice[]>
   synthesize(request: SynthesizeRequest, context?: ProviderContext): Promise<{
     audio: Buffer
-    mimeType: string
-    durationMs: number
+    mime_type: string
+    duration_ms: number
   }>
   streamSynthesize?(request: SynthesizeRequest, context?: ProviderContext): Promise<{
     stream: ReadableStream<Uint8Array>
-    mimeType: string
+    mime_type: string
   }>
 }
 
@@ -90,14 +91,15 @@ export interface TranscribeRequest {
   model?: string
   file: {
     data: Buffer
-    mimeType: string
-    fileName: string
+    mime_type: string
+    file_name: string
   }
   language?: string
   prompt?: string
-  responseFormat?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json'
+  response_format?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json'
   format?: 'txt' | 'srt' | 'vtt' | 'raw' | 'diarized_json'
   stream?: boolean
+  extra_params?: JsonObject
 }
 
 export interface TranscribeSegment {
@@ -118,21 +120,22 @@ export interface SoundEffectRequest {
   provider?: string
   model?: string
   prompt: string
-  outputFormat?: string
-  durationSeconds?: number
-  promptInfluence?: number
+  output_format?: string
+  duration_seconds?: number
+  prompt_influence?: number
   loop?: boolean
+  extra_params?: JsonObject
 }
 
 export interface AudioIsolationRequest {
   provider?: string
   file: {
     data: Buffer
-    mimeType: string
-    fileName: string
+    mime_type: string
+    file_name: string
   }
-  fileFormat?: 'pcm_s16le_16' | 'other'
-  previewBase64?: string
+  file_format?: 'pcm_s16le_16' | 'other'
+  preview_b64?: string
 }
 
 export interface VoiceDesignRequest {
@@ -140,33 +143,35 @@ export interface VoiceDesignRequest {
   input: string
   name?: string
   text?: string
-  outputFormat?: string
+  output_format?: string
   model?: string
-  providerOptions?: JsonObject
+  extra_params?: JsonObject
 }
 
 export interface VoiceCloneRequest {
   provider?: string
   name: string
-  audioData: string
-  mimeType?: string
-  fileName?: string
+  audio_sample: {
+    data: Buffer
+    mime_type: string
+    file_name: string
+  }
   consent?: string
   description?: string
   language?: string
-  previewText?: string
+  preview_text?: string
   metadata?: JsonObject
 }
 
 export interface VoicePreview {
-  voiceId: string
-  providerVoiceId?: string
+  voice_id: string
+  provider_voice_id?: string
   name: string
   description?: string
   language?: string
-  previewAudioData?: string
-  previewMimeType?: string
-  durationSeconds?: number
+  preview_audio_data?: string
+  preview_mime_type?: string
+  duration_seconds?: number
   metadata?: JsonObject
 }
 
@@ -185,8 +190,8 @@ export interface VoiceCloneResult {
 
 export interface AudioGenerationResult {
   audio: Buffer
-  mimeType: string
-  durationMs: number
+  mime_type: string
+  duration_ms: number
 }
 
 export interface AsrProvider {
@@ -197,7 +202,7 @@ export interface AsrProvider {
   transcribe(request: TranscribeRequest, context?: ProviderContext): Promise<TranscribeResult>
   streamTranscribe?(request: TranscribeRequest, context?: ProviderContext): Promise<{
     stream: ReadableStream<Uint8Array>
-    mimeType: string
+    mime_type: string
   }>
 }
 

@@ -25,6 +25,7 @@ import {
   getConfigString,
   getPayloadError,
   getSecretString,
+  mergeJsonBody,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -78,27 +79,27 @@ interface ElevenLabsClonePayload {
 export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider, VoiceCloneProvider {
   readonly id = 'elevenlabs'
   readonly name = 'ElevenLabs'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, soundEffects: true, isolation: true, voiceDesign: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, asr: true, sound_effects: true, isolation: true, voice_design: true, voice_clone: true }
   readonly fields = [
-    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
-    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
-    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: ELEVENLABS_TTS_MODELS },
-    { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: ELEVENLABS_ASR_MODELS },
-    { key: 'soundEffectModel', label: 'Sound Effect Model', type: 'text' as const, placeholder: DEFAULT_SOUND_EFFECT_MODEL },
-    { key: 'voiceDesignModel', label: 'Voice Design Model', type: 'text' as const, placeholder: 'eleven_multilingual_ttv_v2' },
-    { key: 'defaultVoiceId', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
-    { key: 'outputFormat', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT },
-    { key: 'promptInfluence', label: 'Prompt Influence', type: 'number' as const, placeholder: '0.3' },
+    { key: 'api_key', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'base_url', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: ELEVENLABS_TTS_MODELS },
+    { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: ELEVENLABS_ASR_MODELS },
+    { key: 'sound_effect_model', label: 'Sound Effect Model', type: 'text' as const, placeholder: DEFAULT_SOUND_EFFECT_MODEL },
+    { key: 'voice_design_model', label: 'Voice Design Model', type: 'text' as const, placeholder: 'eleven_multilingual_ttv_v2' },
+    { key: 'default_voice_id', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
+    { key: 'output_format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT },
+    { key: 'prompt_influence', label: 'Prompt Influence', type: 'number' as const, placeholder: '0.3' },
   ]
 
   async listVoices(context: ProviderContext = {}): Promise<TtsVoice[]> {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) return [getDefaultVoice(this.id, context)]
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) return [getDefaultVoice(this.id, context)]
 
     const url = new URL(`${getApiRoot(context)}/v2/voices`)
     url.searchParams.set('page_size', '100')
     const response = await fetch(url, {
-      headers: { 'xi-api-key': apiKey },
+      headers: { 'xi-api-key': api_key },
     })
     if (!response.ok) return [getDefaultVoice(this.id, context)]
 
@@ -110,43 +111,43 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   }
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     const text = request.text.trim()
-    const voiceId = request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
-    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
-    const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}`)
-    url.searchParams.set('output_format', outputFormat)
+    const voice_id = request.voice ?? getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
+    const output_format = request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT
+    const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voice_id)}`)
+    url.searchParams.set('output_format', output_format)
 
-    const response = await postJsonAudio(url, {
+    const response = await postJsonAudio(url, mergeJsonBody({
       text,
-      model_id: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+      model_id: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
       language_code: normalizeLanguageCode(request.lang),
       voice_settings: normalizeVoiceSettings(request),
-    }, apiKey)
+    }, request.extra_params), api_key)
     return response
   }
 
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    if (request.streamFormat === 'sse') throw new Error('ElevenLabs TTS streaming supports stream_format "audio" only.')
-    const apiKey = getApiKey(context)
+    if (request.stream_format === 'sse') throw new Error('ElevenLabs TTS streaming supports stream_format "audio" only.')
+    const api_key = getApiKey(context)
     const text = request.text.trim()
-    const voiceId = request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
-    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
-    const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voiceId)}/stream`)
-    url.searchParams.set('output_format', outputFormat)
+    const voice_id = request.voice ?? getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
+    const output_format = request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT
+    const url = new URL(`${getBaseUrl(context)}/text-to-speech/${encodeURIComponent(voice_id)}/stream`)
+    url.searchParams.set('output_format', output_format)
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'xi-api-key': apiKey,
+        'xi-api-key': api_key,
       },
-      body: JSON.stringify(compactObject({
+      body: JSON.stringify(mergeJsonBody({
         text,
-        model_id: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+        model_id: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
         language_code: normalizeLanguageCode(request.lang),
         voice_settings: normalizeVoiceSettings(request),
-      })),
+      }, request.extra_params)),
     })
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
@@ -155,22 +156,22 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     if (!response.body) throw new Error('ElevenLabs text-to-speech stream response was empty.')
     return {
       stream: response.body,
-      mimeType: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
+      mime_type: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
     }
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     const form = new FormData()
-    form.set('model_id', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
+    form.set('model_id', request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_ASR_MODEL)
     const language = normalizeLanguageCode(request.language)
     if (language) form.set('language_code', language)
 
-    form.set('file', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
+    form.set('file', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
 
     const response = await fetch(`${getBaseUrl(context)}/speech-to-text`, {
       method: 'POST',
-      headers: { 'xi-api-key': apiKey },
+      headers: { 'xi-api-key': api_key },
       body: form,
     })
     const payload = await readJsonResponse<ElevenLabsTranscriptPayload>(response)
@@ -190,30 +191,30 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   }
 
   async createSoundEffect(request: SoundEffectRequest, context: ProviderContext = {}) {
-    const apiKey = getApiKey(context)
-    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
+    const api_key = getApiKey(context)
+    const output_format = request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT
     const url = new URL(`${getBaseUrl(context)}/sound-generation`)
-    if (outputFormat) url.searchParams.set('output_format', outputFormat)
+    if (output_format) url.searchParams.set('output_format', output_format)
 
-    return postJsonAudio(url, {
+    return postJsonAudio(url, mergeJsonBody({
       text: request.prompt.trim(),
-      model_id: request.model ?? getConfigString(context, 'soundEffectModel') ?? getConfigString(context, 'model') ?? DEFAULT_SOUND_EFFECT_MODEL,
-      duration_seconds: normalizeDurationSeconds(request.durationSeconds) ?? normalizeDurationSeconds(getConfigNumber(context, 'durationSeconds')),
-      prompt_influence: normalizePromptInfluence(request.promptInfluence) ?? normalizePromptInfluence(getConfigNumber(context, 'promptInfluence')),
+      model_id: request.model ?? getConfigString(context, 'sound_effect_model') ?? getConfigString(context, 'model') ?? DEFAULT_SOUND_EFFECT_MODEL,
+      duration_seconds: normalizeDurationSeconds(request.duration_seconds) ?? normalizeDurationSeconds(getConfigNumber(context, 'duration_seconds')),
+      prompt_influence: normalizePromptInfluence(request.prompt_influence) ?? normalizePromptInfluence(getConfigNumber(context, 'prompt_influence')),
       loop: request.loop ?? getConfigBoolean(context, 'loop'),
-    }, apiKey, 'ElevenLabs sound effect')
+    }, request.extra_params), api_key, 'ElevenLabs sound effect')
   }
 
   async isolateAudio(request: AudioIsolationRequest, context: ProviderContext = {}) {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     const form = new FormData()
-    form.set('audio', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
-    form.set('file_format', request.fileFormat ?? 'other')
-    if (request.previewBase64) form.set('preview_b64', request.previewBase64)
+    form.set('audio', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
+    form.set('file_format', request.file_format ?? 'other')
+    if (request.preview_b64) form.set('preview_b64', request.preview_b64)
 
     const response = await fetch(`${getBaseUrl(context)}/audio-isolation`, {
       method: 'POST',
-      headers: { 'xi-api-key': apiKey },
+      headers: { 'xi-api-key': api_key },
       body: form,
     })
     const buffer = Buffer.from(await response.arrayBuffer())
@@ -223,27 +224,29 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     }
     return {
       audio: buffer,
-      mimeType: response.headers.get('content-type')?.split(';')[0] || request.file.mimeType,
-      durationMs: 0,
+      mime_type: response.headers.get('content-type')?.split(';')[0] || request.file.mime_type,
+      duration_ms: 0,
     }
   }
 
   async designVoice(request: VoiceDesignRequest, context: ProviderContext = {}): Promise<VoiceDesignResult> {
-    const apiKey = getApiKey(context)
-    const options = request.providerOptions ?? {}
-    const outputFormat = request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT
+    const api_key = getApiKey(context)
+    const options = request.extra_params ?? {}
+    const passthroughOptions = { ...options }
+    delete passthroughOptions.reference_audio_base64
+    const output_format = request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT
     const url = new URL(`${getBaseUrl(context)}/text-to-voice/design`)
-    url.searchParams.set('output_format', outputFormat)
+    url.searchParams.set('output_format', output_format)
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'xi-api-key': apiKey,
+        'xi-api-key': api_key,
       },
-      body: JSON.stringify(compactObject({
+      body: JSON.stringify(mergeJsonBody({
         voice_description: request.input,
-        model_id: request.model ?? getConfigString(context, 'voiceDesignModel') ?? 'eleven_multilingual_ttv_v2',
+        model_id: request.model ?? getConfigString(context, 'voice_design_model') ?? 'eleven_multilingual_ttv_v2',
         text: request.text,
         auto_generate_text: options.auto_generate_text,
         loudness: options.loudness,
@@ -252,7 +255,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
         quality: options.quality,
         reference_audio_base64: typeof options.reference_audio_base64 === 'string' ? stripDataUrlPrefix(options.reference_audio_base64) : undefined,
         prompt_strength: options.prompt_strength,
-      })),
+      }, passthroughOptions)),
     })
     const payload = await readJsonResponse<ElevenLabsDesignPayload>(response)
     if (!response.ok) {
@@ -261,20 +264,20 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     const voices = (payload.previews ?? [])
       .filter(preview => preview.generated_voice_id)
       .map((preview, index) => {
-        const mediaType = preview.media_type || getMimeTypeFromOutputFormat(outputFormat)
+        const mediaType = preview.media_type || getMimeTypeFromOutputFormat(output_format)
         return {
-          voiceId: preview.generated_voice_id ?? `elevenlabs-preview-${index + 1}`,
-          providerVoiceId: preview.generated_voice_id,
+          voice_id: preview.generated_voice_id ?? `elevenlabs-preview-${index + 1}`,
+          provider_voice_id: preview.generated_voice_id,
           name: request.name ?? `ElevenLabs Voice ${index + 1}`,
           description: request.input,
           language: preview.language,
-          previewAudioData: preview.audio_base_64
+          preview_audio_data: preview.audio_base_64
             ? `data:${mediaType};base64,${stripDataUrlPrefix(preview.audio_base_64)}`
             : undefined,
-          previewMimeType: mediaType,
-          durationSeconds: preview.duration_secs,
+          preview_mime_type: mediaType,
+          duration_seconds: preview.duration_secs,
           metadata: {
-            model: request.model ?? getConfigString(context, 'voiceDesignModel') ?? 'eleven_multilingual_ttv_v2',
+            model: request.model ?? getConfigString(context, 'voice_design_model') ?? 'eleven_multilingual_ttv_v2',
           },
         }
       })
@@ -287,16 +290,16 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   }
 
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
-    const apiKey = getApiKey(context)
-    const audio = parseAudioData(request.audioData, request.mimeType)
+    const api_key = getApiKey(context)
+    const audio = request.audio_sample
     const form = new FormData()
     form.set('name', request.name)
     if (request.description) form.set('description', request.description)
-    form.set('files[]', new Blob([audio.data], { type: audio.mimeType }), request.fileName || audio.fileName)
+    form.set('files[]', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
 
     const response = await fetch(`${getBaseUrl(context)}/voices/add`, {
       method: 'POST',
-      headers: { 'xi-api-key': apiKey },
+      headers: { 'xi-api-key': api_key },
       body: form,
     })
     const payload = await readJsonResponse<ElevenLabsClonePayload>(response)
@@ -307,8 +310,8 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     return {
       provider: this.id,
       voice: {
-        voiceId: payload.voice_id,
-        providerVoiceId: payload.voice_id,
+        voice_id: payload.voice_id,
+        provider_voice_id: payload.voice_id,
         name: request.name,
         description: request.description,
         language: request.language,
@@ -321,12 +324,12 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   }
 }
 
-async function postJsonAudio(url: URL, body: Record<string, unknown>, apiKey: string, label = 'ElevenLabs text-to-speech') {
+async function postJsonAudio(url: URL, body: Record<string, unknown>, api_key: string, label = 'ElevenLabs text-to-speech') {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'xi-api-key': apiKey,
+      'xi-api-key': api_key,
     },
     body: JSON.stringify(compactObject(body)),
   })
@@ -339,19 +342,19 @@ async function postJsonAudio(url: URL, body: Record<string, unknown>, apiKey: st
   if (audio.length < 128) throw new Error(`${label} response audio was empty.`)
   return {
     audio,
-    mimeType: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
-    durationMs: 0,
+    mime_type: response.headers.get('content-type')?.split(';')[0] || 'audio/mpeg',
+    duration_ms: 0,
   }
 }
 
 function getApiKey(context: ProviderContext): string {
-  const apiKey = getSecretString(context, 'apiKey')
-  if (!apiKey) throw new Error('elevenlabs apiKey is required in provider settings.')
-  return apiKey
+  const api_key = getSecretString(context, 'api_key')
+  if (!api_key) throw new Error('elevenlabs api_key is required in provider settings.')
+  return api_key
 }
 
 function getBaseUrl(context: ProviderContext): string {
-  return trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
+  return trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
 }
 
 function getApiRoot(context: ProviderContext): string {
@@ -397,26 +400,8 @@ function normalizeVoice(voice: ElevenLabsVoicePayload, provider: string): TtsVoi
 }
 
 function getDefaultVoice(provider: string, context: ProviderContext): TtsVoice {
-  const id = getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+  const id = getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
   return { id, name: id, provider }
-}
-
-function parseAudioData(value: string, mimeType?: string): { data: Buffer, mimeType: string, fileName: string } {
-  const dataUrlMatch = /^data:([^;,]+)?;base64,(.*)$/is.exec(value)
-  if (dataUrlMatch) {
-    const resolvedMimeType = dataUrlMatch[1] || mimeType || 'audio/mpeg'
-    return {
-      data: Buffer.from(dataUrlMatch[2] ?? '', 'base64'),
-      mimeType: resolvedMimeType,
-      fileName: getAudioFileName(resolvedMimeType),
-    }
-  }
-  const resolvedMimeType = mimeType || 'audio/mpeg'
-  return {
-    data: Buffer.from(value, 'base64'),
-    mimeType: resolvedMimeType,
-    fileName: getAudioFileName(resolvedMimeType),
-  }
 }
 
 function stripDataUrlPrefix(value: string): string {
@@ -424,18 +409,11 @@ function stripDataUrlPrefix(value: string): string {
   return value.startsWith('data:') && comma >= 0 ? value.slice(comma + 1) : value
 }
 
-function getMimeTypeFromOutputFormat(outputFormat: string): string {
-  const normalized = outputFormat.toLowerCase()
+function getMimeTypeFromOutputFormat(output_format: string): string {
+  const normalized = output_format.toLowerCase()
   if (normalized.startsWith('pcm_')) return 'audio/wav'
   if (normalized.startsWith('ulaw_')) return 'audio/basic'
   return 'audio/mpeg'
-}
-
-function getAudioFileName(mimeType: string): string {
-  if (mimeType.includes('wav')) return 'audio.wav'
-  if (mimeType.includes('mp4')) return 'audio.mp4'
-  if (mimeType.includes('webm')) return 'audio.webm'
-  return 'audio.mp3'
 }
 
 function normalizeWords(words: ElevenLabsTranscriptPayload['words']) {

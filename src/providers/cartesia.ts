@@ -17,6 +17,7 @@ import {
   getConfigString,
   getPayloadError,
   getSecretString,
+  mergeJsonBody,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -63,22 +64,22 @@ interface CartesiaTranscriptPayload {
 export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
   readonly id = 'cartesia'
   readonly name = 'Cartesia'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, asr: true, voice_clone: true }
   readonly fields = [
-    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
-    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
-    { key: 'apiVersion', label: 'API Version', type: 'text' as const, placeholder: DEFAULT_API_VERSION },
-    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: CARTESIA_TTS_MODELS },
-    { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: CARTESIA_ASR_MODELS },
-    { key: 'defaultVoiceId', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
-    { key: 'outputFormat', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT, options: ['mp3', 'wav', 'pcm'] },
+    { key: 'api_key', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'base_url', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'api_version', label: 'API Version', type: 'text' as const, placeholder: DEFAULT_API_VERSION },
+    { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: CARTESIA_TTS_MODELS },
+    { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: CARTESIA_ASR_MODELS },
+    { key: 'default_voice_id', label: 'Default Voice ID', type: 'text' as const, placeholder: DEFAULT_VOICE_ID },
+    { key: 'output_format', label: 'Output Format', type: 'text' as const, placeholder: DEFAULT_OUTPUT_FORMAT, options: ['mp3', 'wav', 'pcm'] },
   ]
 
   async listVoices(context: ProviderContext = {}): Promise<TtsVoice[]> {
-    const apiKey = getSecretString(context, 'apiKey')
-    if (!apiKey) return [getDefaultVoice(this.id, context)]
+    const api_key = getSecretString(context, 'api_key')
+    if (!api_key) return [getDefaultVoice(this.id, context)]
 
-    const voicePayloads = await listCartesiaVoices(context, apiKey)
+    const voicePayloads = await listCartesiaVoices(context, api_key)
     const voices = voicePayloads
       .map(voice => normalizeVoice(voice, this.id))
       .filter((voice): voice is TtsVoice => !!voice)
@@ -95,8 +96,8 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     if (audio.length < 128) throw new Error('Cartesia text-to-speech response audio was empty.')
     return {
       audio,
-      mimeType: response.headers.get('content-type')?.split(';')[0] || getMimeType(request, context),
-      durationMs: 0,
+      mime_type: response.headers.get('content-type')?.split(';')[0] || getMimeType(request, context),
+      duration_ms: 0,
     }
   }
 
@@ -107,30 +108,30 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
       throw new Error(detail || `Cartesia text-to-speech stream request failed: ${response.status}`)
     }
     if (!response.body) throw new Error('Cartesia text-to-speech stream response was empty.')
-    if ((request.streamFormat ?? 'audio') === 'sse') {
+    if ((request.stream_format ?? 'audio') === 'sse') {
       return {
         stream: response.body,
-        mimeType: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
+        mime_type: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
       }
     }
     return {
       stream: decodeCartesiaAudioSseStream(response.body),
-      mimeType: getMimeType(request, context),
+      mime_type: getMimeType(request, context),
     }
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     const form = new FormData()
-    form.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
-    form.set('file', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
+    form.set('model', request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_ASR_MODEL)
+    form.set('file', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
     form.set('timestamp_granularities[]', 'word')
     const language = normalizeLanguage(request.language)
     if (language) form.set('language', language)
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/stt`, {
       method: 'POST',
-      headers: getHeaders(context, apiKey),
+      headers: getHeaders(context, api_key),
       body: form,
     }, context)
     const payload = await readJsonResponse<CartesiaTranscriptPayload>(response)
@@ -149,19 +150,19 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
   }
 
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
-    const apiKey = getApiKey(context)
-    const audio = parseAudioData(request.audioData, request.mimeType)
+    const api_key = getApiKey(context)
+    const audio = request.audio_sample
     const form = new FormData()
-    form.set('clip', new Blob([audio.data], { type: audio.mimeType }), request.fileName || audio.fileName)
+    form.set('clip', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
     form.set('name', request.name)
     form.set('language', normalizeLanguage(request.language) ?? 'en')
     if (request.description) form.set('description', request.description)
-    const baseVoiceId = getConfigString(context, 'baseVoiceId')
-    if (baseVoiceId) form.set('base_voice_id', baseVoiceId)
+    const base_voice_id = getConfigString(context, 'base_voice_id')
+    if (base_voice_id) form.set('base_voice_id', base_voice_id)
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/clone`, {
       method: 'POST',
-      headers: getHeaders(context, apiKey),
+      headers: getHeaders(context, api_key),
       body: form,
     }, context)
     const payload = await readJsonResponse<CartesiaVoicePayload>(response)
@@ -172,8 +173,8 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     return {
       provider: this.id,
       voice: {
-        voiceId: payload.id,
-        providerVoiceId: payload.id,
+        voice_id: payload.id,
+        provider_voice_id: payload.id,
         name: payload.name ?? request.name,
         description: payload.description ?? request.description,
         language: payload.language ?? request.language,
@@ -186,32 +187,32 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
   }
 
   private createSpeech(request: SynthesizeRequest, context: ProviderContext, path: '/tts/bytes' | '/tts/sse'): Promise<Response> {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     return fetchWithProviderTimeout(`${getBaseUrl(context)}${path}`, {
       method: 'POST',
       headers: {
-        ...getHeaders(context, apiKey),
+        ...getHeaders(context, api_key),
         'content-type': 'application/json',
       },
-      body: JSON.stringify(compactObject({
-        model_id: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+      body: JSON.stringify(mergeJsonBody({
+        model_id: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
         transcript: request.text.trim(),
         voice: {
           mode: 'id',
-          id: request.voice ?? getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID,
+          id: request.voice ?? getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID,
         },
-        output_format: normalizeOutputFormat(request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT),
+        output_format: normalizeOutputFormat(request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT),
         language: normalizeLanguage(request.lang),
         generation_config: compactObject({
           speed: normalizeSpeed(request.speed),
         }),
-        pronunciation_dict_id: getConfigString(context, 'pronunciationDictId'),
-      })),
+        pronunciation_dict_id: getConfigString(context, 'pronunciation_dict_id'),
+      }, request.extra_params)),
     }, context)
   }
 }
 
-async function listCartesiaVoices(context: ProviderContext, apiKey: string): Promise<CartesiaVoicePayload[]> {
+async function listCartesiaVoices(context: ProviderContext, api_key: string): Promise<CartesiaVoicePayload[]> {
   const voices: CartesiaVoicePayload[] = []
   let startingAfter: string | undefined
   for (let page = 0; page < 20; page += 1) {
@@ -219,7 +220,7 @@ async function listCartesiaVoices(context: ProviderContext, apiKey: string): Pro
     url.searchParams.set('limit', '100')
     if (startingAfter) url.searchParams.set('starting_after', startingAfter)
     const response = await fetchWithProviderTimeout(url, {
-      headers: getHeaders(context, apiKey),
+      headers: getHeaders(context, api_key),
     }, context)
     if (!response.ok) return voices
 
@@ -232,20 +233,20 @@ async function listCartesiaVoices(context: ProviderContext, apiKey: string): Pro
 }
 
 function getApiKey(context: ProviderContext): string {
-  const apiKey = getSecretString(context, 'apiKey')
-  if (!apiKey) throw new Error('cartesia apiKey is required in provider settings.')
-  return apiKey
+  const api_key = getSecretString(context, 'api_key')
+  if (!api_key) throw new Error('cartesia api_key is required in provider settings.')
+  return api_key
 }
 
-function getHeaders(context: ProviderContext, apiKey: string): Record<string, string> {
+function getHeaders(context: ProviderContext, api_key: string): Record<string, string> {
   return {
-    authorization: `Bearer ${apiKey}`,
-    'Cartesia-Version': getConfigString(context, 'apiVersion') ?? DEFAULT_API_VERSION,
+    authorization: `Bearer ${api_key}`,
+    'Cartesia-Version': getConfigString(context, 'api_version') ?? DEFAULT_API_VERSION,
   }
 }
 
 function getBaseUrl(context: ProviderContext): string {
-  return trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
+  return trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
 }
 
 function normalizeOutputFormat(value: string): Record<string, string | number> {
@@ -256,7 +257,7 @@ function normalizeOutputFormat(value: string): Record<string, string | number> {
 }
 
 function getMimeType(request: SynthesizeRequest, context: ProviderContext): string {
-  const normalized = (request.outputFormat ?? getConfigString(context, 'outputFormat') ?? DEFAULT_OUTPUT_FORMAT).toLowerCase()
+  const normalized = (request.output_format ?? getConfigString(context, 'output_format') ?? DEFAULT_OUTPUT_FORMAT).toLowerCase()
   if (normalized === 'wav') return 'audio/wav'
   if (normalized === 'pcm' || normalized === 'raw') return 'audio/pcm'
   return 'audio/mpeg'
@@ -274,7 +275,7 @@ function normalizeVoice(voice: CartesiaVoicePayload, provider: string): TtsVoice
 }
 
 function getDefaultVoice(provider: string, context: ProviderContext): TtsVoice {
-  const id = getConfigString(context, 'defaultVoiceId') ?? DEFAULT_VOICE_ID
+  const id = getConfigString(context, 'default_voice_id') ?? DEFAULT_VOICE_ID
   return { id, name: id, provider }
 }
 
@@ -292,24 +293,6 @@ function normalizeLanguage(value: string | undefined): string | undefined {
 function normalizeSpeed(value: number | undefined): number | undefined {
   if (value == null) return undefined
   return Number.isFinite(value) && value > 0 ? value : undefined
-}
-
-function parseAudioData(value: string, mimeType?: string): { data: Buffer, mimeType: string, fileName: string } {
-  const match = /^data:([^;,]+)?;base64,(.*)$/is.exec(value)
-  const resolvedMimeType = match?.[1] || mimeType || 'audio/mpeg'
-  return {
-    data: Buffer.from(match?.[2] ?? value, 'base64'),
-    mimeType: resolvedMimeType,
-    fileName: getAudioFileName(resolvedMimeType),
-  }
-}
-
-function getAudioFileName(mimeType: string): string {
-  if (mimeType.includes('wav')) return 'audio.wav'
-  if (mimeType.includes('flac')) return 'audio.flac'
-  if (mimeType.includes('ogg')) return 'audio.ogg'
-  if (mimeType.includes('webm')) return 'audio.webm'
-  return 'audio.mp3'
 }
 
 function normalizeWords(words: CartesiaTranscriptPayload['words']) {

@@ -4,7 +4,7 @@ import type { ProviderContext, ProviderFieldDefinition, SynthesizeRequest, TtsPr
 export class DefaultProvider implements TtsProvider {
   readonly id = 'default'
   readonly name = 'Default'
-  readonly capabilities = { tts: true, ttsStreaming: true }
+  readonly capabilities = { tts: true, tts_streaming: true }
   readonly fields: ProviderFieldDefinition[]
 
   constructor(

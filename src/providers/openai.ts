@@ -12,10 +12,10 @@ import type {
   VoiceCloneResult,
 } from '../types.js'
 import {
-  compactObject,
   getConfigString,
   getPayloadError,
   getSecretString,
+  mergeJsonBody,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -56,14 +56,14 @@ interface OpenAiTranscriptionPayload {
 export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
   readonly id = 'openai'
   readonly name = 'OpenAI'
-  readonly capabilities = { tts: true, ttsStreaming: true, asr: true, asrStreaming: true, voiceClone: true }
+  readonly capabilities = { tts: true, tts_streaming: true, asr: true, asr_streaming: true, voice_clone: true }
   readonly fields = [
-    { key: 'apiKey', label: 'API Key', type: 'password' as const, secret: true },
-    { key: 'baseUrl', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
-    { key: 'ttsModel', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: OPENAI_TTS_MODELS },
-    { key: 'asrModel', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: OPENAI_ASR_MODELS },
-    { key: 'defaultVoice', label: 'Default Voice', type: 'text' as const, placeholder: DEFAULT_VOICE },
-    { key: 'responseFormat', label: 'Response Format', type: 'text' as const, placeholder: DEFAULT_RESPONSE_FORMAT },
+    { key: 'api_key', label: 'API Key', type: 'password' as const, secret: true },
+    { key: 'base_url', label: 'Base URL', type: 'url' as const, placeholder: DEFAULT_BASE_URL },
+    { key: 'tts_model', label: 'TTS Model', type: 'text' as const, placeholder: DEFAULT_TTS_MODEL, options: OPENAI_TTS_MODELS },
+    { key: 'asr_model', label: 'ASR Model', type: 'text' as const, placeholder: DEFAULT_ASR_MODEL, options: OPENAI_ASR_MODELS },
+    { key: 'default_voice', label: 'Default Voice', type: 'text' as const, placeholder: DEFAULT_VOICE },
+    { key: 'response_format', label: 'Response Format', type: 'text' as const, placeholder: DEFAULT_RESPONSE_FORMAT },
   ]
 
   async listVoices(): Promise<TtsVoice[]> {
@@ -74,8 +74,8 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   }
 
   async synthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const responseFormat = normalizeResponseFormat(request.outputFormat ?? getConfigString(context, 'responseFormat') ?? DEFAULT_RESPONSE_FORMAT)
-    const response = await this.createSpeech(request, context, responseFormat)
+    const response_format = normalizeResponseFormat(request.output_format ?? getConfigString(context, 'response_format') ?? DEFAULT_RESPONSE_FORMAT)
+    const response = await this.createSpeech(request, context, response_format)
     const audio = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
       const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
@@ -84,15 +84,15 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     if (audio.length < 128) throw new Error('OpenAI speech response audio was empty.')
     return {
       audio,
-      mimeType: getMimeType(responseFormat, response.headers.get('content-type') ?? undefined),
-      durationMs: 0,
+      mime_type: getMimeType(response_format, response.headers.get('content-type') ?? undefined),
+      duration_ms: 0,
     }
   }
 
   async streamSynthesize(request: SynthesizeRequest, context: ProviderContext = {}) {
-    const responseFormat = normalizeResponseFormat(request.outputFormat ?? getConfigString(context, 'responseFormat') ?? DEFAULT_RESPONSE_FORMAT)
-    const streamFormat = request.streamFormat ?? 'audio'
-    const response = await this.createSpeech(request, context, responseFormat, streamFormat)
+    const response_format = normalizeResponseFormat(request.output_format ?? getConfigString(context, 'response_format') ?? DEFAULT_RESPONSE_FORMAT)
+    const stream_format = request.stream_format ?? 'audio'
+    const response = await this.createSpeech(request, context, response_format, stream_format)
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
       throw new Error(detail || `OpenAI speech stream request failed: ${response.status}`)
@@ -100,50 +100,50 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     if (!response.body) throw new Error('OpenAI speech stream response was empty.')
     return {
       stream: response.body,
-      mimeType: streamFormat === 'sse'
+      mime_type: stream_format === 'sse'
         ? response.headers.get('content-type')?.split(';')[0] || 'text/event-stream'
-        : getMimeType(responseFormat, response.headers.get('content-type') ?? undefined),
+        : getMimeType(response_format, response.headers.get('content-type') ?? undefined),
     }
   }
 
   private async createSpeech(
     request: SynthesizeRequest,
     context: ProviderContext,
-    responseFormat: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm',
-    streamFormat?: 'audio' | 'sse',
+    response_format: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm',
+    stream_format?: 'audio' | 'sse',
   ): Promise<Response> {
-    const apiKey = getApiKey(context)
+    const api_key = getApiKey(context)
     const text = request.text.trim()
     const response = await fetch(`${getBaseUrl(context)}/audio/speech`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${apiKey}`,
+        authorization: `Bearer ${api_key}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(compactObject({
-        model: request.model ?? getConfigString(context, 'ttsModel') ?? DEFAULT_TTS_MODEL,
+      body: JSON.stringify(mergeJsonBody({
+        model: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
         input: text,
-        voice: request.voice ?? getConfigString(context, 'defaultVoice') ?? DEFAULT_VOICE,
-        response_format: responseFormat,
+        voice: request.voice ?? getConfigString(context, 'default_voice') ?? DEFAULT_VOICE,
+        response_format: response_format,
         speed: normalizeSpeed(request.speed),
-        stream_format: streamFormat,
+        stream_format: stream_format,
         instructions: normalizeInstructions(request.instructions),
-      })),
+      }, request.extra_params)),
     })
     return response
   }
 
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
-    const apiKey = getApiKey(context)
-    const audio = parseAudioData(request.audioData, request.mimeType)
+    const api_key = getApiKey(context)
+    const audio = request.audio_sample
     const form = new FormData()
     form.set('name', request.name)
     if (request.consent) form.set('consent', request.consent)
-    form.set('audio_sample', new Blob([audio.data], { type: audio.mimeType }), request.fileName || audio.fileName)
+    form.set('audio_sample', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
 
     const response = await fetch(`${getBaseUrl(context)}/audio/voices`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}` },
+      headers: { authorization: `Bearer ${api_key}` },
       body: form,
     })
     const payload = await readJsonResponse<OpenAiVoicePayload>(response, 'errorMessageObject')
@@ -154,8 +154,8 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     return {
       provider: this.id,
       voice: {
-        voiceId: payload.id,
-        providerVoiceId: payload.id,
+        voice_id: payload.id,
+        provider_voice_id: payload.id,
         name: payload.name ?? request.name,
         description: request.description,
         language: request.language,
@@ -169,14 +169,14 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   }
 
   async transcribe(request: TranscribeRequest, context: ProviderContext = {}): Promise<TranscribeResult> {
-    const apiKey = getApiKey(context)
-    const responseFormat = normalizeTranscriptionResponseFormat(request.responseFormat, request.format)
+    const api_key = getApiKey(context)
+    const response_format = normalizeTranscriptionResponseFormat(request.response_format, request.format)
     const response = await fetch(`${getBaseUrl(context)}/audio/transcriptions`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}` },
-      body: createTranscriptionForm(request, context, responseFormat),
+      headers: { authorization: `Bearer ${api_key}` },
+      body: createTranscriptionForm(request, context, response_format),
     })
-    if (responseFormat === 'text' || responseFormat === 'srt' || responseFormat === 'vtt') {
+    if (response_format === 'text' || response_format === 'srt' || response_format === 'vtt') {
       const text = await response.text()
       if (!response.ok) throw new Error(text || `OpenAI transcription request failed: ${response.status}`)
       return {
@@ -205,13 +205,13 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   }
 
   async streamTranscribe(request: TranscribeRequest, context: ProviderContext = {}) {
-    const apiKey = getApiKey(context)
-    const responseFormat = normalizeTranscriptionResponseFormat(request.responseFormat, request.format)
-    const form = createTranscriptionForm(request, context, responseFormat)
+    const api_key = getApiKey(context)
+    const response_format = normalizeTranscriptionResponseFormat(request.response_format, request.format)
+    const form = createTranscriptionForm(request, context, response_format)
     form.set('stream', 'true')
     const response = await fetch(`${getBaseUrl(context)}/audio/transcriptions`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}` },
+      headers: { authorization: `Bearer ${api_key}` },
       body: form,
     })
     if (!response.ok) {
@@ -221,7 +221,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     if (!response.body) throw new Error('OpenAI transcription stream response was empty.')
     return {
       stream: response.body,
-      mimeType: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
+      mime_type: response.headers.get('content-type')?.split(';')[0] || 'text/event-stream',
     }
   }
 }
@@ -245,12 +245,12 @@ const OPENAI_PRESET_VOICES: TtsVoice[] = [
 function createTranscriptionForm(
   request: TranscribeRequest,
   context: ProviderContext,
-  responseFormat: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
+  response_format: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json',
 ): FormData {
   const form = new FormData()
-  form.set('model', request.model ?? getConfigString(context, 'asrModel') ?? DEFAULT_ASR_MODEL)
-  form.set('file', new Blob([request.file.data], { type: request.file.mimeType }), request.file.fileName)
-  form.set('response_format', responseFormat)
+  form.set('model', request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_ASR_MODEL)
+  form.set('file', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
+  form.set('response_format', response_format)
   const language = normalizeLanguage(request.language)
   if (language) form.set('language', language)
   const prompt = normalizePrompt(request.prompt)
@@ -259,13 +259,13 @@ function createTranscriptionForm(
 }
 
 function getApiKey(context: ProviderContext): string {
-  const apiKey = getSecretString(context, 'apiKey')
-  if (!apiKey) throw new Error('openai apiKey is required in provider settings.')
-  return apiKey
+  const api_key = getSecretString(context, 'api_key')
+  if (!api_key) throw new Error('openai api_key is required in provider settings.')
+  return api_key
 }
 
 function getBaseUrl(context: ProviderContext): string {
-  return trimTrailingSlash(getConfigString(context, 'baseUrl') ?? DEFAULT_BASE_URL)
+  return trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
 }
 
 function normalizeResponseFormat(value: string): 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm' {
@@ -275,10 +275,10 @@ function normalizeResponseFormat(value: string): 'mp3' | 'opus' | 'aac' | 'flac'
 }
 
 function normalizeTranscriptionResponseFormat(
-  responseFormat: TranscribeRequest['responseFormat'],
+  response_format: TranscribeRequest['response_format'],
   format: TranscribeRequest['format'],
 ): 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json' {
-  if (responseFormat === 'text' || responseFormat === 'srt' || responseFormat === 'verbose_json' || responseFormat === 'vtt' || responseFormat === 'diarized_json') return responseFormat
+  if (response_format === 'text' || response_format === 'srt' || response_format === 'verbose_json' || response_format === 'vtt' || response_format === 'diarized_json') return response_format
   if (format === 'txt') return 'text'
   if (format === 'srt') return 'srt'
   if (format === 'vtt') return 'vtt'
@@ -316,26 +316,4 @@ function normalizeSpeed(value: number | undefined): number | undefined {
 function normalizeInstructions(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed || undefined
-}
-
-function parseAudioData(value: string, mimeType: string | undefined): { data: Buffer, mimeType: string, fileName: string } {
-  const match = /^data:([^;,]+)[^,]*,(.+)$/s.exec(value)
-  const resolvedMimeType = match?.[1] ?? mimeType ?? 'application/octet-stream'
-  const base64 = match?.[2] ?? value
-  return {
-    data: Buffer.from(base64, 'base64'),
-    mimeType: resolvedMimeType,
-    fileName: getAudioFileName(resolvedMimeType),
-  }
-}
-
-function getAudioFileName(mimeType: string): string {
-  if (mimeType.includes('wav')) return 'voice.wav'
-  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'voice.mp3'
-  if (mimeType.includes('flac')) return 'voice.flac'
-  if (mimeType.includes('ogg')) return 'voice.ogg'
-  if (mimeType.includes('aac')) return 'voice.aac'
-  if (mimeType.includes('webm')) return 'voice.webm'
-  if (mimeType.includes('mp4')) return 'voice.mp4'
-  return 'voice.bin'
 }
