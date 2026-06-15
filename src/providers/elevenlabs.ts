@@ -213,6 +213,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     form.set('audio', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
     form.set('file_format', request.file_format ?? 'other')
     if (request.preview_b64) form.set('preview_b64', request.preview_b64)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetch(`${getBaseUrl(context)}/audio-isolation`, {
       method: 'POST',

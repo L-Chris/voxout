@@ -432,6 +432,18 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
   const invalidFormatPayload = await invalidFormatResponse.json()
   assert.equal(invalidFormatResponse.status, 400)
   assert.match(invalidFormatPayload.error, /file_format must be "pcm_s16le_16" or "other"/)
+
+  const conflictingExtraParams = new FormData()
+  conflictingExtraParams.set('model', 'mock')
+  conflictingExtraParams.set('file', new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
+  conflictingExtraParams.set('extra_params', JSON.stringify({ file_format: 'other' }))
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/isolation`, {
+    method: 'POST',
+    body: conflictingExtraParams,
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.file_format conflicts/)
 })
 
 test('POST /v1/audio/design persists generated voices', async () => {

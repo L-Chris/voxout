@@ -79,6 +79,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `file`，必填 file | 无 | 不支持 | Voxout provider 内部映射成 ElevenLabs `audio` multipart file | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `file_format`，可选 `pcm_s16le_16` 或 `other` | 无 | 不支持 | 校验后映射 `file_format`，缺省 `other` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `preview_b64`，可选 string | 无 | 不支持 | `preview_b64` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `extra_params`，可选 JSON object string | 无 | 不支持 | 追加到 ElevenLabs multipart；adapter 已映射字段优先 | 不支持 | 不支持 | 不支持 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `provider/model/file/file_format/preview_b64` 等已识别字段 |
 | 响应 | 无 | 不支持 | 隔离后的音频 bytes，MIME 来自 `content-type`，缺省输入 MIME | 不支持 | 不支持 | 不支持 | 不支持 | 不返回 ElevenLabs JSON |
 
 ## POST `/v1/audio/design`

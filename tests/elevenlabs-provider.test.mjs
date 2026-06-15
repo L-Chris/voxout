@@ -206,6 +206,8 @@ test('ElevenLabs provider sends audio isolation requests', async () => {
       url: String(url),
       headers: init.headers,
       file_format: init.body.get('file_format'),
+      preview_b64: init.body.get('preview_b64'),
+      custom_tags: init.body.getAll('custom_tags[]'),
       file: init.body.get('audio'),
     }
     return new Response(Buffer.alloc(256, 1), {
@@ -221,6 +223,12 @@ test('ElevenLabs provider sends audio isolation requests', async () => {
       mime_type: 'audio/wav',
       file_name: 'input.wav',
     },
+    file_format: 'pcm_s16le_16',
+    preview_b64: 'preview-data',
+    extra_params: {
+      file_format: 'other',
+      custom_tags: ['clean', 'voice'],
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-eleven-key' },
@@ -228,7 +236,9 @@ test('ElevenLabs provider sends audio isolation requests', async () => {
 
   assert.equal(captured.url, 'https://api.elevenlabs.io/v1/audio-isolation')
   assert.equal(captured.headers['xi-api-key'], 'test-eleven-key')
-  assert.equal(captured.file_format, 'other')
+  assert.equal(captured.file_format, 'pcm_s16le_16')
+  assert.equal(captured.preview_b64, 'preview-data')
+  assert.deepEqual(captured.custom_tags, ['clean', 'voice'])
   assert.equal(captured.file.type, 'audio/wav')
   assert.equal(result.mime_type, 'audio/mpeg')
 })

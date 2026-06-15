@@ -142,6 +142,7 @@ export interface AudioIsolationRequest {
   }
   file_format?: 'pcm_s16le_16' | 'other'
   preview_b64?: string
+  extra_params?: JsonObject
 }
 
 export interface VoiceDesignRequest {

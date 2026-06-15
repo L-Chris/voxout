@@ -89,6 +89,14 @@ const SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'loop',
   'extra_params',
 ])
+const AUDIO_ISOLATION_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'model',
+  'file',
+  'file_format',
+  'preview_b64',
+  'extra_params',
+])
 const VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'provider',
   'input',
@@ -383,6 +391,10 @@ function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnTy
     },
     file_format: normalizeIsolationFileFormat(form.fields.file_format),
     preview_b64: normalizeOptionalString(form.fields.preview_b64, 'preview_b64'),
+    extra_params: normalizeExtraParams(
+      form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined,
+      AUDIO_ISOLATION_EXTRA_PARAM_RESERVED_FIELDS,
+    ),
   }
 }
 
