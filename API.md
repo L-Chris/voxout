@@ -99,7 +99,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 ## POST `/v1/audio/voices`
 
-上传音频素材克隆声音。请求体是 `multipart/form-data`。
+上传音频素材克隆声音。请求体是 `multipart/form-data`。为贴近 OpenAI 规范，顶层只接受 `provider`、`name`、`consent`、`audio_sample`、`extra_params`；provider 专属 clone 字段放入 `extra_params`。
 
 | 实际传参 | [OpenAI 规范][openai-voice] | [OpenAI][openai-voice] | [ElevenLabs][elevenlabs-ivc] | [Cartesia][cartesia-clone] | [Gradium][gradium-clone] | [MiMo][mimo-tts] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
@@ -107,10 +107,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `name`，必填 string | 必填 | `name` | `name` | `name` | `name` | 本地保存 name | 不支持 | 无 |
 | `consent`，可选 string | 官方要求 consent recording id | `consent` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
 | `audio_sample`，必填 file | 必填；最大 10 MiB，支持常见音频格式 | `audio_sample` | `files[]` | `clip` | `audio_file` | 不调用下游，仅保存为 preview audio | 不支持 | 无 |
-| `description` / `language`，可选 string | OpenAI 无 | 保存到 Voxout voice record；不发送给 OpenAI voice clone | `description` 会发送；`language` 保存到 Voxout voice record | `description` / `language` 会发送；`language` 裁剪地区码，缺省 `en` | `description` / `language` 会发送；`language` 裁剪地区码 | 保存到 Voxout voice record；不调用下游 | 不支持 | 无 |
-| `metadata`，可选 JSON object string | OpenAI 无 | 保存到 Voxout voice record；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | multipart 中必须是 JSON object 字符串 |
-| `preview_text`，可选 string | OpenAI 无 | 保存到 Voxout voice metadata；不发送给 provider | 同左 | 同左 | 同左 | 同左 | 不支持 | 无 |
-| `extra_params`，可选 JSON object string | 无 | 追加到 OpenAI multipart；不能覆盖 `name/consent/audio_sample` 等已识别字段 | 追加到 ElevenLabs multipart；adapter 已映射字段优先 | 追加到 Cartesia multipart；adapter 已映射字段优先 | 追加到 Gradium multipart；adapter 已映射字段优先 | 当前不下发 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `provider/name/consent/audio_sample/description/language/metadata/preview_text` 等已识别字段 |
+| `extra_params`，可选 JSON object string | 无 | 追加到 OpenAI multipart；不能覆盖 `name/consent/audio_sample` 等已识别字段 | `description` 映射到 ElevenLabs form；`language` 仅保存为 Voxout voice 语言；其他字段追加到 ElevenLabs multipart | `description` / `language` 映射到 Cartesia form；`language` 裁剪地区码，缺省 `en`；其他字段追加到 multipart | `description` / `language` 映射到 Gradium form；`language` 裁剪地区码；其他字段追加到 multipart | `description` / `language` 保存到本地 voice；不调用下游 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `provider/name/consent/audio_sample` 等已识别字段；`metadata`、`preview_text` 等未知字段是否生效取决于目标 provider |
 | 固定/配置字段 | 无 | 无 | 无 | `base_voice_id` 来自 provider 配置 `base_voice_id` | `input_format` 由 MIME 推断；`start_s=0`；`timeout_s` 来自 `clone_timeout_seconds` 或 `10` | 本地生成 `mimo_*` voice id | 不支持 | 无 |
 | 响应 | `{ id, object: "audio.voice", created_at, name }` | Voxout 返回 OpenAI 风格响应，并保存 provider link | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应 | 同 OpenAI 风格响应；无 provider voice id | 不支持 | 不返回 provider 原始 clone response |
 

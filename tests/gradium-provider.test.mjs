@@ -191,14 +191,14 @@ test('Gradium provider sends voice clone requests and lists voices', async () =>
   const provider = new GradiumProvider()
   const clone = await provider.cloneVoice({
     name: 'Narrator',
-    description: 'Calm narrator',
-    language: 'en-US',
     audio_sample: {
       data: Buffer.alloc(256, 1),
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
     extra_params: {
+      description: 'Calm narrator',
+      language: 'en-US',
       timeout_s: 99,
       tags: ['narration', 'calm'],
     },

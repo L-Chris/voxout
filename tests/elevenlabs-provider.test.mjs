@@ -318,14 +318,13 @@ test('ElevenLabs provider sends voice clone requests', async () => {
   const provider = new ElevenLabsProvider()
   const result = await provider.cloneVoice({
     name: 'Narrator Clone',
-    description: 'A clean narrator sample.',
     audio_sample: {
       data: Buffer.alloc(256, 1),
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
     extra_params: {
-      description: 'extra-description-should-not-win',
+      description: 'A clean narrator sample.',
       labels: { accent: 'neutral' },
     },
   }, {

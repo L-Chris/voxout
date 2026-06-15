@@ -19,6 +19,7 @@ import { TextDecoder, TextEncoder } from 'node:util'
 import {
   getConfigBooleanWithFallback as getBooleanConfig,
   getConfigString,
+  getJsonStringParam,
   getSecretString,
   mergeJsonBody,
   trimTrailingSlash,
@@ -176,13 +177,15 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
   async cloneVoice(request: VoiceCloneRequest): Promise<VoiceCloneResult> {
     const audio = fileToAudioDataUrl(request.audio_sample)
     const voice_id = `mimo_${randomUUID()}`
+    const description = getJsonStringParam(request.extra_params, 'description')
+    const language = getJsonStringParam(request.extra_params, 'language')
     return {
       provider: this.id,
       voice: {
         voice_id,
         name: request.name,
-        description: request.description,
-        language: request.language,
+        description,
+        language,
         preview_audio_data: audio,
         preview_mime_type: getDataUrlMimeType(audio) ?? request.audio_sample.mime_type,
         metadata: {

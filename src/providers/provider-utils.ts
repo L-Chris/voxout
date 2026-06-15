@@ -55,6 +55,19 @@ export function appendJsonParamsToForm(form: FormData, params?: JsonObject): voi
   }
 }
 
+export function getJsonStringParam(params: JsonObject | undefined, key: string): string | undefined {
+  const value = params?.[key]
+  if (typeof value !== 'string') return undefined
+  return value.trim() || undefined
+}
+
+export function omitJsonParams(params: JsonObject | undefined, keys: string[]): JsonObject | undefined {
+  if (!params) return undefined
+  const omitted = new Set(keys)
+  const next = Object.fromEntries(Object.entries(params).filter(([key]) => !omitted.has(key))) as JsonObject
+  return Object.keys(next).length ? next : undefined
+}
+
 export async function fetchWithProviderTimeout(input: string | URL, init: RequestInit, context: ProviderContext): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), getProviderTimeoutMs(context))

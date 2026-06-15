@@ -24,9 +24,11 @@ import {
   getConfigBoolean,
   getConfigNumber,
   getConfigString,
+  getJsonStringParam,
   getPayloadError,
   getSecretString,
   mergeJsonBody,
+  omitJsonParams,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -295,11 +297,13 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
     const api_key = getApiKey(context)
     const audio = request.audio_sample
+    const description = getJsonStringParam(request.extra_params, 'description')
+    const language = getJsonStringParam(request.extra_params, 'language')
     const form = new FormData()
     form.set('name', request.name)
-    if (request.description) form.set('description', request.description)
+    if (description) form.set('description', description)
     form.set('files[]', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
-    appendJsonParamsToForm(form, request.extra_params)
+    appendJsonParamsToForm(form, omitJsonParams(request.extra_params, ['description', 'language']))
 
     const response = await fetch(`${getBaseUrl(context)}/voices/add`, {
       method: 'POST',
@@ -317,8 +321,8 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
         voice_id: payload.voice_id,
         provider_voice_id: payload.voice_id,
         name: request.name,
-        description: request.description,
-        language: request.language,
+        description,
+        language,
         metadata: {
           requires_verification: payload.requires_verification ?? null,
         },

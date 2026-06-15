@@ -113,12 +113,14 @@ const VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'name',
   'consent',
   'audio_sample',
-  'description',
-  'language',
-  'metadata',
-  'preview_text',
   'extra_params',
 ])
+const TRANSCRIPTION_FORM_FIELDS = new Set(TRANSCRIPTION_EXTRA_PARAM_RESERVED_FIELDS)
+const AUDIO_ISOLATION_FORM_FIELDS = new Set(AUDIO_ISOLATION_EXTRA_PARAM_RESERVED_FIELDS)
+const VOICE_CLONE_FORM_FIELDS = new Set(VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS)
+const TRANSCRIPTION_FILE_FIELDS = new Set(['file'])
+const AUDIO_ISOLATION_FILE_FIELDS = new Set(['file'])
+const VOICE_CLONE_FILE_FIELDS = new Set(['audio_sample'])
 
 @Service()
 export class AudioService {
@@ -221,6 +223,7 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
 
 async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const form = await readMultipartForm(req)
+  assertSupportedMultipartFields(form, AUDIO_ISOLATION_FORM_FIELDS, AUDIO_ISOLATION_FILE_FIELDS)
   const providerId = getOpenAiModelProvider(form.fields.model, form.fields.provider)
   assertPublicProviderAccess(providerId)
   const provider = getAudioIsolationProvider(providerId)
@@ -264,6 +267,7 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
 
 async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const form = await readMultipartForm(req)
+  assertSupportedMultipartFields(form, VOICE_CLONE_FORM_FIELDS, VOICE_CLONE_FILE_FIELDS)
   const providerId = typeof form.fields.provider === 'string' && form.fields.provider.trim()
     ? form.fields.provider.trim()
     : 'openai'
@@ -279,7 +283,7 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
     timeout_ms,
     `Voice cloning timed out after ${timeout_ms}ms for provider ${provider.id}`,
   )
-  const voice = await persistProviderVoice(provider.id, context, mergeVoicePreviewMetadata(result.voice, request.metadata), {
+  const voice = await persistProviderVoice(provider.id, context, result.voice, {
     requested_consent: request.consent ?? null,
     source: 'audio_sample',
   })
@@ -293,6 +297,7 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
 
 async function handleOpenAiTranscription(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const form = await readMultipartForm(req)
+  assertSupportedMultipartFields(form, TRANSCRIPTION_FORM_FIELDS, TRANSCRIPTION_FILE_FIELDS)
   const target = resolveOpenAiTranscriptionTarget(form.fields.model, form.fields.provider)
   const providerId = target.providerId
   assertPublicProviderAccess(providerId)
@@ -437,8 +442,6 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
   if (!name) throw new Error('name is required')
   if (!file) throw new Error('audio_sample is required')
   if (file.data.length > VOICE_SAMPLE_MAX_BYTES) throw new Error('audio_sample must be 10 MiB or smaller')
-  const metadata = normalizeFormJsonObject(form.fields.metadata, 'metadata')
-  const preview_text = normalizeOptionalString(form.fields.preview_text, 'preview_text')
   const extra_params = normalizeExtraParams(
     form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined,
     VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS,
@@ -452,12 +455,19 @@ async function normalizeVoiceCloneInput(providerId: string, form: Awaited<Return
       file_name: file.file_name,
     },
     consent: normalizeOptionalString(form.fields.consent, 'consent'),
-    description: normalizeOptionalString(form.fields.description, 'description'),
-    language: normalizeOptionalString(form.fields.language, 'language'),
-    preview_text,
-    metadata: preview_text ? { ...(metadata ?? {}), preview_text } : metadata,
     extra_params,
   }
+}
+
+function assertSupportedMultipartFields(
+  form: Awaited<ReturnType<typeof readMultipartForm>>,
+  allowed_fields: ReadonlySet<string>,
+  allowed_files: ReadonlySet<string>,
+): void {
+  const unsupported_field = Object.keys(form.fields).find(field => !allowed_fields.has(field))
+  if (unsupported_field) throw new Error(`${unsupported_field} is not supported`)
+  const unsupported_file = Object.keys(form.files).find(field => !allowed_files.has(field))
+  if (unsupported_file) throw new Error(`${unsupported_file} is not supported`)
 }
 
 async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
@@ -561,11 +571,6 @@ function normalizeExtraParams(value: unknown, reserved_fields?: ReadonlySet<stri
   const conflict = Object.keys(extra_params).find(key => reserved_fields?.has(key))
   if (conflict) throw new Error(`extra_params.${conflict} conflicts with a recognized request field`)
   return extra_params
-}
-
-function normalizeFormJsonObject(value: string | undefined, field_name: string): JsonObject | undefined {
-  if (value == null || value === '') return undefined
-  return parseJsonObjectField(value, field_name)
 }
 
 function normalizeOptionalString(value: unknown, field_name: string): string | undefined {
@@ -691,17 +696,6 @@ function normalizeChunkingStrategy(value: string | undefined): 'auto' | JsonObje
 function validateTranscriptionRequest(request: TranscribeRequest): void {
   if (request.timestamp_granularities?.length && request.response_format !== 'verbose_json') {
     throw new Error('timestamp_granularities requires response_format "verbose_json"')
-  }
-}
-
-function mergeVoicePreviewMetadata(voice: VoicePreview, metadata: JsonObject | undefined): VoicePreview {
-  if (!metadata) return voice
-  return {
-    ...voice,
-    metadata: {
-      ...metadata,
-      ...(voice.metadata ?? {}),
-    },
   }
 }
 

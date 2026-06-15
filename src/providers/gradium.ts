@@ -18,8 +18,10 @@ import {
   fetchWithProviderTimeout,
   getConfigNumber,
   getConfigString,
+  getJsonStringParam,
   getSecretString,
   mergeJsonBody,
+  omitJsonParams,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -153,15 +155,17 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
     const api_key = getApiKey(context)
     const audio = request.audio_sample
+    const description = getJsonStringParam(request.extra_params, 'description')
+    const language = getJsonStringParam(request.extra_params, 'language')
     const form = new FormData()
     form.set('audio_file', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
     form.set('name', request.name)
     form.set('input_format', getGradiumInputFormat(audio.mime_type))
-    if (request.description) form.set('description', request.description)
-    if (request.language) form.set('language', normalizeLanguage(request.language) ?? request.language)
+    if (description) form.set('description', description)
+    if (language) form.set('language', normalizeLanguage(language) ?? language)
     form.set('start_s', '0')
     form.set('timeout_s', String(getConfigNumber(context, 'clone_timeout_seconds') ?? 10))
-    appendJsonParamsToForm(form, request.extra_params)
+    appendJsonParamsToForm(form, omitJsonParams(request.extra_params, ['description', 'language']))
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/`, {
       method: 'POST',
@@ -180,8 +184,8 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
         voice_id: payload.uid,
         provider_voice_id: payload.uid,
         name: request.name,
-        description: request.description,
-        language: request.language,
+        description,
+        language,
         metadata: {
           was_updated: payload.was_updated ?? false,
         },

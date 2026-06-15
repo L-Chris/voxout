@@ -197,14 +197,14 @@ test('Cartesia provider sends voice clone requests and lists voices', async () =
   const provider = new CartesiaProvider()
   const clone = await provider.cloneVoice({
     name: 'Narrator',
-    description: 'Calm narrator',
-    language: 'en-US',
     audio_sample: {
       data: Buffer.alloc(256, 1),
       mime_type: 'audio/wav',
       file_name: 'voice.wav',
     },
     extra_params: {
+      description: 'Calm narrator',
+      language: 'en-US',
       base_voice_id: 'extra-base-should-not-win',
       tags: ['narration', 'calm'],
     },

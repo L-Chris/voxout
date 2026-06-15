@@ -416,29 +416,16 @@ test('POST /v1/audio/isolation returns processed audio bytes', async () => {
 })
 
 test('POST /v1/audio/isolation only accepts multipart file input', async () => {
-  const legacyForms = [
-    (() => {
-      const form = new FormData()
-      form.set('model', 'mock')
-      form.set('audio', new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
-      return form
-    })(),
-    (() => {
-      const form = new FormData()
-      form.set('model', 'mock')
-      form.set('url', 'https://example.com/audio.wav')
-      return form
-    })(),
-    (() => {
-      const form = new FormData()
-      form.set('model', 'mock')
-      form.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
-      form.set('mime_type', 'audio/wav')
-      return form
-    })(),
-  ]
-
-  for (const form of legacyForms) {
+  for (const field of ['audio', 'url', 'audioData', 'mimeType']) {
+    const form = new FormData()
+    form.set('model', 'mock')
+    if (field === 'audio') {
+      form.set(field, new Blob([createTinyWav()], { type: 'audio/wav' }), 'input.wav')
+    } else {
+      form.set(field, field === 'url'
+        ? 'https://example.com/audio.wav'
+        : `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
+    }
     const response = await fetch(`${base_url}/v1/audio/isolation`, {
       method: 'POST',
       body: form,
@@ -446,7 +433,7 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, /file is required/)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
   }
 
   const invalidFormat = new FormData()
@@ -550,10 +537,6 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   const form = new FormData()
   form.set('provider', 'mock')
   form.set('name', 'Uploaded Mock')
-  form.set('description', 'Uploaded sample voice')
-  form.set('language', 'zh-CN')
-  form.set('preview_text', 'Preview text sample')
-  form.set('metadata', JSON.stringify({ owner: 'test-suite' }))
   form.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
 
   const response = await fetch(`${base_url}/v1/audio/voices`, {
@@ -575,10 +558,6 @@ test('POST /v1/audio/voices clones and persists provider-linked voices', async (
   assert.equal(voicesResponse.status, 200)
   const storedVoice = voicesPayload.voices.find(voice => voice.voice_id === payload.id)
   assert.ok(storedVoice)
-  assert.equal(storedVoice.description, 'Uploaded sample voice')
-  assert.equal(storedVoice.language, 'zh-CN')
-  assert.equal(storedVoice.metadata.owner, 'test-suite')
-  assert.equal(storedVoice.metadata.preview_text, 'Preview text sample')
 })
 
 test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => {
@@ -592,7 +571,7 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
   })
   const legacyProviderPayload = await legacyProviderResponse.json()
   assert.equal(legacyProviderResponse.status, 400)
-  assert.match(legacyProviderPayload.error, /Provider is disabled: openai|openai api_key is required|Unknown provider/)
+  assert.match(legacyProviderPayload.error, /model is not supported/)
 
   for (const field of ['file', 'audio']) {
     const form = new FormData()
@@ -605,45 +584,39 @@ test('POST /v1/audio/voices only accepts OpenAI voice form fields', async () => 
     })
     const payload = await response.json()
     assert.equal(response.status, 400)
-    assert.match(payload.error, /audio_sample is required/)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
   }
 
-  const urlForm = new FormData()
-  urlForm.set('provider', 'mock')
-  urlForm.set('name', 'Legacy URL')
-  urlForm.set('url', 'https://example.com/sample.wav')
-  const urlResponse = await fetch(`${base_url}/v1/audio/voices`, {
-    method: 'POST',
-    body: urlForm,
-  })
-  const urlPayload = await urlResponse.json()
-  assert.equal(urlResponse.status, 400)
-  assert.match(urlPayload.error, /audio_sample is required/)
+  for (const field of ['url', 'audioData', 'mimeType']) {
+    const form = new FormData()
+    form.set('provider', 'mock')
+    form.set('name', `Legacy ${field}`)
+    form.set(field, field === 'url'
+      ? 'https://example.com/sample.wav'
+      : `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
+    const response = await fetch(`${base_url}/v1/audio/voices`, {
+      method: 'POST',
+      body: form,
+    })
+    const payload = await response.json()
+    assert.equal(response.status, 400)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
+  }
 
-  const legacyDataForm = new FormData()
-  legacyDataForm.set('provider', 'mock')
-  legacyDataForm.set('name', 'Legacy Audio Data')
-  legacyDataForm.set('audioData', `data:audio/wav;base64,${createTinyWav().toString('base64')}`)
-  const legacyDataResponse = await fetch(`${base_url}/v1/audio/voices`, {
-    method: 'POST',
-    body: legacyDataForm,
-  })
-  const legacyDataPayload = await legacyDataResponse.json()
-  assert.equal(legacyDataResponse.status, 400)
-  assert.match(legacyDataPayload.error, /audio_sample is required/)
-
-  const invalidMetadata = new FormData()
-  invalidMetadata.set('provider', 'mock')
-  invalidMetadata.set('name', 'Invalid Metadata')
-  invalidMetadata.set('metadata', '[1,2,3]')
-  invalidMetadata.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
-  const invalidMetadataResponse = await fetch(`${base_url}/v1/audio/voices`, {
-    method: 'POST',
-    body: invalidMetadata,
-  })
-  const invalidMetadataPayload = await invalidMetadataResponse.json()
-  assert.equal(invalidMetadataResponse.status, 400)
-  assert.match(invalidMetadataPayload.error, /metadata must be a JSON object/)
+  for (const field of ['description', 'language', 'metadata', 'preview_text']) {
+    const form = new FormData()
+    form.set('provider', 'mock')
+    form.set('name', `Unsupported ${field}`)
+    form.set(field, field === 'metadata' ? '{"owner":"test-suite"}' : 'unsupported')
+    form.set('audio_sample', new Blob([createTinyWav()], { type: 'audio/wav' }), 'voice.wav')
+    const response = await fetch(`${base_url}/v1/audio/voices`, {
+      method: 'POST',
+      body: form,
+    })
+    const payload = await response.json()
+    assert.equal(response.status, 400)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
+  }
 
   const conflictingExtraParams = new FormData()
   conflictingExtraParams.set('provider', 'mock')
@@ -761,7 +734,7 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
 })
 
 test('POST /v1/audio/transcriptions only accepts multipart file input', async () => {
-  for (const field of ['url', 'audioData']) {
+  for (const field of ['url', 'audioData', 'mimeType']) {
     const form = new FormData()
     form.set('provider', 'mock-asr')
     form.set('model', 'mock-asr-model')
@@ -776,11 +749,11 @@ test('POST /v1/audio/transcriptions only accepts multipart file input', async ()
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, /file is required/)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
   }
 })
 
-test('POST /v1/audio/transcriptions ignores legacy model aliases', async () => {
+test('POST /v1/audio/transcriptions rejects legacy model aliases', async () => {
   for (const field of ['model_id', 'asr_model']) {
     const form = new FormData()
     form.set(field, 'gpt-4o-transcribe')
@@ -794,7 +767,7 @@ test('POST /v1/audio/transcriptions ignores legacy model aliases', async () => {
     const payload = await response.json()
 
     assert.equal(response.status, 400)
-    assert.match(payload.error, /model is required/)
+    assert.match(payload.error, new RegExp(`${field} is not supported`))
   }
 })
 

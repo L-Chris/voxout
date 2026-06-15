@@ -164,10 +164,6 @@ export interface VoiceCloneRequest {
     file_name: string
   }
   consent?: string
-  description?: string
-  language?: string
-  preview_text?: string
-  metadata?: JsonObject
   extra_params?: JsonObject
 }
 

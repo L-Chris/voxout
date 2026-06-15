@@ -91,8 +91,6 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
         voice_id,
         provider_voice_id: voice_id,
         name: request.name,
-        description: request.description,
-        language: request.language,
         preview_audio_data: `data:${request.audio_sample.mime_type};base64,${audio_data}`,
         preview_mime_type: request.audio_sample.mime_type,
         metadata: {},

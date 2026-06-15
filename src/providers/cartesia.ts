@@ -16,9 +16,11 @@ import {
   compactObject,
   fetchWithProviderTimeout,
   getConfigString,
+  getJsonStringParam,
   getPayloadError,
   getSecretString,
   mergeJsonBody,
+  omitJsonParams,
   readJsonResponse,
   trimTrailingSlash,
 } from './provider-utils.js'
@@ -154,14 +156,16 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
     const api_key = getApiKey(context)
     const audio = request.audio_sample
+    const language = getJsonStringParam(request.extra_params, 'language')
+    const description = getJsonStringParam(request.extra_params, 'description')
     const form = new FormData()
     form.set('clip', new Blob([audio.data], { type: audio.mime_type }), audio.file_name)
     form.set('name', request.name)
-    form.set('language', normalizeLanguage(request.language) ?? 'en')
-    if (request.description) form.set('description', request.description)
+    form.set('language', normalizeLanguage(language) ?? 'en')
+    if (description) form.set('description', description)
     const base_voice_id = getConfigString(context, 'base_voice_id')
     if (base_voice_id) form.set('base_voice_id', base_voice_id)
-    appendJsonParamsToForm(form, request.extra_params)
+    appendJsonParamsToForm(form, omitJsonParams(request.extra_params, ['language', 'description']))
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/voices/clone`, {
       method: 'POST',
@@ -179,8 +183,8 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
         voice_id: payload.id,
         provider_voice_id: payload.id,
         name: payload.name ?? request.name,
-        description: payload.description ?? request.description,
-        language: payload.language ?? request.language,
+        description: payload.description ?? description,
+        language: payload.language ?? language,
         metadata: {
           created_at: payload.created_at ?? null,
         },

@@ -194,8 +194,6 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         voice_id: payload.id,
         provider_voice_id: payload.id,
         name: payload.name ?? request.name,
-        description: request.description,
-        language: request.language,
         metadata: {
           object: payload.object ?? null,
           created_at: payload.created_at ?? null,
