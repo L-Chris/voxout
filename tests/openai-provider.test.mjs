@@ -30,6 +30,7 @@ test('OpenAI provider sends text-to-speech requests', async () => {
     instructions: 'Speak with a warm narration style.',
     extra_params: {
       seed: 42,
+      instructions: 'Bypass with extra params.',
     },
     id: 'tts',
     text: 'Hello from OpenAI.',
@@ -47,7 +48,6 @@ test('OpenAI provider sends text-to-speech requests', async () => {
     input: 'Hello from OpenAI.',
     voice: 'voice_custom_1',
     response_format: 'mp3',
-    instructions: 'Speak with a warm narration style.',
     seed: 42,
   })
 })
@@ -91,6 +91,26 @@ test('OpenAI provider streams text-to-speech requests', async () => {
     stream_format: 'sse',
     instructions: 'Sound calm.',
   })
+})
+
+test('OpenAI provider rejects SSE speech streams for legacy TTS models', async () => {
+  globalThis.fetch = async () => {
+    throw new Error('fetch should not be called')
+  }
+
+  const provider = new OpenAiProvider()
+  await assert.rejects(
+    () => provider.streamSynthesize({
+      model: 'tts-1',
+      stream_format: 'sse',
+      id: 'tts',
+      text: 'Hello from OpenAI.',
+    }, {
+      config: {},
+      secrets: { api_key: 'test-openai-key' },
+    }),
+    /OpenAI speech model tts-1 does not support stream_format "sse"/,
+  )
 })
 
 test('OpenAI provider sends voice clone requests', async () => {

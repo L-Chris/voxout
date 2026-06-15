@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './styles.css'
 
 function App() {
-  const [appConfig, setAppConfig] = useState({ apiBaseUrl: '' })
+  const [appConfig, setAppConfig] = useState({ api_base_url: '' })
   const [providers, setProviders] = useState([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
@@ -23,12 +23,12 @@ function App() {
   const [transcriptionForm, setTranscriptionForm] = useState(defaultTranscriptionForm())
   const [transcriptionFile, setTranscriptionFile] = useState(null)
 
-  const apiBaseUrl = normalizeApiBaseUrl(appConfig.apiBaseUrl)
+  const api_base_url = normalize_api_base_url(appConfig.api_base_url)
   const selectedProvider = providers.find(provider => provider.id === selectedProviderId) ?? providers[0]
   const voiceTree = useMemo(() => buildVoiceTree(voiceOptions), [voiceOptions])
 
   useEffect(() => {
-    loadConfig().then(setAppConfig).catch(() => setAppConfig({ apiBaseUrl: '' }))
+    loadConfig().then(setAppConfig).catch(() => setAppConfig({ api_base_url: '' }))
   }, [])
 
   useEffect(() => {
@@ -36,7 +36,7 @@ function App() {
       setProviders([])
       setTestResult({ kind: 'error', message: error.message })
     })
-  }, [apiBaseUrl])
+  }, [api_base_url])
 
   useEffect(() => {
     if (!selectedProvider) return
@@ -75,10 +75,10 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [selectedProvider?.id, apiBaseUrl])
+  }, [selectedProvider?.id, api_base_url])
 
   async function loadProviders() {
-    const response = await fetch(apiUrl('/api/providers', apiBaseUrl))
+    const response = await fetch(apiUrl('/api/providers', api_base_url))
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.error || 'Failed to load providers')
     const nextProviders = payload.providers || []
@@ -90,7 +90,7 @@ function App() {
   }
 
   async function loadProviderVoices(providerId) {
-    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(providerId)}/voices`, apiBaseUrl))
+    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(providerId)}/voices`, api_base_url))
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.error || 'Failed to load voices')
     return (payload.voices || []).map(formatVoiceOption)
@@ -139,7 +139,7 @@ function App() {
       }
     }
 
-    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(selectedProvider.id)}/config`, apiBaseUrl), {
+    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(selectedProvider.id)}/config`, api_base_url), {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ enabled: Boolean(formValues.enabled), config, secrets }),
@@ -182,7 +182,7 @@ function App() {
   }
 
   async function runSpeechTest() {
-    const response = await fetch(apiUrl('/v1/audio/speech', apiBaseUrl), {
+    const response = await fetch(apiUrl('/v1/audio/speech', api_base_url), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -226,7 +226,7 @@ function App() {
     if (!transcriptionFile) throw new Error('Choose an audio file.')
     form.set('file', transcriptionFile)
 
-    const response = await fetch(apiUrl('/v1/audio/transcriptions', apiBaseUrl), {
+    const response = await fetch(apiUrl('/v1/audio/transcriptions', api_base_url), {
       method: 'POST',
       body: form,
     })
@@ -244,7 +244,7 @@ function App() {
   }
 
   async function runEffectTest() {
-    const response = await fetch(apiUrl('/v1/audio/effect', apiBaseUrl), {
+    const response = await fetch(apiUrl('/v1/audio/effect', api_base_url), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -275,7 +275,7 @@ function App() {
     if (!isolationFile) throw new Error('Choose an audio file.')
     form.set('file', isolationFile)
 
-    const response = await fetch(apiUrl('/v1/audio/isolation', apiBaseUrl), {
+    const response = await fetch(apiUrl('/v1/audio/isolation', api_base_url), {
       method: 'POST',
       body: form,
     })
@@ -292,19 +292,22 @@ function App() {
   }
 
   async function runDesignTest() {
-    const response = await fetch(apiUrl('/v1/audio/design', apiBaseUrl), {
+    const extra_params = compactPayload({
+      auto_generate_text: designForm.auto_generate_text,
+      guidance_scale: optionalNumber(designForm.guidance_scale),
+      seed: optionalNumber(designForm.seed),
+    })
+    const response = await fetch(apiUrl('/v1/audio/design', api_base_url), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         provider: selectedProvider.id,
-        input: designForm.voiceDescription,
+        input: designForm.input,
         name: designForm.name || undefined,
         text: designForm.text || undefined,
         response_format: designForm.response_format,
         model: designForm.model || undefined,
-        auto_generate_text: designForm.autoGenerateText,
-        guidance_scale: Number(designForm.guidanceScale) || undefined,
-        seed: designForm.seed ? Number(designForm.seed) : undefined,
+        extra_params: Object.keys(extra_params).length ? extra_params : undefined,
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
@@ -333,7 +336,7 @@ function App() {
       throw new Error('Choose an audio file.')
     }
 
-    const response = await fetch(apiUrl('/v1/audio/voices', apiBaseUrl), {
+    const response = await fetch(apiUrl('/v1/audio/voices', api_base_url), {
       method: 'POST',
       body: form,
     })
@@ -897,8 +900,8 @@ function DesignTestForm({ form, onFormChange }) {
         Voice description
         <textarea
           className="textarea min-h-28"
-          value={form.voiceDescription}
-          onChange={event => onFormChange({ ...form, voiceDescription: event.target.value })}
+          value={form.input}
+          onChange={event => onFormChange({ ...form, input: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -946,8 +949,8 @@ function DesignTestForm({ form, onFormChange }) {
           max="100"
           step="0.5"
           type="number"
-          value={form.guidanceScale}
-          onChange={event => onFormChange({ ...form, guidanceScale: event.target.value })}
+          value={form.guidance_scale}
+          onChange={event => onFormChange({ ...form, guidance_scale: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -964,8 +967,8 @@ function DesignTestForm({ form, onFormChange }) {
       <label className="inline-flex items-center gap-2 self-end text-sm font-semibold">
         <input
           type="checkbox"
-          checked={form.autoGenerateText}
-          onChange={event => onFormChange({ ...form, autoGenerateText: event.target.checked })}
+          checked={form.auto_generate_text}
+          onChange={event => onFormChange({ ...form, auto_generate_text: event.target.checked })}
         />
         Auto text
       </label>
@@ -1040,8 +1043,11 @@ function ResultPreview({ result }) {
 
 async function loadConfig() {
   const response = await fetch('/voxout.config.json', { cache: 'no-store' })
-  if (!response.ok) return { apiBaseUrl: '' }
-  return { apiBaseUrl: '', ...await response.json() }
+  if (!response.ok) return { api_base_url: '' }
+  const payload = await response.json()
+  return {
+    api_base_url: typeof payload.api_base_url === 'string' ? payload.api_base_url : '',
+  }
 }
 
 async function readError(response) {
@@ -1118,13 +1124,13 @@ function defaultIsolationForm() {
 
 function defaultDesignForm() {
   return {
-    voiceDescription: 'A calm narrator voice with a clean tone and warm delivery.',
+    input: 'A calm narrator voice with a clean tone and warm delivery.',
     name: '',
     text: '',
     model: '',
     response_format: 'mp3_44100_128',
-    autoGenerateText: true,
-    guidanceScale: '',
+    auto_generate_text: true,
+    guidance_scale: '',
     seed: '',
   }
 }
@@ -1144,12 +1150,25 @@ function defaultTranscriptionForm(provider) {
   }
 }
 
-function apiUrl(path, apiBaseUrl) {
-  return `${apiBaseUrl}${path}`
+function apiUrl(path, api_base_url) {
+  return `${api_base_url}${path}`
 }
 
-function normalizeApiBaseUrl(value) {
+function normalize_api_base_url(value) {
   return String(value || '').replace(/\/+$/, '')
+}
+
+function optionalNumber(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return undefined
+  const number = Number(text)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function compactPayload(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ''),
+  )
 }
 
 function formatBytes(value) {

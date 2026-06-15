@@ -99,7 +99,7 @@ Voice isolation:
 curl -X POST http://127.0.0.1:4177/v1/audio/isolation \
   --output isolated.mp3 \
   -F provider=elevenlabs \
-  -F audio=@sample.wav
+  -F file=@sample.wav
 ```
 
 Voice design:
@@ -129,16 +129,6 @@ curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
   -F response_format=json \
   -F language=auto \
   -F file=@sample.wav
-```
-
-Transcription from a URL is supported as a voxout extension for URL-based
-providers:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
-  -F provider=default \
-  -F response_format=text \
-  -F url=https://example.com/audio.m4a
 ```
 
 ## Provider Config
@@ -192,9 +182,9 @@ When the API is exposed on the same origin, keep
 
 ```json
 {
-  "apiBaseUrl": ""
+  "api_base_url": ""
 }
 ```
 
-If the static frontend is hosted on a different origin, set `apiBaseUrl` to the
+If the static frontend is hosted on a different origin, set `api_base_url` to the
 public voxout API origin, for example `https://tts.rethinkos.com`.

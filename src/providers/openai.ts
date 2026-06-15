@@ -31,6 +31,8 @@ const OPENAI_TTS_MODELS = [
   'tts-1',
   'tts-1-hd',
 ]
+const OPENAI_TTS_INSTRUCTIONS_MODELS = new Set(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'])
+const OPENAI_TTS_SSE_MODELS = new Set(['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'])
 const OPENAI_ASR_MODELS = [
   'gpt-4o-transcribe',
   'gpt-4o-mini-transcribe',
@@ -116,21 +118,23 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
   ): Promise<Response> {
     const api_key = getApiKey(context)
     const text = request.text.trim()
+    const model = request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL
+    const body = normalizeSpeechBodyForModel(mergeJsonBody({
+      model,
+      input: text,
+      voice: request.voice ?? getConfigString(context, 'default_voice') ?? DEFAULT_VOICE,
+      response_format: response_format,
+      speed: normalizeSpeed(request.speed),
+      stream_format: stream_format,
+      instructions: normalizeInstructions(request.instructions),
+    }, request.extra_params), model)
     const response = await fetch(`${getBaseUrl(context)}/audio/speech`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${api_key}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(mergeJsonBody({
-        model: request.model ?? getConfigString(context, 'tts_model') ?? DEFAULT_TTS_MODEL,
-        input: text,
-        voice: request.voice ?? getConfigString(context, 'default_voice') ?? DEFAULT_VOICE,
-        response_format: response_format,
-        speed: normalizeSpeed(request.speed),
-        stream_format: stream_format,
-        instructions: normalizeInstructions(request.instructions),
-      }, request.extra_params)),
+      body: JSON.stringify(body),
     })
     return response
   }
@@ -351,4 +355,19 @@ function normalizeSpeed(value: number | undefined): number | undefined {
 function normalizeInstructions(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed || undefined
+}
+
+function normalizeSpeechBodyForModel(body: Record<string, unknown>, fallback_model: string): Record<string, unknown> {
+  const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : fallback_model
+  const stream_format = body.stream_format
+  if (stream_format != null && stream_format !== 'audio' && stream_format !== 'sse') {
+    throw new Error('stream_format must be "audio" or "sse"')
+  }
+  if (stream_format === 'sse' && !OPENAI_TTS_SSE_MODELS.has(model)) {
+    throw new Error(`OpenAI speech model ${model} does not support stream_format "sse"`)
+  }
+  if (!OPENAI_TTS_INSTRUCTIONS_MODELS.has(model)) {
+    delete body.instructions
+  }
+  return body
 }
