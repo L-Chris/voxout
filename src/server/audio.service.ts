@@ -233,7 +233,7 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   if (!file) throw new Error('file is required')
   const response_format = normalizeTranscriptionResponseFormat(form.fields.response_format)
   const providerResponseFormat = normalizeProviderTranscriptionResponseFormat(provider.id, response_format)
-  const stream = normalizeBoolean(form.fields.stream)
+  const stream = normalizeTranscriptionStream(form.fields.stream)
   const request: TranscribeRequest = {
     model: target.model,
     file: {
@@ -785,13 +785,18 @@ function normalizeSpeechStreamFormat(value: unknown): 'audio' | 'sse' | undefine
   throw new Error('stream_format must be "audio" or "sse"')
 }
 
-function normalizeBoolean(value: unknown): boolean {
-  return value === true || value === 'true' || value === '1'
+function normalizeTranscriptionStream(value: unknown): boolean {
+  if (value == null || value === '') return false
+  if (value === true || value === 'true' || value === '1') return true
+  if (value === false || value === 'false' || value === '0') return false
+  throw new Error('stream must be a boolean')
 }
 
 function normalizeTranscriptionResponseFormat(value: string | undefined): 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt' | 'diarized_json' {
-  if (value === 'text' || value === 'srt' || value === 'verbose_json' || value === 'vtt' || value === 'diarized_json') return value
-  return 'json'
+  const format = value?.trim()
+  if (!format) return 'json'
+  if (format === 'json' || format === 'text' || format === 'srt' || format === 'verbose_json' || format === 'vtt' || format === 'diarized_json') return format
+  throw new Error('response_format must be one of "json", "text", "srt", "verbose_json", "vtt", or "diarized_json"')
 }
 
 function normalizeProviderTranscriptionResponseFormat(

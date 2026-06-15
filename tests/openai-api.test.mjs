@@ -612,6 +612,34 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   const timestampsPayload = await timestampsResponse.json()
   assert.equal(timestampsResponse.status, 400)
   assert.match(timestampsPayload.error, /timestamp_granularities requires response_format "verbose_json"/)
+
+  const formatForm = new FormData()
+  formatForm.set('provider', 'mock-asr')
+  formatForm.set('model', 'mock-asr-model')
+  formatForm.set('response_format', 'mp3')
+  formatForm.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const formatResponse = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: formatForm,
+  })
+  const formatPayload = await formatResponse.json()
+  assert.equal(formatResponse.status, 400)
+  assert.match(formatPayload.error, /response_format must be one of/)
+
+  const streamForm = new FormData()
+  streamForm.set('provider', 'mock-asr')
+  streamForm.set('model', 'mock-asr-model')
+  streamForm.set('stream', 'maybe')
+  streamForm.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const streamResponse = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: streamForm,
+  })
+  const streamPayload = await streamResponse.json()
+  assert.equal(streamResponse.status, 400)
+  assert.match(streamPayload.error, /stream must be a boolean/)
 })
 
 test('POST /v1/audio/transcriptions only accepts multipart file input', async () => {

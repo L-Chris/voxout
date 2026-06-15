@@ -43,8 +43,8 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `provider`，可选 | 无 | 只用于路由；省略时 OpenAI ASR model 或未知 model 路由到 OpenAI | 只用于路由 | 只用于路由 | 只用于路由 | 只用于路由 | 不支持 | 无 |
 | `language`，可选 string | ISO-639-1 | `language` | `language_code` | `language`，裁剪地区码 | `json_config={"language":...}`，裁剪地区码 | `asr_options.language`，默认 `auto` | 不支持 | 无 |
 | `prompt`，可选 string | 引导转写风格；部分模型不支持 | `prompt` | 忽略 | 忽略 | 忽略 | 忽略 | 不支持 | 无 |
-| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json` | 原样传给 OpenAI | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
-| `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
+| `response_format`，可选 | `json`、`text`、`srt`、`verbose_json`、`vtt`、`diarized_json`；非法值拒绝 | 原样传给 OpenAI | 非 `json/text` 会让 Voxout 请求 verbose 语义并本地格式化 | 同 ElevenLabs；Cartesia 固定请求 word timestamps | 同 ElevenLabs；结果由 Voxout 解析 | 同 ElevenLabs；当前无 segments | 不支持 | 无 |
+| `stream`，可选 boolean | 官方支持 `stream=true` 返回 SSE transcript events；非法 boolean 拒绝；`whisper-1` 不支持 | `stream=true`，直接透传 OpenAI SSE | 不支持 | 不支持 | 不支持 | 下游 `stream: true`，Voxout 将 chat completion chunk 转成 `transcript.text.delta/done` SSE | 不支持 | 无 |
 | `temperature`，可选 number | 官方 `0..1` | 校验后作为 `temperature` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `timestamp_granularities[]`，可选 array | `word` / `segment`；要求 `response_format=verbose_json` | 重复 multipart 字段 `timestamp_granularities[]` | 当前忽略 | 当前忽略；仍固定发送 `timestamp_granularities[]=word` 以获得 words | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `include[]`，可选 array | 当前支持 `logprobs` | 重复 multipart 字段 `include[]` | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
