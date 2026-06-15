@@ -51,7 +51,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `chunking_strategy`，可选 `auto` 或 object | 官方 `auto` 或 server VAD object | `auto` 原样；object 以 JSON 字符串放入 multipart | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `known_speaker_names[]` / `known_speaker_references[]`，可选 array | diarization 已知说话人名称和参考音频 data URL | 重复 multipart 字段 | 当前忽略 | 当前忽略 | 当前忽略 | 当前忽略 | 不支持 | 无 |
 | `extra_params`，可选 JSON string | 无 | 追加到 OpenAI multipart；scalar 用原 key，array 用 `key[]` 重复字段，object JSON.stringify；不能覆盖已识别标准字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 当前不下发 multipart 额外字段 | 深合并到 MiMo chat completion JSON body；adapter 已映射字段优先 | 不支持 | multipart 中必须是 JSON object 字符串；不能包含 `model/file/language/prompt/response_format/stream/temperature/timestamp_granularities/include/chunking_strategy/known_speaker_*` 等已识别字段 |
-| 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；详细格式返回 JSON；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / `{ text, segments, raw }` | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 不直接返回未整理 provider 原始响应，除 OpenAI JSON 扩展字段或 verbose/diarized 中的 `raw` |
+| 响应 | `json -> { text, ... }`；`text/srt/vtt` 返回文本；`verbose_json/diarized_json` 返回 `{ text, segments }`，segments 使用 OpenAI 风格 `id/start/end/text`；`stream=true` 返回 SSE | JSON 会保留 OpenAI 原始 `logprobs/usage/segments` 等字段；stream 直接透传 | Voxout 输出 `{ text }` / text / OpenAI 风格详细 JSON | 同 ElevenLabs | 同 ElevenLabs | 非流式同 ElevenLabs；stream 输出 OpenAI transcript SSE | 不支持 | 非 OpenAI provider 不直接返回未整理 provider 原始响应 |
 
 ## POST `/v1/audio/effect`
 

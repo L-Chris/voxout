@@ -330,11 +330,7 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
     return sendText(res, formatTranscriptionText(response_format, result), transcriptionTextContentType(response_format))
   }
   if (response_format === 'verbose_json' || response_format === 'diarized_json') {
-    return sendJson(res, {
-      text,
-      segments: result.segments,
-      raw: result.raw,
-    })
+    return sendJson(res, formatDetailedTranscriptionResult(text, result, provider.id === 'openai'))
   }
   return sendJson(res, formatJsonTranscriptionResult(text, result.raw))
 }
@@ -914,6 +910,19 @@ function formatJsonTranscriptionResult(text: string, raw: unknown): Record<strin
     ...(raw as Record<string, unknown>),
     text: typeof (raw as { text?: unknown }).text === 'string' ? (raw as { text: string }).text : text,
   }
+}
+
+function formatDetailedTranscriptionResult(text: string, result: TranscribeResult, preserveRawFields: boolean): Record<string, unknown> {
+  const payload = preserveRawFields ? formatJsonTranscriptionResult(text, result.raw) : { text }
+  if (!Array.isArray(payload.segments) && result.segments?.length) {
+    payload.segments = result.segments.map((segment, index) => ({
+      id: index,
+      start: segment.from,
+      end: segment.to,
+      text: segment.content,
+    }))
+  }
+  return payload
 }
 
 function formatSrtTimestamp(seconds: number): string {
