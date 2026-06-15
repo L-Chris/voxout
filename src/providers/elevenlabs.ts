@@ -169,6 +169,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     if (language) form.set('language_code', language)
 
     form.set('file', new Blob([request.file.data], { type: request.file.mime_type }), request.file.file_name)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetch(`${getBaseUrl(context)}/speech-to-text`, {
       method: 'POST',

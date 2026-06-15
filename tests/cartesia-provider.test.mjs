@@ -103,6 +103,8 @@ test('Cartesia provider sends speech-to-text requests', async () => {
       model: init.body.get('model'),
       language: init.body.get('language'),
       granularity: init.body.get('timestamp_granularities[]'),
+      diarization: init.body.get('diarization'),
+      custom_tags: init.body.getAll('custom_tags[]'),
       file: init.body.get('file'),
     }
     return new Response(JSON.stringify({
@@ -124,6 +126,12 @@ test('Cartesia provider sends speech-to-text requests', async () => {
     },
     language: 'en-US',
     format: 'raw',
+    extra_params: {
+      model: 'extra-model-should-not-win',
+      timestamp_granularities: ['segment'],
+      diarization: true,
+      custom_tags: ['meeting', 'clean'],
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-cartesia-key' },
@@ -134,6 +142,8 @@ test('Cartesia provider sends speech-to-text requests', async () => {
   assert.equal(captured.model, 'ink-whisper')
   assert.equal(captured.language, 'en')
   assert.equal(captured.granularity, 'word')
+  assert.equal(captured.diarization, 'true')
+  assert.deepEqual(captured.custom_tags, ['meeting', 'clean'])
   assert.equal(captured.file.type, 'audio/wav')
   assert.equal(result.text, 'Recognized by Cartesia')
   assert.deepEqual(result.segments, [{ from: 0, to: 0.5, content: 'Recognized' }])

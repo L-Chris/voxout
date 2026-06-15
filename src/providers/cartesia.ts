@@ -129,6 +129,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     form.set('timestamp_granularities[]', 'word')
     const language = normalizeLanguage(request.language)
     if (language) form.set('language', language)
+    appendJsonParamsToForm(form, request.extra_params)
 
     const response = await fetchWithProviderTimeout(`${getBaseUrl(context)}/stt`, {
       method: 'POST',

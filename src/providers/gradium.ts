@@ -127,7 +127,8 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     url.searchParams.set('model', request.model ?? getConfigString(context, 'asr_model') ?? DEFAULT_MODEL)
     url.searchParams.set('input_format', inputFormat)
     const language = normalizeLanguage(request.language)
-    if (language) url.searchParams.set('json_config', JSON.stringify({ language }))
+    const json_config = mergeJsonBody({ language }, request.extra_params)
+    if (Object.keys(json_config).length) url.searchParams.set('json_config', JSON.stringify(json_config))
 
     const response = await fetchWithProviderTimeout(url, {
       method: 'POST',

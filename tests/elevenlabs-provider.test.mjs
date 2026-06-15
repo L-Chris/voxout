@@ -109,6 +109,8 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
       model_id: init.body.get('model_id'),
       file: init.body.get('file'),
       language_code: init.body.get('language_code'),
+      diarize: init.body.get('diarize'),
+      custom_tags: init.body.getAll('custom_tags[]'),
     }
     return new Response(JSON.stringify({
       text: 'Recognized text',
@@ -129,6 +131,11 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
     },
     language: 'en',
     format: 'raw',
+    extra_params: {
+      model_id: 'extra-model-should-not-win',
+      diarize: true,
+      custom_tags: ['meeting', 'clean'],
+    },
   }, {
     config: {
       asr_model: 'scribe_v2',
@@ -143,6 +150,8 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
   assert.equal(captured.model_id, 'scribe_v1')
   assert.equal(captured.file.type, 'audio/wav')
   assert.equal(captured.language_code, 'en')
+  assert.equal(captured.diarize, 'true')
+  assert.deepEqual(captured.custom_tags, ['meeting', 'clean'])
   assert.equal(result.text, 'Recognized text')
   assert.equal(result.raw.text, 'Recognized text')
 })

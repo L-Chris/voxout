@@ -131,6 +131,10 @@ test('Gradium provider sends speech-to-text requests', async () => {
     },
     language: 'en-US',
     format: 'raw',
+    extra_params: {
+      language: 'fr',
+      diarization: true,
+    },
   }, {
     config: {},
     secrets: { api_key: 'test-gradium-key' },
@@ -140,7 +144,7 @@ test('Gradium provider sends speech-to-text requests', async () => {
   assert.equal(`${url.origin}${url.pathname}`, 'https://api.gradium.ai/api/post/speech/asr')
   assert.equal(url.searchParams.get('model'), 'fast-asr')
   assert.equal(url.searchParams.get('input_format'), 'wav')
-  assert.equal(url.searchParams.get('json_config'), JSON.stringify({ language: 'en' }))
+  assert.equal(url.searchParams.get('json_config'), JSON.stringify({ language: 'en', diarization: true }))
   assert.equal(captured.headers['x-api-key'], 'test-gradium-key')
   assert.equal(captured.headers['content-type'], 'audio/wav')
   assert.equal(captured.body.type, 'audio/wav')
