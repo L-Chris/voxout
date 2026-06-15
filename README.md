@@ -9,7 +9,7 @@ into the `ProviderConfig` table.
 
 ## Providers
 
-- `default`: Microsoft Edge online TTS plus direct Bilibili/Bcut URL ASR.
+- `default`: Microsoft Edge online TTS plus Bilibili/Bcut file-upload ASR.
 - `openai`: OpenAI TTS, ASR, and custom voice cloning.
 - `cartesia`: Cartesia TTS, streaming TTS, ASR, voice listing, and voice cloning.
 - `mimo`: Xiaomi MiMo TTS with preset voices, voice design, and ASR.
@@ -35,8 +35,9 @@ voxout extension audio API:
 model, `input` is the text, `voice` is the voice name or id, and
 `response_format`, `speed`, `stream_format`, and `instructions` are optional.
 Use voxout's `provider` extension to choose a backend such as `default`,
-`openai`, `cartesia`, `mimo`, `gradium`, or `elevenlabs`. The legacy
-provider-as-`model` form is still accepted for compatibility.
+`openai`, `cartesia`, `mimo`, `gradium`, or `elevenlabs`. When `provider` is
+omitted, OpenAI model ids route to OpenAI and unique provider model ids route to
+the matching provider.
 `/v1/audio/transcriptions` follows the OpenAI multipart shape: `model` is the
 ASR model, `file` is the uploaded audio, and `response_format`, `language`, and
 `prompt` are optional. Use the `provider` extension to choose a non-OpenAI ASR
@@ -130,6 +131,15 @@ curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
   -F model=gpt-4o-transcribe \
   -F response_format=json \
   -F language=auto \
+  -F file=@sample.wav
+```
+
+Default Bcut transcription:
+
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
+  -F provider=default \
+  -F response_format=verbose_json \
   -F file=@sample.wav
 ```
 
