@@ -48,6 +48,56 @@ const OPENAI_TRANSCRIPTION_MODELS = new Set([
   'gpt-4o-mini-transcribe-2025-12-15',
   'gpt-4o-transcribe-diarize',
 ])
+const SPEECH_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'model',
+  'input',
+  'voice',
+  'response_format',
+  'speed',
+  'instructions',
+  'stream_format',
+  'extra_params',
+])
+const TRANSCRIPTION_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'model',
+  'file',
+  'language',
+  'prompt',
+  'response_format',
+  'stream',
+  'temperature',
+  'timestamp_granularities',
+  'timestamp_granularities[]',
+  'include',
+  'include[]',
+  'chunking_strategy',
+  'known_speaker_names',
+  'known_speaker_names[]',
+  'known_speaker_references',
+  'known_speaker_references[]',
+  'extra_params',
+])
+const SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'model',
+  'input',
+  'response_format',
+  'duration_seconds',
+  'prompt_influence',
+  'loop',
+  'extra_params',
+])
+const VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'input',
+  'name',
+  'text',
+  'response_format',
+  'model',
+  'extra_params',
+])
 
 @Service()
 export class AudioService {
@@ -108,7 +158,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     stream_format,
     speed: normalizeSpeechSpeed(body.speed),
     instructions: normalizeSpeechInstructions(body.instructions),
-    extra_params: normalizeExtraParams(body.extra_params),
+    extra_params: normalizeExtraParams(body.extra_params, SPEECH_EXTRA_PARAM_RESERVED_FIELDS),
   })
   await resolveVoiceForSynthesis(provider.id, request)
   const timeout_ms = getProviderTimeoutMs(context)
@@ -251,7 +301,10 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
     chunking_strategy: normalizeChunkingStrategy(form.fields.chunking_strategy),
     known_speaker_names: normalizeStringArrayField(form, 'known_speaker_names'),
     known_speaker_references: normalizeStringArrayField(form, 'known_speaker_references'),
-    extra_params: normalizeExtraParams(form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined),
+    extra_params: normalizeExtraParams(
+      form.fields.extra_params ? parseJsonObjectField(form.fields.extra_params, 'extra_params') : undefined,
+      TRANSCRIPTION_EXTRA_PARAM_RESERVED_FIELDS,
+    ),
     format: getTranscriptionOutputFormat(providerResponseFormat),
   }
   validateTranscriptionRequest(request)
@@ -338,7 +391,7 @@ function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEff
     duration_seconds: normalizeSoundEffectDuration(value.duration_seconds),
     prompt_influence: normalizePromptInfluence(value.prompt_influence),
     loop: normalizeOptionalBoolean(value.loop, 'loop'),
-    extra_params: normalizeExtraParams(value.extra_params),
+    extra_params: normalizeExtraParams(value.extra_params, SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS),
   }
 }
 
@@ -353,7 +406,7 @@ function normalizeVoiceDesignInput(providerId: string, input: unknown): VoiceDes
     text: typeof value.text === 'string' ? value.text : undefined,
     output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,
-    extra_params: normalizeExtraParams(value.extra_params),
+    extra_params: normalizeExtraParams(value.extra_params, VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS),
   }
 }
 
@@ -462,12 +515,15 @@ function isJsonValue(value: unknown): value is JsonValue {
   return false
 }
 
-function normalizeExtraParams(value: unknown): JsonObject | undefined {
+function normalizeExtraParams(value: unknown, reserved_fields?: ReadonlySet<string>): JsonObject | undefined {
   if (value == null || value === '') return undefined
   if (typeof value !== 'object' || Array.isArray(value) || !isJsonValue(value)) {
     throw new Error('extra_params must be a JSON object')
   }
-  return value as JsonObject
+  const extra_params = value as JsonObject
+  const conflict = Object.keys(extra_params).find(key => reserved_fields?.has(key))
+  if (conflict) throw new Error(`extra_params.${conflict} conflicts with a recognized request field`)
+  return extra_params
 }
 
 function normalizeFormJsonObject(value: string | undefined, field_name: string): JsonObject | undefined {

@@ -156,6 +156,21 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   const invalidVoicePayload = await invalidVoiceResponse.json()
   assert.equal(invalidVoiceResponse.status, 400)
   assert.match(invalidVoicePayload.error, /voice must be a string or object with id/)
+
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello',
+      extra_params: {
+        response_format: 'wav',
+      },
+    }),
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.response_format conflicts/)
 })
 
 test('POST /v1/audio/speech accepts provider extension with OpenAI-style model', async () => {
@@ -339,6 +354,21 @@ test('POST /v1/audio/effect requires provider and OpenAI-style field names', asy
   const invalidInfluencePayload = await invalidInfluenceResponse.json()
   assert.equal(invalidInfluenceResponse.status, 400)
   assert.match(invalidInfluencePayload.error, /prompt_influence must be between 0 and 1/)
+
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'a short test chime',
+      extra_params: {
+        duration_seconds: 0.5,
+      },
+    }),
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.duration_seconds conflicts/)
 })
 
 test('POST /v1/audio/isolation returns processed audio bytes', async () => {
@@ -453,6 +483,21 @@ test('POST /v1/audio/design requires provider and input fields', async () => {
     }),
   })
   assert.equal(legacyInputResponse.status, 400)
+
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/design`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'A calm narrator voice.',
+      extra_params: {
+        input: 'Override prompt.',
+      },
+    }),
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.input conflicts/)
 })
 
 test('POST /v1/audio/voices clones and persists provider-linked voices', async () => {
@@ -640,6 +685,20 @@ test('POST /v1/audio/transcriptions validates OpenAI transcription parameters', 
   const streamPayload = await streamResponse.json()
   assert.equal(streamResponse.status, 400)
   assert.match(streamPayload.error, /stream must be a boolean/)
+
+  const conflictingExtraParamsForm = new FormData()
+  conflictingExtraParamsForm.set('provider', 'mock-asr')
+  conflictingExtraParamsForm.set('model', 'mock-asr-model')
+  conflictingExtraParamsForm.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+  conflictingExtraParamsForm.set('extra_params', JSON.stringify({ response_format: 'text' }))
+
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: conflictingExtraParamsForm,
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(conflictingExtraParamsPayload.error, /extra_params\.response_format conflicts/)
 })
 
 test('POST /v1/audio/transcriptions only accepts multipart file input', async () => {
