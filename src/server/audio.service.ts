@@ -118,6 +118,9 @@ const VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS = new Set([
 const TRANSCRIPTION_FORM_FIELDS = new Set(TRANSCRIPTION_EXTRA_PARAM_RESERVED_FIELDS)
 const AUDIO_ISOLATION_FORM_FIELDS = new Set(AUDIO_ISOLATION_EXTRA_PARAM_RESERVED_FIELDS)
 const VOICE_CLONE_FORM_FIELDS = new Set(VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS)
+const SPEECH_BODY_FIELDS = new Set(SPEECH_EXTRA_PARAM_RESERVED_FIELDS)
+const SOUND_EFFECT_BODY_FIELDS = new Set(SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS)
+const VOICE_DESIGN_BODY_FIELDS = new Set(VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS)
 const TRANSCRIPTION_FILE_FIELDS = new Set(['file'])
 const AUDIO_ISOLATION_FILE_FIELDS = new Set(['file'])
 const VOICE_CLONE_FILE_FIELDS = new Set(['audio_sample'])
@@ -158,6 +161,7 @@ export class AudioService {
 }
 
 async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  assertSupportedJsonFields(body, SPEECH_BODY_FIELDS)
   const target = resolveOpenAiSpeechTarget(body.model, body.provider)
   const providerId = target.providerId
   assertPublicProviderAccess(providerId)
@@ -205,6 +209,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
 }
 
 async function handleAudioEffect(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  assertSupportedJsonFields(body, SOUND_EFFECT_BODY_FIELDS)
   const providerId = getRequiredProvider(body.provider)
   assertPublicProviderAccess(providerId)
   const provider = getSoundEffectProvider(providerId)
@@ -241,6 +246,7 @@ async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): 
 }
 
 async function handleVoiceDesign(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  assertSupportedJsonFields(body, VOICE_DESIGN_BODY_FIELDS)
   const providerId = getRequiredProvider(body.provider)
   assertPublicProviderAccess(providerId)
   const provider = getVoiceDesignProvider(providerId)
@@ -468,6 +474,11 @@ function assertSupportedMultipartFields(
   if (unsupported_field) throw new Error(`${unsupported_field} is not supported`)
   const unsupported_file = Object.keys(form.files).find(field => !allowed_files.has(field))
   if (unsupported_file) throw new Error(`${unsupported_file} is not supported`)
+}
+
+function assertSupportedJsonFields(body: Record<string, unknown>, allowed_fields: ReadonlySet<string>): void {
+  const unsupported_field = Object.keys(body).find(field => !allowed_fields.has(field))
+  if (unsupported_field) throw new Error(`${unsupported_field} is not supported`)
 }
 
 async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {

@@ -4,6 +4,8 @@
 
 Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以及 service 到 provider adapter 的内部 request/response 字段默认使用 snake_case。provider adapter 最后一跳会按上游官方接口要求转换字段名；例如 Edge TTS 的 SDK 参数仍会映射为其要求的 `outputFormat`。
 
+各端点顶层只接受表格列出的标准字段和 Voxout 路由扩展字段。provider 已知特殊字段由 adapter 从标准字段或 `extra_params` 映射；未列出的上游透传字段必须放入 `extra_params`，否则会被请求校验拒绝。
+
 ## 资料来源
 
 各接口表格的 `OpenAI 规范` 和 provider 表头已内联链接到对应官方文档；没有官方对应接口的 Voxout 扩展表格会链接到 provider 最接近的 API 文档。

@@ -170,6 +170,19 @@ test('POST /v1/audio/speech validates OpenAI speech parameters', async () => {
   assert.equal(invalidVoiceResponse.status, 400)
   assert.match(invalidVoicePayload.error, /voice must be a string or object with id/)
 
+  const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      input: 'hello',
+      rate: '+10%',
+    }),
+  })
+  const unsupportedFieldPayload = await unsupportedFieldResponse.json()
+  assert.equal(unsupportedFieldResponse.status, 400)
+  assert.match(unsupportedFieldPayload.error, /rate is not supported/)
+
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -357,6 +370,19 @@ test('POST /v1/audio/effect requires provider and OpenAI-style field names', asy
   })
   assert.equal(legacyInputResponse.status, 400)
 
+  const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/effect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'a short test chime',
+      voice_settings: { stability: 0.5 },
+    }),
+  })
+  const unsupportedFieldPayload = await unsupportedFieldResponse.json()
+  assert.equal(unsupportedFieldResponse.status, 400)
+  assert.match(unsupportedFieldPayload.error, /voice_settings is not supported/)
+
   const invalidDurationResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -515,7 +541,22 @@ test('POST /v1/audio/design requires provider and input fields', async () => {
       name: 'Legacy Input',
     }),
   })
+  const legacyInputPayload = await legacyInputResponse.json()
   assert.equal(legacyInputResponse.status, 400)
+  assert.match(legacyInputPayload.error, /voice_description is not supported/)
+
+  const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/design`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      input: 'A calm narrator voice.',
+      style_prompt: 'warm',
+    }),
+  })
+  const unsupportedFieldPayload = await unsupportedFieldResponse.json()
+  assert.equal(unsupportedFieldResponse.status, 400)
+  assert.match(unsupportedFieldPayload.error, /style_prompt is not supported/)
 
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
