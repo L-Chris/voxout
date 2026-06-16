@@ -16,7 +16,8 @@ import {
   listTtsProviders,
   listVoiceDesignProviders,
 } from '../providers/registry.js'
-import { getProviderTimeoutMs, withTimeout } from '../timeout.js'
+import { getProviderRetryCount, getProviderTimeoutMs, withTimeout } from '../timeout.js'
+import { logProviderUpstreamError } from '../providers/provider-utils.js'
 import { readMultipartForm, sendBinary, sendJson, sendStream, sendText } from './http.js'
 import {
   assertPublicProviderAccess,
@@ -215,17 +216,23 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
   const timeout = getProviderTimeoutMs(context)
   if (stream_format) {
     if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
-    const result = await withTimeout(
-      provider.streamSynthesize(request, context),
+    const result = await withTtsRetry(
+      provider.id,
+      'speech_stream',
+      context,
       timeout,
+      () => provider.streamSynthesize!(request, context),
       `Speech stream creation timed out after ${timeout}ms for provider ${provider.id}`,
     )
     sendStream(res, result.stream, stream_format === 'sse' ? result.mime_type : normalizeSpeechMimeType(speechFormat.response_format, result.mime_type))
     return
   }
-  const result = await withTimeout(
-    provider.synthesize(request, context),
+  const result = await withTtsRetry(
+    provider.id,
+    'speech',
+    context,
     timeout,
+    () => provider.synthesize(request, context),
     `Speech generation timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const output = convertAudioOutput(result.audio, result.mime_type, speechFormat)
@@ -251,6 +258,36 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
   )
   const output = convertAudioOutput(result.audio, result.mime_type, effectFormat)
   sendBinary(res, output.audio, output.mime_type)
+}
+
+export async function withTtsRetry<T>(
+  providerId: string,
+  operation: 'speech' | 'speech_stream',
+  context: ProviderRuntimeConfig,
+  timeout: number,
+  execute: () => Promise<T>,
+  timeoutMessage: string,
+): Promise<T> {
+  const retryCount = getProviderRetryCount(context)
+  let attempt = 0
+  while (true) {
+    try {
+      return await withTimeout(execute(), timeout, timeoutMessage)
+    } catch (error) {
+      if (attempt >= retryCount || isServiceTimeoutError(error, timeoutMessage)) throw error
+      attempt += 1
+      logProviderUpstreamError({
+        provider: providerId,
+        operation: `${operation}_retry`,
+        detail: `retrying attempt ${attempt} of ${retryCount}`,
+        error,
+      })
+    }
+  }
+}
+
+function isServiceTimeoutError(error: unknown, timeoutMessage: string): boolean {
+  return error instanceof Error && error.message === timeoutMessage
 }
 
 async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): Promise<void> {

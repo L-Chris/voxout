@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { logProviderResponseError } from '../dist/providers/provider-utils.js'
+import { getProviderRetryCount } from '../dist/timeout.js'
+import { withTtsRetry } from '../dist/server/audio.service.js'
 
 const originalConsoleError = console.error
 
@@ -31,4 +33,48 @@ test('provider upstream error logs are structured and redact sensitive URL param
   assert.equal(payload.status_text, 'Bad Request')
   assert.equal(payload.detail, 'upstream said no')
   assert.equal(payload.url, 'https://example.com/audio?api_key=%5Bredacted%5D&model=test&token=%5Bredacted%5D')
+})
+
+test('provider retry count requires auto_retry and is capped', () => {
+  assert.equal(getProviderRetryCount({ config: {} }), 0)
+  assert.equal(getProviderRetryCount({ config: { auto_retry: true } }), 2)
+  assert.equal(getProviderRetryCount({ config: { auto_retry: true, retry_count: 3 } }), 3)
+  assert.equal(getProviderRetryCount({ config: { auto_retry: true, retry_count: 99 } }), 5)
+  assert.equal(getProviderRetryCount({ config: { auto_retry: false, retry_count: 3 } }), 0)
+})
+
+test('TTS retry wrapper retries transient failures when enabled', async () => {
+  const logs = []
+  console.error = message => logs.push(message)
+  let attempts = 0
+  const result = await withTtsRetry('mock', 'speech', {
+    config: { auto_retry: true, retry_count: 1 },
+    secrets: {},
+    enabled: true,
+  }, 1000, async () => {
+    attempts += 1
+    if (attempts === 1) throw new Error('transient')
+    return 'ok'
+  }, 'timed out')
+
+  assert.equal(result, 'ok')
+  assert.equal(attempts, 2)
+  assert.equal(JSON.parse(logs[0]).event, 'provider_upstream_error')
+  assert.equal(JSON.parse(logs[0]).operation, 'speech_retry')
+})
+
+test('TTS retry wrapper does not retry when disabled', async () => {
+  let attempts = 0
+  await assert.rejects(
+    withTtsRetry('mock', 'speech', {
+      config: { auto_retry: false, retry_count: 3 },
+      secrets: {},
+      enabled: true,
+    }, 1000, async () => {
+      attempts += 1
+      throw new Error('transient')
+    }, 'timed out'),
+    /transient/,
+  )
+  assert.equal(attempts, 1)
 })

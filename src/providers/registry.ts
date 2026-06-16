@@ -20,6 +20,8 @@ import type {
 const COMMON_PROVIDER_FIELDS: ProviderFieldDefinition[] = [
   { key: 'account_id', label: 'Provider Account ID', type: 'text', placeholder: 'default' },
   { key: 'timeout', label: 'Timeout (ms)', type: 'number', placeholder: '45000' },
+  { key: 'auto_retry', label: 'Auto Retry', type: 'boolean' },
+  { key: 'retry_count', label: 'Retry Count', type: 'number', placeholder: '2' },
 ]
 const INTERNAL_PROVIDER_IDS = new Set(['mock', 'mock-asr'])
 

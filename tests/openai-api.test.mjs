@@ -109,6 +109,8 @@ test('GET /api/providers does not expose internal test providers', async () => {
   const mimo = payload.providers.find(provider => provider.id === 'mimo')
   assert.equal(mimo.capabilities.voice_design, true)
   assert.equal(mimo.capabilities.voice_clone, true)
+  assert.ok(mimo.fields.some(field => field.key === 'auto_retry'))
+  assert.ok(mimo.fields.some(field => field.key === 'retry_count'))
   const elevenlabs = payload.providers.find(provider => provider.id === 'elevenlabs')
   assert.equal(elevenlabs.capabilities.sound_effects, true)
   assert.equal(elevenlabs.capabilities.isolation, true)
