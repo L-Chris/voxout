@@ -158,7 +158,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const voiceDescription = normalizePrompt(request.instructions)
     if (!voiceDescription) throw new Error('instructions is required')
     const model = request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL
-    const format = normalizeAudioFormat(request.output_format ?? getConfigString(context, 'format') ?? DEFAULT_FORMAT)
+    const format = normalizeAudioFormat(request.output_format ?? DEFAULT_FORMAT)
     const sample = await this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, format, context, request.extra_params)
     const voice_id = `mimo_${randomUUID()}`
     return {

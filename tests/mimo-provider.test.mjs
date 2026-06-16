@@ -108,7 +108,7 @@ test('Mimo provider designs a reusable voice preview', async () => {
     name: '冷静男声',
     model: 'mimo-custom-design-model',
   }, {
-    config: {},
+    config: { format: 'wav' },
     secrets: { api_key: 'test-key' },
   })
 

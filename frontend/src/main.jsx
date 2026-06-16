@@ -45,7 +45,7 @@ function App() {
     setEffectForm(defaultEffectForm())
     setIsolationForm(defaultIsolationForm())
     setIsolationFile(null)
-    setDesignForm(defaultDesignForm())
+    setDesignForm(defaultDesignForm(selectedProvider))
     setCloneForm(defaultCloneForm())
     setCloneFile(null)
     setTranscriptionForm(defaultTranscriptionForm(selectedProvider))
@@ -1060,6 +1060,7 @@ function DesignTestForm({ form, onFormChange }) {
           value={form.response_format}
           onChange={event => onFormChange({ ...form, response_format: event.target.value })}
         >
+          <option value="mp3">mp3</option>
           <option value="mp3_44100_128">mp3_44100_128</option>
           <option value="mp3_44100_192">mp3_44100_192</option>
           <option value="wav">wav</option>
@@ -1304,13 +1305,13 @@ function defaultIsolationForm() {
   }
 }
 
-function defaultDesignForm() {
+function defaultDesignForm(provider) {
   return {
     instructions: 'A calm narrator voice with a clean tone and warm delivery.',
     name: '',
     input: '',
     model: '',
-    response_format: 'mp3_44100_128',
+    response_format: provider?.id === 'mimo' ? 'mp3' : 'mp3_44100_128',
     auto_generate_text: true,
     guidance_scale: '',
     seed: '',
