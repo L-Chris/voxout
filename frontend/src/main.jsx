@@ -346,8 +346,6 @@ function App() {
           generated_voice_id: preview.generated_voice_id,
           name: preview.name || designForm.name || preview.generated_voice_id,
           instructions: preview.instructions || designForm.instructions,
-          preview_audio: preview.preview_audio,
-          preview_mime_type: preview.preview_mime_type,
           language: preview.language,
         }),
       })

@@ -118,7 +118,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 
 ## POST `/v1/audio/voices/create`
 
-确认并持久化声音设计预览。请求体是 JSON。OpenAI 官方当前没有对应的 `/v1/audio/voices/create` 规范；这是 Voxout 扩展接口，语义对应 ElevenLabs “Create a voice from previously generated voice preview”。
+确认并持久化声音设计预览。请求体是 JSON。OpenAI 官方当前没有对应的 `/v1/audio/voices/create` 规范；这是 Voxout 扩展接口，语义对应 ElevenLabs “Create a voice from previously generated voice preview”。该接口只接收 preview id 和元数据，不接收 `preview_audio`；Voxout 会在同一进程内用 design 阶段缓存的 preview 音频补齐本地持久化数据。
 
 | 实际传参 | OpenAI 规范 | OpenAI | [ElevenLabs][elevenlabs-create] | Cartesia | Gradium | [MiMo][mimo-tts] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
@@ -128,10 +128,8 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `instructions`，必填 string | 无；参考 speech 的风格控制字段命名 | 不支持 | `voice_description` | 不支持 | 不支持 | 本地保存 description | 不支持 | 无 |
 | `labels`，可选 object | 无 | 不支持 | `labels` | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 无 |
 | `played_not_selected_voice_ids`，可选 string[] | 无 | 不支持 | `played_not_selected_voice_ids` | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 无 |
-| `preview_audio`，可选 string | 无 | 不支持 | 不下发，仅随 Voxout voice 保存；ElevenLabs create 后可从响应 `preview_url` 获取 provider 预览 | 不支持 | 不支持 | 必填；保存为本地 preview audio，因为 MiMo 没有单独确认创建接口 | 不支持 | 无 |
-| `preview_mime_type`，可选 string | 无 | 不支持 | 不下发，仅随 Voxout voice 保存 | 不支持 | 不支持 | 与 `preview_audio` 一起保存，缺省 `audio/wav` | 不支持 | 无 |
 | `language`，可选 string | 无 | 不支持 | 不下发；ElevenLabs 响应 `verified_languages[]` 优先 | 不支持 | 不支持 | 本地保存 language | 不支持 | 无 |
-| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs create JSON body；adapter 已映射字段优先 | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 仅接受 JSON object；不能包含 `provider/generated_voice_id/name/instructions/labels/played_not_selected_voice_ids/preview_audio/preview_mime_type/language` 等已识别字段 |
+| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs create JSON body；adapter 已映射字段优先 | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 仅接受 JSON object；不能包含 `provider/generated_voice_id/name/instructions/labels/played_not_selected_voice_ids/language` 等已识别字段 |
 | 响应 | `{ id, object: "audio.voice", created_at, name }` 风格 | 不支持 | Voxout 返回 `{ id, object: "audio.voice", created_at, name, description, language, preview_audio, preview_mime_type }` 并保存 provider link | 不支持 | 不支持 | 同 Voxout voice 响应；provider link 没有下游 voice id | 不支持 | 不返回 ElevenLabs 原始 create response |
 
 ## POST `/v1/audio/voices`

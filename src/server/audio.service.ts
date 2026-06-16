@@ -136,10 +136,14 @@ const VOICE_CLONE_FORM_FIELDS = new Set(VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS)
 const SPEECH_BODY_FIELDS = new Set(SPEECH_EXTRA_PARAM_RESERVED_FIELDS)
 const SOUND_EFFECT_BODY_FIELDS = new Set(SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS)
 const VOICE_DESIGN_BODY_FIELDS = new Set(VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS)
-const VOICE_CREATE_BODY_FIELDS = new Set(VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS)
+const VOICE_CREATE_BODY_FIELDS = new Set(
+  [...VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS].filter(field => field !== 'preview_audio' && field !== 'preview_mime_type'),
+)
 const TRANSCRIPTION_FILE_FIELDS = new Set(['file'])
 const AUDIO_ISOLATION_FILE_FIELDS = new Set(['file'])
 const VOICE_CLONE_FILE_FIELDS = new Set(['audio_sample'])
+const VOICE_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000
+const voicePreviewCache = new Map<string, { expires_at: number, voice: VoicePreview }>()
 
 @Service()
 export class AudioService {
@@ -284,6 +288,7 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
     timeout,
     `Voice design timed out after ${timeout}ms for provider ${provider.id}`,
   )
+  cacheVoicePreviews(provider.id, result.voices)
   sendJson(res, {
     object: 'list',
     data: result.voices.map(voice => formatAudioVoicePreviewObject(provider.id, voice)),
@@ -302,7 +307,7 @@ async function handleCreateDesignedVoice(body: Record<string, unknown>, res: Ser
   ensureEnabled(provider.id, context)
   if (!provider.createDesignedVoice) throw new Error(`Provider does not support voice preview creation: ${provider.id}`)
 
-  const request = normalizeVoiceCreateInput(provider.id, body)
+  const request = attachCachedVoicePreview(provider.id, normalizeVoiceCreateInput(provider.id, body))
   const timeout = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.createDesignedVoice(request, context),
@@ -499,8 +504,6 @@ function normalizeVoiceCreateInput(providerId: string, input: unknown): VoiceCre
     instructions,
     labels: normalizeJsonObjectValue(value.labels, 'labels'),
     played_not_selected_voice_ids: normalizeStringArrayValue(value.played_not_selected_voice_ids, 'played_not_selected_voice_ids'),
-    preview_audio_data: normalizeOptionalString(value.preview_audio, 'preview_audio'),
-    preview_mime_type: normalizeOptionalString(value.preview_mime_type, 'preview_mime_type'),
     language: normalizeOptionalString(value.language, 'language'),
     extra_params: normalizeExtraParams(value.extra_params, VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS),
   }
@@ -629,6 +632,40 @@ function formatAudioVoicePreviewObject(providerId: string, voice: VoicePreview):
     duration_seconds: voice.duration_seconds,
     metadata: voice.metadata,
   }
+}
+
+function cacheVoicePreviews(providerId: string, voices: VoicePreview[]): void {
+  pruneVoicePreviewCache()
+  const expires_at = Date.now() + VOICE_PREVIEW_CACHE_TTL_MS
+  for (const voice of voices) {
+    voicePreviewCache.set(getVoicePreviewCacheKey(providerId, voice.provider_voice_id ?? voice.voice_id), {
+      expires_at,
+      voice,
+    })
+  }
+}
+
+function attachCachedVoicePreview(providerId: string, request: VoiceCreateRequest): VoiceCreateRequest {
+  pruneVoicePreviewCache()
+  const cached = voicePreviewCache.get(getVoicePreviewCacheKey(providerId, request.generated_voice_id))?.voice
+  if (!cached) return request
+  return {
+    ...request,
+    language: request.language ?? cached.language,
+    preview_audio_data: cached.preview_audio_data,
+    preview_mime_type: cached.preview_mime_type,
+  }
+}
+
+function pruneVoicePreviewCache(): void {
+  const now = Date.now()
+  for (const [key, value] of voicePreviewCache) {
+    if (value.expires_at <= now) voicePreviewCache.delete(key)
+  }
+}
+
+function getVoicePreviewCacheKey(providerId: string, generated_voice_id: string): string {
+  return `${providerId}:${generated_voice_id}`
 }
 
 function getOpenAiModelProvider(model: unknown, provider: unknown): string {

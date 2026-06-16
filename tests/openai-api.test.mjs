@@ -614,8 +614,6 @@ test('POST /v1/audio/voices/design returns voice previews and create persists th
       generated_voice_id: payload.data[0].generated_voice_id,
       name: payload.data[0].name,
       instructions: payload.data[0].instructions,
-      preview_audio: payload.data[0].preview_audio,
-      preview_mime_type: payload.data[0].preview_mime_type,
       labels: { source: 'test' },
     }),
   })
@@ -624,6 +622,7 @@ test('POST /v1/audio/voices/design returns voice previews and create persists th
   assert.equal(createPayload.object, 'audio.voice')
   assert.equal(createPayload.id, payload.data[0].id)
   assert.equal(createPayload.name, 'Calm Mock')
+  assert.match(createPayload.preview_audio, /^data:audio\/wav;base64,/)
 
   const voicesAfterCreateResponse = await fetch(`${base_url}/api/voices?provider=mock`)
   const voicesAfterCreatePayload = await voicesAfterCreateResponse.json()
@@ -739,6 +738,21 @@ test('POST /v1/audio/voices/create validates OpenAI-style voice create fields', 
   const legacyFieldPayload = await legacyFieldResponse.json()
   assert.equal(legacyFieldResponse.status, 400)
   assert.match(errorMessage(legacyFieldPayload), /voice_name is not supported/)
+
+  const previewAudioResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      generated_voice_id: 'preview-id',
+      name: 'Calm Mock',
+      instructions: 'A calm narrator voice.',
+      preview_audio: 'data:audio/wav;base64,AAAA',
+    }),
+  })
+  const previewAudioPayload = await previewAudioResponse.json()
+  assert.equal(previewAudioResponse.status, 400)
+  assert.match(errorMessage(previewAudioPayload), /preview_audio is not supported/)
 
   const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
     method: 'POST',
