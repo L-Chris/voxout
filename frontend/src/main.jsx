@@ -194,7 +194,7 @@ function App() {
         stream_format: speechForm.stream_format || undefined,
         speed: Number(speechForm.speed) || undefined,
         instructions: speechForm.instructions || undefined,
-        extra_params: parseJsonObject(speechForm.extra_params, 'Extra params'),
+        extra_params: parseJsonObject(speechForm.extra_params, 'extra_params'),
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
@@ -260,7 +260,7 @@ function App() {
         duration_seconds: Number(effectForm.duration_seconds) || undefined,
         prompt_influence: Number(effectForm.prompt_influence) || undefined,
         loop: effectForm.loop,
-        extra_params: parseJsonObject(effectForm.extra_params, 'Extra params'),
+        extra_params: parseJsonObject(effectForm.extra_params, 'extra_params'),
       }),
     })
     if (!response.ok) throw new Error(await readError(response))
@@ -306,7 +306,7 @@ function App() {
       seed: optionalNumber(designForm.seed),
     })
     const extra_params = {
-      ...parseJsonObject(designForm.extra_params, 'Extra params'),
+      ...parseJsonObject(designForm.extra_params, 'extra_params'),
       ...typed_extra_params,
     }
     const response = await fetch(apiUrl('/v1/audio/voices/design', api_base_url), {
@@ -326,10 +326,59 @@ function App() {
     const payload = await response.json()
     setTestResult({
       kind: 'json',
+      payload,
       content: JSON.stringify(payload, null, 2),
       mime_type: 'application/json',
       endpoint: 'POST /v1/audio/voices/design',
+      createdPreviewIds: {},
     })
+  }
+
+  async function createDesignedVoice(preview) {
+    if (!selectedProvider) return
+    setTestStatus('Creating voice...')
+    try {
+      const response = await fetch(apiUrl('/v1/audio/voices/create', api_base_url), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          provider: selectedProvider.id,
+          generated_voice_id: preview.generated_voice_id,
+          name: preview.name || designForm.name || preview.generated_voice_id,
+          instructions: preview.instructions || designForm.instructions,
+          preview_audio: preview.preview_audio,
+          preview_mime_type: preview.preview_mime_type,
+          language: preview.language,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(formatErrorPayload(payload) || 'Create voice failed')
+      setTestResult(current => ({
+        ...current,
+        createdPreviewIds: {
+          ...(current?.createdPreviewIds || {}),
+          [preview.generated_voice_id]: payload.id,
+        },
+        createResponse: payload,
+        content: JSON.stringify({
+          ...(current?.payload || {}),
+          created_voice: payload,
+        }, null, 2),
+      }))
+      setTestStatus('Created')
+      if (selectedProvider.capabilities?.tts) {
+        loadProviderVoices(selectedProvider.id)
+          .then(options => setVoiceOptions(options))
+          .catch(() => {})
+      }
+    } catch (error) {
+      setTestStatus('Create failed')
+      setTestResult(current => ({
+        ...(current || {}),
+        kind: current?.kind || 'error',
+        createError: error instanceof Error ? error.message : String(error),
+      }))
+    }
   }
 
   async function runCloneTest() {
@@ -417,11 +466,10 @@ function App() {
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="text-lg font-bold">Test API</h2>
                   </div>
-                  <div className="mb-4 flex gap-2">
-                    {['tts', 'asr', 'effect', 'isolation', 'design', 'clone'].map(mode => (
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {getSupportedTestModes(selectedProvider).map(mode => (
                       <button
                         className={`tab ${testMode === mode ? 'tab-active' : ''}`}
-                        disabled={!supportsTestMode(selectedProvider, mode)}
                         key={mode}
                         type="button"
                         onClick={() => selectTestMode(mode)}
@@ -475,7 +523,7 @@ function App() {
                     </div>
                   </form>
 
-                  <ResultPreview result={testResult} />
+                  <ResultPreview result={testResult} onCreatePreview={createDesignedVoice} />
                 </div>
 
                 {isConfigOpen ? (
@@ -585,7 +633,7 @@ function SpeechTestForm({
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Input text
+        input
         <textarea
           className="textarea min-h-28"
           value={form.input}
@@ -594,7 +642,7 @@ function SpeechTestForm({
       </label>
       {modelField ? (
         <label className="grid gap-1.5 text-sm font-semibold">
-          Model
+          model
           <input
             className="input"
             list={modelListId}
@@ -612,7 +660,7 @@ function SpeechTestForm({
         </label>
       ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
-        Voice
+        voice
         {voiceOptions.length ? (
           <VoiceCascader
             value={form.voice || getDefaultVoiceValue(voiceOptions)}
@@ -630,7 +678,7 @@ function SpeechTestForm({
         )}
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Response format
+        response_format
         <select
           className="input"
           value={form.response_format}
@@ -646,7 +694,7 @@ function SpeechTestForm({
       </label>
       {supportsStreaming ? (
         <label className="grid gap-1.5 text-sm font-semibold">
-          Stream format
+          stream_format
           <select
             className="input"
             value={form.stream_format}
@@ -659,7 +707,7 @@ function SpeechTestForm({
         </label>
       ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
-        Speed
+        speed
         <input
           className="input"
           min="0.25"
@@ -671,7 +719,7 @@ function SpeechTestForm({
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Instructions
+        instructions
         <textarea
           className="textarea min-h-20"
           value={form.instructions}
@@ -783,7 +831,7 @@ function IsolationTestForm({ file, form, onFileChange, onFormChange }) {
         onFileChange={onFileChange}
       />
       <label className="grid gap-1.5 text-sm font-semibold">
-        File format
+        file_format
         <select
           className="input"
           value={form.file_format}
@@ -809,7 +857,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
       />
       {modelField ? (
         <label className="grid gap-1.5 text-sm font-semibold">
-          Model
+          model
           <input
             className="input"
             list={modelListId}
@@ -827,7 +875,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         </label>
       ) : null}
       <label className="grid gap-1.5 text-sm font-semibold">
-        Language
+        language
         <input
           className="input"
           placeholder="auto"
@@ -836,7 +884,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Prompt
+        prompt
         <input
           className="input"
           value={form.prompt}
@@ -844,7 +892,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Temperature
+        temperature
         <input
           className="input"
           min="0"
@@ -856,7 +904,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Response format
+        response_format
         <select
           className="input"
           value={form.response_format}
@@ -877,7 +925,7 @@ function TranscriptionTestForm({ file, form, modelField, onFileChange, onFormCha
             checked={form.stream}
             onChange={event => onFormChange({ ...form, stream: event.target.checked })}
           />
-          Stream
+          stream
         </label>
       ) : null}
       <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
@@ -889,7 +937,7 @@ function AudioFileControl({ file, inputId, onFileChange }) {
   const fileId = `${inputId}-file`
   return (
     <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-      <label htmlFor={fileId}>Audio file</label>
+      <label htmlFor={fileId}>file</label>
       <div className="audio-source-actions">
         <span className="truncate text-sm font-normal text-slate-500">
           {file ? file.name : 'Choose an audio file'}
@@ -915,7 +963,7 @@ function EffectTestForm({ form, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Instructions
+        instructions
         <textarea
           className="textarea min-h-28"
           value={form.instructions}
@@ -923,7 +971,7 @@ function EffectTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Duration seconds
+        duration_seconds
         <input
           className="input"
           min="0.5"
@@ -935,7 +983,7 @@ function EffectTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Prompt influence
+        prompt_influence
         <input
           className="input"
           min="0"
@@ -947,7 +995,7 @@ function EffectTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Response format
+        response_format
         <select
           className="input"
           value={form.response_format}
@@ -964,7 +1012,7 @@ function EffectTestForm({ form, onFormChange }) {
           checked={form.loop}
           onChange={event => onFormChange({ ...form, loop: event.target.checked })}
         />
-        Loop
+        loop
       </label>
       <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
@@ -975,7 +1023,7 @@ function DesignTestForm({ form, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Instructions
+        instructions
         <textarea
           className="textarea min-h-28"
           value={form.instructions}
@@ -983,7 +1031,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Name
+        name
         <input
           className="input"
           value={form.name}
@@ -991,7 +1039,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Model
+        model
         <input
           className="input"
           placeholder="provider default"
@@ -1000,7 +1048,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Input
+        input
         <textarea
           className="textarea min-h-20"
           value={form.input}
@@ -1008,7 +1056,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Response format
+        response_format
         <select
           className="input"
           value={form.response_format}
@@ -1020,7 +1068,7 @@ function DesignTestForm({ form, onFormChange }) {
         </select>
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Guidance scale
+        extra_params.guidance_scale
         <input
           className="input"
           min="0"
@@ -1032,7 +1080,7 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Seed
+        extra_params.seed
         <input
           className="input"
           min="0"
@@ -1048,7 +1096,7 @@ function DesignTestForm({ form, onFormChange }) {
           checked={form.auto_generate_text}
           onChange={event => onFormChange({ ...form, auto_generate_text: event.target.checked })}
         />
-        Auto text
+        extra_params.auto_generate_text
       </label>
       <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
     </div>
@@ -1059,7 +1107,7 @@ function CloneTestForm({ file, form, onFileChange, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        <label htmlFor="clone-audio-sample">Audio sample</label>
+        <label htmlFor="clone-audio-sample">audio_sample</label>
         <div className="audio-source-actions">
           <span className="truncate text-sm font-normal text-slate-500">
             {file ? file.name : 'Choose an audio sample'}
@@ -1077,7 +1125,7 @@ function CloneTestForm({ file, form, onFileChange, onFormChange }) {
         </div>
       </div>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Name
+        name
         <input
           className="input"
           value={form.name}
@@ -1085,7 +1133,7 @@ function CloneTestForm({ file, form, onFileChange, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
-        Consent
+        consent
         <input
           className="input"
           value={form.consent}
@@ -1100,7 +1148,7 @@ function CloneTestForm({ file, form, onFileChange, onFormChange }) {
 function ExtraParamsField({ onChange, value }) {
   return (
     <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-      Extra params
+      extra_params
       <textarea
         className="textarea min-h-20 font-mono"
         placeholder="{}"
@@ -1111,7 +1159,7 @@ function ExtraParamsField({ onChange, value }) {
   )
 }
 
-function ResultPreview({ result }) {
+function ResultPreview({ onCreatePreview, result }) {
   if (!result) return null
   if (result.kind === 'error') {
     return <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{result.message}</div>
@@ -1127,9 +1175,39 @@ function ResultPreview({ result }) {
       </div>
     )
   }
+  const voicePreviews = getVoicePreviewItems(result.payload)
   return (
     <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
       <div className="text-sm text-slate-500">{result.endpoint} · {result.mime_type}</div>
+      {result.createError ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{result.createError}</div>
+      ) : null}
+      {voicePreviews.length ? (
+        <div className="grid gap-2">
+          {voicePreviews.map(preview => {
+            const createdId = result.createdPreviewIds?.[preview.generated_voice_id]
+            return (
+              <div className="preview-card" key={preview.generated_voice_id || preview.id}>
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{preview.name || preview.generated_voice_id || preview.id}</div>
+                  <div className="text-sm text-slate-500">
+                    {[preview.language, preview.preview_mime_type, formatDuration(preview.duration_seconds)].filter(Boolean).join(' · ')}
+                  </div>
+                  {preview.preview_audio ? <audio className="mt-2 w-full" controls src={preview.preview_audio} /> : null}
+                </div>
+                <button
+                  className="btn-primary shrink-0"
+                  disabled={Boolean(createdId)}
+                  type="button"
+                  onClick={() => onCreatePreview?.(preview)}
+                >
+                  {createdId ? 'Created' : 'Create'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
       <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-sm text-slate-100">{result.content}</pre>
     </div>
   )
@@ -1179,14 +1257,13 @@ function supportsTestMode(provider, mode) {
   return Boolean(provider.capabilities?.tts)
 }
 
+function getSupportedTestModes(provider) {
+  return ['tts', 'asr', 'effect', 'isolation', 'design', 'clone']
+    .filter(mode => supportsTestMode(provider, mode))
+}
+
 function getDefaultTestMode(provider) {
-  if (provider?.capabilities?.tts) return 'tts'
-  if (provider?.capabilities?.asr) return 'asr'
-  if (provider?.capabilities?.sound_effects) return 'effect'
-  if (provider?.capabilities?.isolation) return 'isolation'
-  if (provider?.capabilities?.voice_design) return 'design'
-  if (provider?.capabilities?.voice_clone) return 'clone'
-  return 'tts'
+  return getSupportedTestModes(provider)[0] || 'tts'
 }
 
 function getTestModeLabel(mode) {
@@ -1300,13 +1377,24 @@ function parseJsonObject(value, fieldName) {
 }
 
 function appendExtraParams(form, value) {
-  const extra_params = parseJsonObject(value, 'Extra params')
+  const extra_params = parseJsonObject(value, 'extra_params')
   if (extra_params) form.set('extra_params', JSON.stringify(extra_params))
 }
 
 function formatBytes(value) {
   if (value < 1024) return `${value} B`
   return `${(value / 1024).toFixed(1)} KB`
+}
+
+function formatDuration(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number) || number <= 0) return ''
+  return `${number.toFixed(number >= 10 ? 0 : 1)}s`
+}
+
+function getVoicePreviewItems(payload) {
+  if (!payload || payload.object !== 'list' || !Array.isArray(payload.data)) return []
+  return payload.data.filter(item => item?.object === 'audio.voice.preview')
 }
 
 function formatVoiceOption(voice) {

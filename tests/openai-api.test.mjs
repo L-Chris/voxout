@@ -106,6 +106,14 @@ test('GET /api/providers does not expose internal test providers', async () => {
   const providerIds = payload.providers.map(provider => provider.id)
   assert.ok(!providerIds.includes('mock'))
   assert.ok(!providerIds.includes('mock-asr'))
+  const mimo = payload.providers.find(provider => provider.id === 'mimo')
+  assert.equal(mimo.capabilities.voice_design, true)
+  assert.equal(mimo.capabilities.voice_clone, true)
+  const elevenlabs = payload.providers.find(provider => provider.id === 'elevenlabs')
+  assert.equal(elevenlabs.capabilities.sound_effects, true)
+  assert.equal(elevenlabs.capabilities.isolation, true)
+  assert.equal(elevenlabs.capabilities.voice_design, true)
+  assert.equal(elevenlabs.capabilities.voice_clone, true)
 })
 
 test('server errors use OpenAI-style error objects', async () => {

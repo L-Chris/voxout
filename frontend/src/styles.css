@@ -102,6 +102,10 @@
     @apply border-blue-600 bg-blue-50;
   }
 
+  .preview-card {
+    @apply grid gap-3 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start;
+  }
+
   .badge {
     @apply inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-500;
   }
