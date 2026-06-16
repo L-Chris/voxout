@@ -259,6 +259,12 @@ test('ElevenLabs provider sends voice design requests', async () => {
         media_type: 'audio/mpeg',
         duration_secs: 1.2,
         language: 'en',
+      }, {
+        audio_base_64: Buffer.alloc(128, 2).toString('base64'),
+        generated_voice_id: 'generated-voice-2',
+        media_type: 'audio/mpeg',
+        duration_secs: 0.8,
+        language: 'en',
       }],
     }), {
       status: 200,
@@ -290,9 +296,63 @@ test('ElevenLabs provider sends voice design requests', async () => {
     auto_generate_text: true,
     guidance_scale: 5,
   })
+  assert.equal(result.voices.length, 2)
   assert.equal(result.voices[0].voice_id, 'generated-voice-1')
   assert.equal(result.voices[0].provider_voice_id, 'generated-voice-1')
   assert.match(result.voices[0].preview_audio_data, /^data:audio\/mpeg;base64,/)
+  assert.equal(result.voices[1].voice_id, 'generated-voice-2')
+  assert.equal(result.voices[1].provider_voice_id, 'generated-voice-2')
+})
+
+test('ElevenLabs provider creates a voice from a preview', async () => {
+  let captured
+  globalThis.fetch = async (url, init) => {
+    captured = {
+      url: String(url),
+      headers: init.headers,
+      body: JSON.parse(init.body),
+    }
+    return new Response(JSON.stringify({
+      voice_id: 'created-voice-1',
+      name: 'Warm Narrator',
+      description: 'A warm expressive narrator voice.',
+      labels: { accent: 'neutral' },
+      preview_url: 'https://example.com/preview.mp3',
+      verified_languages: [{ locale: 'en' }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  const provider = new ElevenLabsProvider()
+  const result = await provider.createDesignedVoice({
+    generated_voice_id: 'generated-voice-1',
+    name: 'Warm Narrator',
+    instructions: 'A warm expressive narrator voice.',
+    labels: { accent: 'neutral' },
+    played_not_selected_voice_ids: ['generated-voice-2'],
+    preview_audio_data: 'data:audio/mpeg;base64,AAAA',
+    preview_mime_type: 'audio/mpeg',
+  }, {
+    config: {},
+    secrets: { api_key: 'test-eleven-key' },
+  })
+
+  assert.equal(captured.url, 'https://api.elevenlabs.io/v1/text-to-voice')
+  assert.equal(captured.headers['xi-api-key'], 'test-eleven-key')
+  assert.deepEqual(captured.body, {
+    voice_name: 'Warm Narrator',
+    voice_description: 'A warm expressive narrator voice.',
+    generated_voice_id: 'generated-voice-1',
+    labels: { accent: 'neutral' },
+    played_not_selected_voice_ids: ['generated-voice-2'],
+  })
+  assert.equal(result.voice.voice_id, 'created-voice-1')
+  assert.equal(result.voice.provider_voice_id, 'created-voice-1')
+  assert.equal(result.voice.language, 'en')
+  assert.equal(result.voice.preview_audio_data, 'data:audio/mpeg;base64,AAAA')
+  assert.equal(result.voice.metadata.preview_url, 'https://example.com/preview.mp3')
 })
 
 test('ElevenLabs provider sends voice clone requests', async () => {

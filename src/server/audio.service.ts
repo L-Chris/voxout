@@ -33,6 +33,7 @@ import type {
   SynthesizeRequest,
   TranscribeRequest,
   TranscribeResult,
+  VoiceCreateRequest,
   VoiceCloneRequest,
   VoiceDesignRequest,
   VoicePreview,
@@ -110,6 +111,18 @@ const VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'model',
   'extra_params',
 ])
+const VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS = new Set([
+  'provider',
+  'generated_voice_id',
+  'name',
+  'instructions',
+  'labels',
+  'played_not_selected_voice_ids',
+  'preview_audio',
+  'preview_mime_type',
+  'language',
+  'extra_params',
+])
 const VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'provider',
   'name',
@@ -123,6 +136,7 @@ const VOICE_CLONE_FORM_FIELDS = new Set(VOICE_CLONE_EXTRA_PARAM_RESERVED_FIELDS)
 const SPEECH_BODY_FIELDS = new Set(SPEECH_EXTRA_PARAM_RESERVED_FIELDS)
 const SOUND_EFFECT_BODY_FIELDS = new Set(SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS)
 const VOICE_DESIGN_BODY_FIELDS = new Set(VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS)
+const VOICE_CREATE_BODY_FIELDS = new Set(VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS)
 const TRANSCRIPTION_FILE_FIELDS = new Set(['file'])
 const AUDIO_ISOLATION_FILE_FIELDS = new Set(['file'])
 const VOICE_CLONE_FILE_FIELDS = new Set(['audio_sample'])
@@ -147,6 +161,10 @@ export class AudioService {
 
   createVoiceDesign(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
     return handleVoiceDesign(body, res)
+  }
+
+  createDesignedVoice(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+    return handleCreateDesignedVoice(body, res)
   }
 
   createVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -266,15 +284,36 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
     timeout,
     `Voice design timed out after ${timeout}ms for provider ${provider.id}`,
   )
-  const voices = []
-  for (const voice of result.voices) {
-    voices.push(await persistProviderVoice(provider.id, context, voice))
-  }
   sendJson(res, {
     object: 'list',
-    data: voices.map(formatAudioVoiceObject),
+    data: result.voices.map(voice => formatAudioVoicePreviewObject(provider.id, voice)),
     text: result.text,
   })
+}
+
+async function handleCreateDesignedVoice(body: Record<string, unknown>, res: ServerResponse): Promise<void> {
+  assertSupportedJsonFields(body, VOICE_CREATE_BODY_FIELDS)
+  const providerId = typeof body.provider === 'string' && body.provider.trim()
+    ? body.provider.trim()
+    : 'elevenlabs'
+  assertPublicProviderAccess(providerId)
+  const provider = getVoiceDesignProvider(providerId)
+  const context = await getRuntimeConfig(provider.id)
+  ensureEnabled(provider.id, context)
+  if (!provider.createDesignedVoice) throw new Error(`Provider does not support voice preview creation: ${provider.id}`)
+
+  const request = normalizeVoiceCreateInput(provider.id, body)
+  const timeout = getProviderTimeoutMs(context)
+  const result = await withTimeout(
+    provider.createDesignedVoice(request, context),
+    timeout,
+    `Voice creation timed out after ${timeout}ms for provider ${provider.id}`,
+  )
+  const voice = await persistProviderVoice(provider.id, context, result.voice, {
+    source: 'voice_design_preview',
+    generated_voice_id: request.generated_voice_id,
+  })
+  sendJson(res, formatAudioVoiceObject(voice))
 }
 
 async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -448,6 +487,25 @@ function normalizeVoiceDesignInput(providerId: string, input: unknown): VoiceDes
   }
 }
 
+function normalizeVoiceCreateInput(providerId: string, input: unknown): VoiceCreateRequest {
+  const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const generated_voice_id = normalizeRequiredString(value.generated_voice_id, 'generated_voice_id')
+  const name = normalizeRequiredString(value.name, 'name')
+  const instructions = normalizeRequiredString(value.instructions, 'instructions')
+  return {
+    provider: providerId,
+    generated_voice_id,
+    name,
+    instructions,
+    labels: normalizeJsonObjectValue(value.labels, 'labels'),
+    played_not_selected_voice_ids: normalizeStringArrayValue(value.played_not_selected_voice_ids, 'played_not_selected_voice_ids'),
+    preview_audio_data: normalizeOptionalString(value.preview_audio, 'preview_audio'),
+    preview_mime_type: normalizeOptionalString(value.preview_mime_type, 'preview_mime_type'),
+    language: normalizeOptionalString(value.language, 'language'),
+    extra_params: normalizeExtraParams(value.extra_params, VOICE_CREATE_EXTRA_PARAM_RESERVED_FIELDS),
+  }
+}
+
 async function normalizeVoiceCloneInput(providerId: string, form: Awaited<ReturnType<typeof readMultipartForm>>): Promise<VoiceCloneRequest> {
   const file = form.files.audio_sample
   const name = form.fields.name?.trim()
@@ -556,6 +614,23 @@ function formatAudioVoiceObject(voice: VoiceRecord): Record<string, unknown> {
   }
 }
 
+function formatAudioVoicePreviewObject(providerId: string, voice: VoicePreview): Record<string, unknown> {
+  return {
+    id: voice.voice_id,
+    object: 'audio.voice.preview',
+    created_at: Math.floor(Date.now() / 1000),
+    provider: providerId,
+    generated_voice_id: voice.provider_voice_id ?? voice.voice_id,
+    name: voice.name,
+    instructions: voice.description,
+    language: voice.language,
+    preview_mime_type: voice.preview_mime_type,
+    preview_audio: voice.preview_audio_data,
+    duration_seconds: voice.duration_seconds,
+    metadata: voice.metadata,
+  }
+}
+
 function getOpenAiModelProvider(model: unknown, provider: unknown): string {
   const providerId = typeof provider === 'string' && provider.trim()
     ? provider.trim()
@@ -584,10 +659,33 @@ function normalizeExtraParams(value: unknown, reserved_fields?: ReadonlySet<stri
   return extra_params
 }
 
+function normalizeRequiredString(value: unknown, field_name: string): string {
+  const text = normalizeOptionalString(value, field_name)
+  if (!text) throw new Error(`${field_name} is required`)
+  return text
+}
+
 function normalizeOptionalString(value: unknown, field_name: string): string | undefined {
   if (value == null || value === '') return undefined
   if (typeof value !== 'string') throw new Error(`${field_name} must be a string`)
   return value.trim() || undefined
+}
+
+function normalizeJsonObjectValue(value: unknown, field_name: string): JsonObject | undefined {
+  if (value == null || value === '') return undefined
+  if (typeof value !== 'object' || Array.isArray(value) || !isJsonValue(value)) {
+    throw new Error(`${field_name} must be a JSON object`)
+  }
+  return value as JsonObject
+}
+
+function normalizeStringArrayValue(value: unknown, field_name: string): string[] | undefined {
+  if (value == null || value === '') return undefined
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+    throw new Error(`${field_name} must be an array of strings`)
+  }
+  const values = value.map(item => item.trim()).filter(Boolean)
+  return values.length ? values : undefined
 }
 
 function normalizeOptionalBoolean(value: unknown, field_name: string): boolean | undefined {

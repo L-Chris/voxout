@@ -567,14 +567,15 @@ test('POST /v1/audio/isolation only accepts multipart file input', async () => {
   assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.file_format conflicts/)
 })
 
-test('POST /v1/audio/design persists generated voices', async () => {
-  const response = await fetch(`${base_url}/v1/audio/design`, {
+test('POST /v1/audio/voices/design returns voice previews and create persists them', async () => {
+  const response = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'mock',
       instructions: 'A calm narrator voice with a clean tone.',
       name: 'Calm Mock',
+      input: 'This is a preview sentence.',
     }),
   })
   const payload = await response.json()
@@ -584,23 +585,59 @@ test('POST /v1/audio/design persists generated voices', async () => {
   assert.equal(payload.provider, undefined)
   assert.equal(payload.voices, undefined)
   assert.equal(payload.data.length, 1)
-  assert.equal(payload.data[0].object, 'audio.voice')
+  assert.equal(payload.data[0].object, 'audio.voice.preview')
   assert.equal(payload.data[0].name, 'Calm Mock')
+  assert.equal(payload.data[0].instructions, 'A calm narrator voice with a clean tone.')
   assert.equal(typeof payload.data[0].created_at, 'number')
+  assert.equal(payload.data[0].generated_voice_id, payload.data[0].id)
   assert.match(payload.data[0].preview_audio, /^data:audio\/wav;base64,/)
   assert.equal(payload.data[0].provider_links, undefined)
 
-  const voicesResponse = await fetch(`${base_url}/api/voices?provider=mock`)
-  const voicesPayload = await voicesResponse.json()
-  assert.equal(voicesResponse.status, 200)
-  const storedVoice = voicesPayload.voices.find(voice => voice.voice_id === payload.data[0].id)
+  const voicesBeforeCreateResponse = await fetch(`${base_url}/api/voices?provider=mock`)
+  const voicesBeforeCreatePayload = await voicesBeforeCreateResponse.json()
+  assert.equal(voicesBeforeCreateResponse.status, 200)
+  assert.equal(voicesBeforeCreatePayload.voices.some(voice => voice.voice_id === payload.data[0].id), false)
+
+  const createResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      generated_voice_id: payload.data[0].generated_voice_id,
+      name: payload.data[0].name,
+      instructions: payload.data[0].instructions,
+      preview_audio: payload.data[0].preview_audio,
+      preview_mime_type: payload.data[0].preview_mime_type,
+      labels: { source: 'test' },
+    }),
+  })
+  const createPayload = await createResponse.json()
+  assert.equal(createResponse.status, 200)
+  assert.equal(createPayload.object, 'audio.voice')
+  assert.equal(createPayload.id, payload.data[0].id)
+  assert.equal(createPayload.name, 'Calm Mock')
+
+  const voicesAfterCreateResponse = await fetch(`${base_url}/api/voices?provider=mock`)
+  const voicesAfterCreatePayload = await voicesAfterCreateResponse.json()
+  assert.equal(voicesAfterCreateResponse.status, 200)
+  const storedVoice = voicesAfterCreatePayload.voices.find(voice => voice.voice_id === payload.data[0].id)
   assert.ok(storedVoice)
   assert.equal(storedVoice.provider_links[0].provider, 'mock')
   assert.equal(storedVoice.provider_links[0].provider_voice_key, payload.data[0].id)
 })
 
-test('POST /v1/audio/design requires model or provider and instructions fields', async () => {
-  const missingModelResponse = await fetch(`${base_url}/v1/audio/design`, {
+test('POST /v1/audio/voices/design requires model or provider and instructions fields', async () => {
+  const legacyRouteResponse = await fetch(`${base_url}/v1/audio/design`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'mock',
+      instructions: 'A calm narrator voice.',
+    }),
+  })
+  assert.equal(legacyRouteResponse.status, 404)
+
+  const missingModelResponse = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -612,7 +649,7 @@ test('POST /v1/audio/design requires model or provider and instructions fields',
   assert.equal(missingModelResponse.status, 400)
   assert.match(errorMessage(missingModelPayload), /model is required/)
 
-  const unknownModelResponse = await fetch(`${base_url}/v1/audio/design`, {
+  const unknownModelResponse = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -624,7 +661,7 @@ test('POST /v1/audio/design requires model or provider and instructions fields',
   assert.equal(unknownModelResponse.status, 400)
   assert.match(errorMessage(unknownModelPayload), /Unknown voice design model: not-a-voice-design-model/)
 
-  const legacyInputResponse = await fetch(`${base_url}/v1/audio/design`, {
+  const legacyInputResponse = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -637,7 +674,7 @@ test('POST /v1/audio/design requires model or provider and instructions fields',
   assert.equal(legacyInputResponse.status, 400)
   assert.match(errorMessage(legacyInputPayload), /text is not supported/)
 
-  const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/design`, {
+  const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -650,7 +687,7 @@ test('POST /v1/audio/design requires model or provider and instructions fields',
   assert.equal(unsupportedFieldResponse.status, 400)
   assert.match(errorMessage(unsupportedFieldPayload), /style_prompt is not supported/)
 
-  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/design`, {
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/voices/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -665,6 +702,52 @@ test('POST /v1/audio/design requires model or provider and instructions fields',
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
   assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.instructions conflicts/)
+})
+
+test('POST /v1/audio/voices/create validates OpenAI-style voice create fields', async () => {
+  const missingPreviewResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      name: 'Calm Mock',
+      instructions: 'A calm narrator voice.',
+    }),
+  })
+  const missingPreviewPayload = await missingPreviewResponse.json()
+  assert.equal(missingPreviewResponse.status, 400)
+  assert.match(errorMessage(missingPreviewPayload), /generated_voice_id is required/)
+
+  const legacyFieldResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      generated_voice_id: 'preview-id',
+      voice_name: 'Calm Mock',
+      instructions: 'A calm narrator voice.',
+    }),
+  })
+  const legacyFieldPayload = await legacyFieldResponse.json()
+  assert.equal(legacyFieldResponse.status, 400)
+  assert.match(errorMessage(legacyFieldPayload), /voice_name is not supported/)
+
+  const conflictingExtraParamsResponse = await fetch(`${base_url}/v1/audio/voices/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      generated_voice_id: 'preview-id',
+      name: 'Calm Mock',
+      instructions: 'A calm narrator voice.',
+      extra_params: {
+        generated_voice_id: 'other-id',
+      },
+    }),
+  })
+  const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
+  assert.equal(conflictingExtraParamsResponse.status, 400)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.generated_voice_id conflicts/)
 })
 
 test('POST /v1/audio/voices clones and persists provider-linked voices', async () => {

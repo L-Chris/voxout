@@ -27,9 +27,15 @@ export class AudioController {
     return ctx
   }
 
-  @Post('/v1/audio/design')
+  @Post('/v1/audio/voices/design')
   async createVoiceDesign(@Body({ required: true }) body: Record<string, unknown>, @Ctx() ctx: Context) {
     await this.audio.createVoiceDesign(body, takeOverResponse(ctx))
+    return ctx
+  }
+
+  @Post('/v1/audio/voices/create')
+  async createDesignedVoice(@Body({ required: true }) body: Record<string, unknown>, @Ctx() ctx: Context) {
+    await this.audio.createDesignedVoice(body, takeOverResponse(ctx))
     return ctx
   }
 

@@ -9,6 +9,7 @@ import type {
   VoiceCloneProvider,
   VoiceCloneRequest,
   VoiceCloneResult,
+  VoiceCreateRequest,
   VoiceDesignProvider,
   VoiceDesignRequest,
   VoiceDesignResult,
@@ -173,6 +174,26 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
           model,
         },
       }],
+    }
+  }
+
+  async createDesignedVoice(request: VoiceCreateRequest): Promise<VoiceCloneResult> {
+    if (!request.preview_audio_data) throw new Error('preview_audio is required for MiMo voice creation.')
+    return {
+      provider: this.id,
+      voice: {
+        voice_id: request.generated_voice_id,
+        name: request.name,
+        description: request.instructions,
+        language: request.language ?? 'zh-CN',
+        preview_audio_data: request.preview_audio_data,
+        preview_mime_type: request.preview_mime_type ?? getDataUrlMimeType(request.preview_audio_data) ?? 'audio/wav',
+        metadata: {
+          generated_voice_id: request.generated_voice_id,
+          labels: request.labels ?? null,
+          created_from_voice_design_preview: true,
+        },
+      },
     }
   }
 

@@ -11,6 +11,7 @@ import type {
   VoiceCloneProvider,
   VoiceCloneRequest,
   VoiceCloneResult,
+  VoiceCreateRequest,
   VoiceDesignProvider,
   VoiceDesignRequest,
   VoiceDesignResult,
@@ -79,6 +80,25 @@ export class MockTtsProvider implements TtsProvider, SoundEffectProvider, AudioI
         preview_mime_type: 'audio/wav',
         metadata: {},
       }],
+    }
+  }
+
+  async createDesignedVoice(request: VoiceCreateRequest): Promise<VoiceCloneResult> {
+    return {
+      provider: this.id,
+      voice: {
+        voice_id: request.generated_voice_id,
+        provider_voice_id: request.generated_voice_id,
+        name: request.name,
+        description: request.instructions,
+        language: request.language,
+        preview_audio_data: request.preview_audio_data,
+        preview_mime_type: request.preview_mime_type,
+        metadata: {
+          labels: request.labels ?? null,
+          created_from_voice_design_preview: true,
+        },
+      },
     }
   }
 

@@ -29,7 +29,8 @@ voxout extension audio API:
 
 - `POST /v1/audio/effect`
 - `POST /v1/audio/isolation`
-- `POST /v1/audio/design`
+- `POST /v1/audio/voices/design`
+- `POST /v1/audio/voices/create`
 
 `/v1/audio/speech` follows the OpenAI speech request shape: `model` is the TTS
 model, `input` is the text, `voice` is the voice name or id, and
@@ -108,9 +109,17 @@ curl -X POST http://127.0.0.1:4177/v1/audio/isolation \
 Voice design:
 
 ```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/design \
+curl -X POST http://127.0.0.1:4177/v1/audio/voices/design \
   -H 'content-type: application/json' \
   --data '{"model":"eleven_multilingual_ttv_v2","instructions":"A calm narrator voice with a clean tone.","input":"This is a preview sentence.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
+```
+
+Create a designed voice from a selected preview:
+
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/voices/create \
+  -H 'content-type: application/json' \
+  --data '{"provider":"elevenlabs","generated_voice_id":"preview_voice_id","name":"Calm Narrator","instructions":"A calm narrator voice with a clean tone.","labels":{"use":"narration"}}'
 ```
 
 Voice cloning from an audio sample:

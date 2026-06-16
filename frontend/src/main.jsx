@@ -309,7 +309,7 @@ function App() {
       ...parseJsonObject(designForm.extra_params, 'Extra params'),
       ...typed_extra_params,
     }
-    const response = await fetch(apiUrl('/v1/audio/design', api_base_url), {
+    const response = await fetch(apiUrl('/v1/audio/voices/design', api_base_url), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -328,13 +328,8 @@ function App() {
       kind: 'json',
       content: JSON.stringify(payload, null, 2),
       mime_type: 'application/json',
-      endpoint: 'POST /v1/audio/design',
+      endpoint: 'POST /v1/audio/voices/design',
     })
-    if (selectedProvider?.capabilities?.tts) {
-      loadProviderVoices(selectedProvider.id)
-        .then(options => setVoiceOptions(options))
-        .catch(() => {})
-    }
   }
 
   async function runCloneTest() {

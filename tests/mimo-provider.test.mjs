@@ -119,6 +119,26 @@ test('Mimo provider designs a reusable voice preview', async () => {
   assert.match(result.voices[0].preview_audio_data, /^data:audio\/wav;base64,/)
 })
 
+test('Mimo provider creates a voice from preview data locally', async () => {
+  const provider = new MimoTtsProvider()
+  const result = await provider.createDesignedVoice({
+    generated_voice_id: 'mimo_preview_1',
+    name: '冷静男声',
+    instructions: '年轻男性，冷静克制，嗓音清亮。',
+    language: 'zh-CN',
+    preview_audio_data: `data:audio/wav;base64,${Buffer.alloc(256, 1).toString('base64')}`,
+    preview_mime_type: 'audio/wav',
+    labels: { style: 'calm' },
+  })
+
+  assert.equal(result.voice.voice_id, 'mimo_preview_1')
+  assert.equal(result.voice.provider_voice_id, undefined)
+  assert.equal(result.voice.name, '冷静男声')
+  assert.equal(result.voice.language, 'zh-CN')
+  assert.match(result.voice.preview_audio_data, /^data:audio\/wav;base64,/)
+  assert.equal(result.voice.metadata.created_from_voice_design_preview, true)
+})
+
 test('Mimo provider uses voice data URLs with the voice clone model', async () => {
   const captured = await synthesizeWithMockedFetch({
     providerRequest: {

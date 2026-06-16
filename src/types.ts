@@ -155,6 +155,19 @@ export interface VoiceDesignRequest {
   extra_params?: JsonObject
 }
 
+export interface VoiceCreateRequest {
+  provider?: string
+  generated_voice_id: string
+  name: string
+  instructions: string
+  labels?: JsonObject
+  played_not_selected_voice_ids?: string[]
+  preview_audio_data?: string
+  preview_mime_type?: string
+  language?: string
+  extra_params?: JsonObject
+}
+
 export interface VoiceCloneRequest {
   provider?: string
   name: string
@@ -232,6 +245,7 @@ export interface VoiceDesignProvider {
   readonly capabilities?: ProviderCapabilities
   readonly fields?: ProviderFieldDefinition[]
   designVoice(request: VoiceDesignRequest, context?: ProviderContext): Promise<VoiceDesignResult>
+  createDesignedVoice?(request: VoiceCreateRequest, context?: ProviderContext): Promise<VoiceCloneResult>
 }
 
 export interface VoiceCloneProvider {

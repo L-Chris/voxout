@@ -14,6 +14,7 @@ import type {
   VoiceCloneProvider,
   VoiceCloneRequest,
   VoiceCloneResult,
+  VoiceCreateRequest,
   VoiceDesignProvider,
   VoiceDesignRequest,
   VoiceDesignResult,
@@ -78,6 +79,15 @@ interface ElevenLabsDesignPayload {
 interface ElevenLabsClonePayload {
   voice_id?: string
   requires_verification?: boolean
+}
+
+interface ElevenLabsCreateVoicePayload {
+  voice_id?: string
+  name?: string
+  description?: string
+  labels?: Record<string, string>
+  preview_url?: string
+  verified_languages?: Array<{ locale?: string, language?: string }>
 }
 
 export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffectProvider, AudioIsolationProvider, VoiceDesignProvider, VoiceCloneProvider {
@@ -295,6 +305,47 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     }
   }
 
+  async createDesignedVoice(request: VoiceCreateRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
+    const api_key = getApiKey(context)
+    const response = await fetch(`${getBaseUrl(context)}/text-to-voice`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'xi-api-key': api_key,
+      },
+      body: JSON.stringify(mergeJsonBody({
+        voice_name: request.name,
+        voice_description: request.instructions,
+        generated_voice_id: request.generated_voice_id,
+        labels: request.labels,
+        played_not_selected_voice_ids: request.played_not_selected_voice_ids,
+      }, request.extra_params)),
+    })
+    const payload = await readJsonResponse<ElevenLabsCreateVoicePayload>(response)
+    if (!response.ok) {
+      throw new Error(getPayloadError(payload) || `ElevenLabs voice create request failed: ${response.status}`)
+    }
+    if (!payload.voice_id) throw new Error('ElevenLabs voice create response did not include voice_id.')
+    return {
+      provider: this.id,
+      voice: {
+        voice_id: payload.voice_id,
+        provider_voice_id: payload.voice_id,
+        name: payload.name ?? request.name,
+        description: payload.description ?? request.instructions,
+        language: normalizeCreatedVoiceLanguage(payload.verified_languages) ?? request.language,
+        preview_audio_data: request.preview_audio_data,
+        preview_mime_type: request.preview_mime_type,
+        metadata: {
+          generated_voice_id: request.generated_voice_id,
+          labels: payload.labels ?? request.labels ?? null,
+          preview_url: payload.preview_url ?? null,
+        },
+      },
+      raw: payload,
+    }
+  }
+
   async cloneVoice(request: VoiceCloneRequest, context: ProviderContext = {}): Promise<VoiceCloneResult> {
     const api_key = getApiKey(context)
     const audio = request.audio_sample
@@ -406,6 +457,10 @@ function normalizeVoice(voice: ElevenLabsVoicePayload, provider: string): TtsVoi
     gender: voice.labels?.gender,
     provider,
   }
+}
+
+function normalizeCreatedVoiceLanguage(languages: Array<{ locale?: string, language?: string }> | undefined): string | undefined {
+  return languages?.[0]?.locale ?? languages?.[0]?.language
 }
 
 function getDefaultVoice(provider: string, context: ProviderContext): TtsVoice {
