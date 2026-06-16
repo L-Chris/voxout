@@ -318,7 +318,7 @@ async function handleCreateDesignedVoice(body: Record<string, unknown>, res: Ser
     source: 'voice_design_preview',
     generated_voice_id: request.generated_voice_id,
   })
-  sendJson(res, formatAudioVoiceObject(voice))
+  sendJson(res, formatCreatedAudioVoiceObject(voice))
 }
 
 async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -614,6 +614,17 @@ function formatAudioVoiceObject(voice: VoiceRecord): Record<string, unknown> {
     language: voice.language,
     preview_mime_type: voice.preview_mime_type,
     preview_audio: voice.preview_audio,
+  }
+}
+
+function formatCreatedAudioVoiceObject(voice: VoiceRecord): Record<string, unknown> {
+  return {
+    id: voice.voice_id,
+    object: 'audio.voice',
+    created_at: toUnixSeconds(voice.created_at),
+    name: voice.name,
+    description: voice.description,
+    language: voice.language,
   }
 }
 

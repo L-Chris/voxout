@@ -130,7 +130,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `played_not_selected_voice_ids`，可选 string[] | 无 | 不支持 | `played_not_selected_voice_ids` | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 无 |
 | `language`，可选 string | 无 | 不支持 | 不下发；ElevenLabs 响应 `verified_languages[]` 优先 | 不支持 | 不支持 | 本地保存 language | 不支持 | 无 |
 | `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs create JSON body；adapter 已映射字段优先 | 不支持 | 不支持 | 保存到本地 metadata | 不支持 | 仅接受 JSON object；不能包含 `provider/generated_voice_id/name/instructions/labels/played_not_selected_voice_ids/language` 等已识别字段 |
-| 响应 | `{ id, object: "audio.voice", created_at, name }` 风格 | 不支持 | Voxout 返回 `{ id, object: "audio.voice", created_at, name, description, language, preview_audio, preview_mime_type }` 并保存 provider link | 不支持 | 不支持 | 同 Voxout voice 响应；provider link 没有下游 voice id | 不支持 | 不返回 ElevenLabs 原始 create response |
+| 响应 | `{ id, object: "audio.voice", created_at, name }` 风格 | 不支持 | Voxout 返回 `{ id, object: "audio.voice", created_at, name, description, language }` 并保存 provider link | 不支持 | 不支持 | 同 Voxout voice 响应；provider link 没有下游 voice id | 不支持 | 不返回 ElevenLabs 原始 create response，也不返回 `preview_audio` / `preview_mime_type`；完整内部 voice record 走 `/api/voices` |
 
 ## POST `/v1/audio/voices`
 
