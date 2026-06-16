@@ -1278,7 +1278,7 @@ function defaultSpeechForm(provider) {
     input: '你好，voxout。',
     model: provider?.config?.tts_model ?? '',
     voice: '',
-    response_format: provider?.id === 'mimo' ? 'wav' : 'mp3',
+    response_format: 'mp3',
     stream_format: '',
     speed: '1',
     instructions: '',

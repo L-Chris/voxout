@@ -25,7 +25,7 @@ test('Mimo provider sends preset voice synthesis requests', async () => {
     { role: 'assistant', content: '你好，rebook。' },
   ])
   assert.deepEqual(captured.body.audio, {
-    format: 'wav',
+    format: 'mp3',
     voice: '冰糖',
   })
 })
@@ -339,7 +339,7 @@ async function synthesizeWithMockedFetch({ providerRequest, returnAllCaptures = 
     secrets: { api_key: 'test-key' },
   })
   assert.equal(result.audio.length, 256)
-  assert.equal(result.mime_type, providerRequest.output_format === 'mp3' ? 'audio/mpeg' : 'audio/wav')
+  assert.equal(result.mime_type, providerRequest.output_format === 'wav' ? 'audio/wav' : 'audio/mpeg')
   return returnAllCaptures ? captures : captures[0]
 }
 

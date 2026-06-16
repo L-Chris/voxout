@@ -996,7 +996,7 @@ function resolveSpeechResponseFormat(providerId: string, value: string | undefin
   conversion?: 'pcm-to-wav' | 'wav-to-pcm'
   sample_rate?: number
 } {
-  const format = value?.toLowerCase().trim()
+  const format = value?.toLowerCase().trim() || (providerId === 'mimo' ? 'mp3' : undefined)
   if (!format) return {}
   if (providerId === 'openai') {
     if (isOpenAiSpeechResponseFormat(format)) return { provider_format: format, response_format: format }

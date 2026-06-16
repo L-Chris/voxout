@@ -293,6 +293,22 @@ test('POST /v1/audio/speech routes provider model ids to their provider', async 
   assert.match(errorMessage(payload), /elevenlabs api_key is required/)
 })
 
+test('POST /v1/audio/speech defaults MiMo response_format to mp3', async () => {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mimo',
+      input: 'hello from mimo',
+    }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(errorMessage(payload), /mimo api_key is required/)
+  assert.doesNotMatch(errorMessage(payload), /response_format/)
+})
+
 test('POST /v1/audio/speech streams generated audio bytes', async () => {
   const response = await fetch(`${base_url}/v1/audio/speech`, {
     method: 'POST',
