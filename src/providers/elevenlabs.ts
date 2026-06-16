@@ -251,9 +251,9 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
         'xi-api-key': api_key,
       },
       body: JSON.stringify(mergeJsonBody({
-        voice_description: request.input,
+        voice_description: request.instructions,
         model_id: request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL,
-        text: request.text,
+        text: request.input,
         auto_generate_text: options.auto_generate_text,
         loudness: options.loudness,
         seed: options.seed,
@@ -275,7 +275,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
           voice_id: preview.generated_voice_id ?? `elevenlabs-preview-${index + 1}`,
           provider_voice_id: preview.generated_voice_id,
           name: request.name ?? `ElevenLabs Voice ${index + 1}`,
-          description: request.input,
+          description: request.instructions,
           language: preview.language,
           preview_audio_data: preview.audio_base_64
             ? `data:${mediaType};base64,${stripDataUrlPrefix(preview.audio_base_64)}`

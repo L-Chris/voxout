@@ -211,9 +211,9 @@ async function createTask(
 }
 
 async function pollTask(task_id: string, context: ProviderContext, model_id: string): Promise<BcutTaskResultPayload> {
-  const timeout_ms = getTimeoutMs(context)
+  const timeout = getTimeoutMs(context)
   const poll_interval_ms = Math.max(250, getConfigNumber(context, 'bcut_poll_interval_ms') ?? DEFAULT_POLL_INTERVAL_MS)
-  const deadline = Date.now() + timeout_ms
+  const deadline = Date.now() + timeout
   while (Date.now() <= deadline) {
     const url = new URL(`${getBaseUrl(context)}/task/result`)
     url.searchParams.set('model_id', model_id)
@@ -227,7 +227,7 @@ async function pollTask(task_id: string, context: ProviderContext, model_id: str
     if (payload.state === 4) return payload
     await sleep(Math.min(poll_interval_ms, Math.max(0, deadline - Date.now())))
   }
-  throw new Error(`Bilibili Bcut ASR task timed out after ${timeout_ms}ms.`)
+  throw new Error(`Bilibili Bcut ASR task timed out after ${timeout}ms.`)
 }
 
 async function readBcutData<T>(response: Response, label: string): Promise<T> {
@@ -313,7 +313,7 @@ function getHeaders(): Record<string, string> {
 }
 
 function getTimeoutMs(context: ProviderContext): number {
-  return Math.max(1, getConfigNumber(context, 'timeout_ms') ?? 45000)
+  return Math.max(1, getConfigNumber(context, 'timeout') ?? 45000)
 }
 
 function sleep(ms: number): Promise<void> {

@@ -367,7 +367,7 @@ test('POST /v1/audio/effect returns generated audio bytes', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       duration_seconds: 0.5,
       response_format: 'wav',
     }),
@@ -386,7 +386,7 @@ test('POST /v1/audio/effect converts WAV provider output to PCM', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       duration_seconds: 0.5,
       response_format: 'pcm',
     }),
@@ -404,7 +404,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       response_format: 'wav',
     }),
   })
@@ -417,7 +417,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'not-a-sound-effect-model',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
     }),
   })
   const unknownModelPayload = await unknownModelResponse.json()
@@ -429,18 +429,20 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      prompt: 'a short test chime',
+      input: 'a short test chime',
       response_format: 'wav',
     }),
   })
+  const legacyInputPayload = await legacyInputResponse.json()
   assert.equal(legacyInputResponse.status, 400)
+  assert.match(errorMessage(legacyInputPayload), /input is not supported/)
 
   const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/effect`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       voice_settings: { stability: 0.5 },
     }),
   })
@@ -453,7 +455,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       response_format: 'flac',
     }),
   })
@@ -466,7 +468,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       duration_seconds: 90,
     }),
   })
@@ -479,7 +481,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       prompt_influence: 2,
     }),
   })
@@ -492,7 +494,7 @@ test('POST /v1/audio/effect requires model or provider and OpenAI-style field na
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'a short test chime',
+      instructions: 'a short test chime',
       extra_params: {
         duration_seconds: 0.5,
       },
@@ -571,7 +573,7 @@ test('POST /v1/audio/design persists generated voices', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'mock',
-      input: 'A calm narrator voice with a clean tone.',
+      instructions: 'A calm narrator voice with a clean tone.',
       name: 'Calm Mock',
     }),
   })
@@ -597,12 +599,12 @@ test('POST /v1/audio/design persists generated voices', async () => {
   assert.equal(storedVoice.provider_links[0].provider_voice_key, payload.data[0].id)
 })
 
-test('POST /v1/audio/design requires model or provider and input fields', async () => {
+test('POST /v1/audio/design requires model or provider and instructions fields', async () => {
   const missingModelResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      input: 'A calm narrator voice.',
+      instructions: 'A calm narrator voice.',
       name: 'Legacy Provider',
     }),
   })
@@ -615,7 +617,7 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'not-a-voice-design-model',
-      input: 'A calm narrator voice.',
+      instructions: 'A calm narrator voice.',
     }),
   })
   const unknownModelPayload = await unknownModelResponse.json()
@@ -627,20 +629,20 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      voice_description: 'A calm narrator voice.',
+      text: 'A calm narrator voice.',
       name: 'Legacy Input',
     }),
   })
   const legacyInputPayload = await legacyInputResponse.json()
   assert.equal(legacyInputResponse.status, 400)
-  assert.match(errorMessage(legacyInputPayload), /voice_description is not supported/)
+  assert.match(errorMessage(legacyInputPayload), /text is not supported/)
 
   const unsupportedFieldResponse = await fetch(`${base_url}/v1/audio/design`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'A calm narrator voice.',
+      instructions: 'A calm narrator voice.',
       style_prompt: 'warm',
     }),
   })
@@ -653,15 +655,16 @@ test('POST /v1/audio/design requires model or provider and input fields', async 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       provider: 'mock',
-      input: 'A calm narrator voice.',
+      instructions: 'A calm narrator voice.',
+      input: 'Preview sample text.',
       extra_params: {
-        input: 'Override prompt.',
+        instructions: 'Override prompt.',
       },
     }),
   })
   const conflictingExtraParamsPayload = await conflictingExtraParamsResponse.json()
   assert.equal(conflictingExtraParamsResponse.status, 400)
-  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.input conflicts/)
+  assert.match(errorMessage(conflictingExtraParamsPayload), /extra_params\.instructions conflicts/)
 })
 
 test('POST /v1/audio/voices clones and persists provider-linked voices', async () => {

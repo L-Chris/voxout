@@ -104,7 +104,7 @@ test('Mimo provider designs a reusable voice preview', async () => {
 
   const provider = new MimoTtsProvider()
   const result = await provider.designVoice({
-    input: '年轻男性，冷静克制，嗓音清亮。',
+    instructions: '年轻男性，冷静克制，嗓音清亮。',
     name: '冷静男声',
     model: 'mimo-custom-design-model',
   }, {

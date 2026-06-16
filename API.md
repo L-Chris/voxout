@@ -32,7 +32,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | [OpenAI 规范][openai-api] | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `account_id` | 无 | 仅用于 Voxout voice 关联表 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
-| `timeout_ms` | 无 | Voxout 调用超时 | Voxout 调用超时 | Voxout 调用超时 | HTTP 调用超时；WebSocket 流也使用该超时 | HTTP 调用和下载超时 | Edge TTS `timeout`；Bcut ASR 整体轮询超时；voice catalog 下载超时另用 `voices_timeout_ms` | 不下发，除 Default/Edge 映射到库参数 |
+| `timeout` | 无 | Voxout 调用超时 | Voxout 调用超时 | Voxout 调用超时 | HTTP 调用超时；WebSocket 流也使用该超时 | HTTP 调用和下载超时 | Edge TTS `timeout`；Bcut ASR 整体轮询超时；voice catalog 下载超时另用 `voices_timeout_ms` | 不下发，除 Default/Edge 映射到库参数 |
 
 ## POST `/v1/audio/speech`
 
@@ -79,13 +79,13 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | OpenAI 规范 | OpenAI | [ElevenLabs][elevenlabs-sfx] | Cartesia | Gradium | MiMo | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `provider`，可选 | 无 | 不支持 | 只用于路由；省略时可用 `model` 的唯一 provider model option 路由 | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `input`，必填 string | 无 | 不支持 | `text` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
+| `instructions`，必填 string | 无；参考 speech 的风格控制字段命名 | 不支持 | `text` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `model`，必填，除非 `provider` 显式指定 | 无 | 不支持 | `model_id`；`model=elevenlabs` 只用于路由，`model=eleven_text_to_sound_v2` 会路由到 ElevenLabs 并下发为 model id；缺省 `sound_effect_model` 或 `model` 或 `eleven_text_to_sound_v2` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `response_format`，可选 string | 无；参考 speech 的 `mp3/wav/pcm` | 不支持 | `mp3 -> mp3_44100_128`，`pcm -> pcm_44100`，`wav -> pcm_44100` 后由 Voxout 包 WAV；也接受 `mp3_*`、`pcm_*`、`ulaw_*` provider-native output format | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `duration_seconds`，可选 number | 无 | 不支持 | 校验 `0.5..30` 后映射 `duration_seconds` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `prompt_influence`，可选 number | 无 | 不支持 | 校验 `0..1` 后映射 `prompt_influence` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
 | `loop`，可选 boolean | 无 | 不支持 | `loop` | 不支持 | 不支持 | 不支持 | 不支持 | 无 |
-| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs sound generation JSON body；adapter 已映射字段优先 | 不支持 | 不支持 | 不支持 | 不支持 | 仅接受 JSON object；不能包含 `provider/model/input/response_format/duration_seconds/prompt_influence/loop` 等已识别字段 |
+| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs sound generation JSON body；adapter 已映射字段优先 | 不支持 | 不支持 | 不支持 | 不支持 | 仅接受 JSON object；不能包含 `provider/model/instructions/response_format/duration_seconds/prompt_influence/loop` 等已识别字段 |
 | 响应 | 无 | 不支持 | 音频 bytes，MIME 来自 `content-type`，缺省 `audio/mpeg` | 不支持 | 不支持 | 不支持 | 不支持 | 不返回 ElevenLabs JSON |
 
 ## POST `/v1/audio/isolation`
@@ -108,12 +108,12 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | OpenAI 规范 | OpenAI | [ElevenLabs][elevenlabs-design] | Cartesia | Gradium | [MiMo][mimo-tts] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `provider`，可选 | 无 | 不支持 | 只用于路由；省略时可用 `model` 的唯一 provider model option 路由 | 不支持 | 不支持 | 只用于路由；省略时可用 `model` 的唯一 provider model option 路由 | 不支持 | 无 |
-| `input`，必填 string | 无 | 不支持 | `voice_description` | 不支持 | 不支持 | voice description prompt | 不支持 | 无 |
+| `instructions`，必填 string | 无；参考 speech 的语音风格/描述字段命名 | 不支持 | `voice_description` | 不支持 | 不支持 | voice description prompt | 不支持 | 无 |
 | `name`，可选 string | 无 | 不支持 | 仅用于保存 Voxout voice 名称，不发送给设计接口 | 不支持 | 不支持 | 用于保存 Voxout voice 名称 | 不支持 | 无 |
-| `text`，可选 string | 无 | 不支持 | `text` | 不支持 | 不支持 | sample text；缺省 `voice_sample_text` 配置或内置中文样例 | 不支持 | 无 |
+| `input`，可选 string | 无；参考 speech 的文本输入字段命名 | 不支持 | `text` | 不支持 | 不支持 | sample text；缺省 `voice_sample_text` 配置或内置中文样例 | 不支持 | 无 |
 | `response_format`，可选 string | 无 | 不支持 | query `output_format` | 不支持 | 不支持 | 预览固定 `wav` | 不支持 | 无 |
 | `model`，必填，除非 `provider` 显式指定 | 无 | 不支持 | `model_id`；`model=elevenlabs` 只用于路由，`model=eleven_multilingual_ttv_v2` 会路由到 ElevenLabs 并下发为 model id | 不支持 | 不支持 | `model`；`model=mimo` 只用于路由，`model=mimo-v2.5-tts-voicedesign` 会路由到 MiMo 并下发为 model | 不支持 | 无 |
-| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs voice design JSON body；常用 `auto_generate_text`、`loudness`、`seed`、`guidance_scale`、`quality`、`reference_audio_base64`、`prompt_strength`；adapter 已映射字段优先 | 不支持 | 不支持 | 深合并到 MiMo voice preview chat completion JSON body；adapter 已映射字段优先 | 不支持 | 仅接受 JSON object；不能包含 `provider/input/name/text/response_format/model` 等已识别字段 |
+| `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs voice design JSON body；常用 `auto_generate_text`、`loudness`、`seed`、`guidance_scale`、`quality`、`reference_audio_base64`、`prompt_strength`；adapter 已映射字段优先 | 不支持 | 不支持 | 深合并到 MiMo voice preview chat completion JSON body；adapter 已映射字段优先 | 不支持 | 仅接受 JSON object；不能包含 `provider/instructions/input/name/response_format/model` 等已识别字段 |
 | 响应 | 无 | 不支持 | Voxout 持久化 previews，并返回 `{ object: "list", data: [{ id, object: "audio.voice", created_at, name, preview_audio, ... }] }` | 不支持 | 不支持 | Voxout 生成本地 `mimo_*` voice 并返回同样的 list/audio.voice 结构 | 不支持 | 不返回 provider link 或下游原始 previews；完整内部 voice record 走 `/api/voices` |
 
 ## POST `/v1/audio/voices`

@@ -82,7 +82,7 @@ test('Default provider sends Bilibili Bcut ASR upload and task requests', async 
     },
   }, {
     config: {
-      timeout_ms: 1000,
+      timeout: 1000,
       bcut_poll_interval_ms: 250,
     },
   })

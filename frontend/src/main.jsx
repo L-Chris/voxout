@@ -255,7 +255,7 @@ function App() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         provider: selectedProvider.id,
-        input: effectForm.input,
+        instructions: effectForm.instructions,
         response_format: effectForm.response_format,
         duration_seconds: Number(effectForm.duration_seconds) || undefined,
         prompt_influence: Number(effectForm.prompt_influence) || undefined,
@@ -314,9 +314,9 @@ function App() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         provider: selectedProvider.id,
-        input: designForm.input,
+        instructions: designForm.instructions,
         name: designForm.name || undefined,
-        text: designForm.text || undefined,
+        input: designForm.input || undefined,
         response_format: designForm.response_format,
         model: designForm.model || undefined,
         extra_params: Object.keys(extra_params).length ? extra_params : undefined,
@@ -920,11 +920,11 @@ function EffectTestForm({ form, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Prompt
+        Instructions
         <textarea
           className="textarea min-h-28"
-          value={form.input}
-          onChange={event => onFormChange({ ...form, input: event.target.value })}
+          value={form.instructions}
+          onChange={event => onFormChange({ ...form, instructions: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -980,11 +980,11 @@ function DesignTestForm({ form, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Voice description
+        Instructions
         <textarea
           className="textarea min-h-28"
-          value={form.input}
-          onChange={event => onFormChange({ ...form, input: event.target.value })}
+          value={form.instructions}
+          onChange={event => onFormChange({ ...form, instructions: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -1005,11 +1005,11 @@ function DesignTestForm({ form, onFormChange }) {
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
-        Preview text
+        Input
         <textarea
           className="textarea min-h-20"
-          value={form.text}
-          onChange={event => onFormChange({ ...form, text: event.target.value })}
+          value={form.input}
+          onChange={event => onFormChange({ ...form, input: event.target.value })}
         />
       </label>
       <label className="grid gap-1.5 text-sm font-semibold">
@@ -1218,7 +1218,7 @@ function defaultSpeechForm(provider) {
 
 function defaultEffectForm() {
   return {
-    input: 'a short cinematic whoosh',
+    instructions: 'a short cinematic whoosh',
     duration_seconds: '1.5',
     prompt_influence: '0.3',
     response_format: 'mp3',
@@ -1236,9 +1236,9 @@ function defaultIsolationForm() {
 
 function defaultDesignForm() {
   return {
-    input: 'A calm narrator voice with a clean tone and warm delivery.',
+    instructions: 'A calm narrator voice with a clean tone and warm delivery.',
     name: '',
-    text: '',
+    input: '',
     model: '',
     response_format: 'mp3_44100_128',
     auto_generate_text: true,

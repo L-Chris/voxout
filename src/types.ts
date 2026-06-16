@@ -147,9 +147,9 @@ export interface AudioIsolationRequest {
 
 export interface VoiceDesignRequest {
   provider?: string
-  input: string
+  instructions: string
   name?: string
-  text?: string
+  input?: string
   output_format?: string
   model?: string
   extra_params?: JsonObject

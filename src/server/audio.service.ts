@@ -86,7 +86,7 @@ const TRANSCRIPTION_EXTRA_PARAM_RESERVED_FIELDS = new Set([
 const SOUND_EFFECT_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'provider',
   'model',
-  'input',
+  'instructions',
   'response_format',
   'duration_seconds',
   'prompt_influence',
@@ -103,9 +103,9 @@ const AUDIO_ISOLATION_EXTRA_PARAM_RESERVED_FIELDS = new Set([
 ])
 const VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS = new Set([
   'provider',
+  'instructions',
   'input',
   'name',
-  'text',
   'response_format',
   'model',
   'extra_params',
@@ -190,21 +190,21 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     extra_params: normalizeExtraParams(body.extra_params, SPEECH_EXTRA_PARAM_RESERVED_FIELDS),
   })
   await resolveVoiceForSynthesis(provider.id, request)
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   if (stream_format) {
     if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
     const result = await withTimeout(
       provider.streamSynthesize(request, context),
-      timeout_ms,
-      `Speech stream creation timed out after ${timeout_ms}ms for provider ${provider.id}`,
+      timeout,
+      `Speech stream creation timed out after ${timeout}ms for provider ${provider.id}`,
     )
     sendStream(res, result.stream, stream_format === 'sse' ? result.mime_type : normalizeSpeechMimeType(speechFormat.response_format, result.mime_type))
     return
   }
   const result = await withTimeout(
     provider.synthesize(request, context),
-    timeout_ms,
-    `Speech generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Speech generation timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const output = convertAudioOutput(result.audio, result.mime_type, speechFormat)
   sendBinary(res, output.audio, output.mime_type)
@@ -221,11 +221,11 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
   const effectFormat = resolveAudioEffectResponseFormat(provider.id, typeof body.response_format === 'string' ? body.response_format : undefined)
 
   const request = normalizeSoundEffectInput(provider.id, { ...body, model: target.model, response_format: effectFormat.provider_format })
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.createSoundEffect(request, context),
-    timeout_ms,
-    `Sound effect generation timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Sound effect generation timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const output = convertAudioOutput(result.audio, result.mime_type, effectFormat)
   sendBinary(res, output.audio, output.mime_type)
@@ -241,11 +241,11 @@ async function handleAudioIsolation(req: IncomingMessage, res: ServerResponse): 
   ensureEnabled(provider.id, context)
 
   const request = await normalizeAudioIsolationInput(provider.id, form)
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.isolateAudio(request, context),
-    timeout_ms,
-    `Audio isolation timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Audio isolation timed out after ${timeout}ms for provider ${provider.id}`,
   )
   sendBinary(res, result.audio, result.mime_type)
 }
@@ -260,11 +260,11 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
   ensureEnabled(provider.id, context)
 
   const request = normalizeVoiceDesignInput(provider.id, { ...body, model: target.model })
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.designVoice(request, context),
-    timeout_ms,
-    `Voice design timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Voice design timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const voices = []
   for (const voice of result.voices) {
@@ -289,11 +289,11 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
   ensureEnabled(provider.id, context)
 
   const request = await normalizeVoiceCloneInput(provider.id, form)
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const result = await withTimeout(
     provider.cloneVoice(request, context),
-    timeout_ms,
-    `Voice cloning timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Voice cloning timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const voice = await persistProviderVoice(provider.id, context, result.voice, {
     requested_consent: request.consent ?? null,
@@ -347,21 +347,21 @@ async function handleOpenAiTranscription(req: IncomingMessage, res: ServerRespon
   }
   validateTranscriptionRequest(request)
 
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   if (stream) {
     if (!provider.streamTranscribe) throw new Error(`Provider does not support streaming transcription: ${provider.id}`)
     const result = await withTimeout(
       provider.streamTranscribe(request, context),
-      timeout_ms,
-      `Transcription stream creation timed out after ${timeout_ms}ms for provider ${provider.id}`,
+      timeout,
+      `Transcription stream creation timed out after ${timeout}ms for provider ${provider.id}`,
     )
     return sendStream(res, result.stream, result.mime_type)
   }
 
   const result = await withTimeout(
     provider.transcribe(request, context),
-    timeout_ms,
-    `Transcription timed out after ${timeout_ms}ms for provider ${provider.id}`,
+    timeout,
+    `Transcription timed out after ${timeout}ms for provider ${provider.id}`,
   )
   const text = result.text ?? ''
   if (response_format === 'text' || response_format === 'srt' || response_format === 'vtt') {
@@ -419,12 +419,12 @@ function normalizeAudioIsolationInput(providerId: string, form: Awaited<ReturnTy
 
 function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEffectRequest {
   const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const prompt = typeof value.input === 'string' ? value.input : ''
-  if (!prompt.trim()) throw new Error('input is required')
+  const instructions = typeof value.instructions === 'string' ? value.instructions : ''
+  if (!instructions.trim()) throw new Error('instructions is required')
   return {
     provider: providerId,
     model: typeof value.model === 'string' ? value.model : undefined,
-    prompt,
+    prompt: instructions,
     output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
     duration_seconds: normalizeSoundEffectDuration(value.duration_seconds),
     prompt_influence: normalizePromptInfluence(value.prompt_influence),
@@ -435,13 +435,13 @@ function normalizeSoundEffectInput(providerId: string, input: unknown): SoundEff
 
 function normalizeVoiceDesignInput(providerId: string, input: unknown): VoiceDesignRequest {
   const value = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const prompt = typeof value.input === 'string' ? value.input : ''
-  if (!prompt.trim()) throw new Error('input is required')
+  const instructions = typeof value.instructions === 'string' ? value.instructions : ''
+  if (!instructions.trim()) throw new Error('instructions is required')
   return {
     provider: providerId,
-    input: prompt,
+    instructions,
     name: typeof value.name === 'string' ? value.name : undefined,
-    text: typeof value.text === 'string' ? value.text : undefined,
+    input: typeof value.input === 'string' ? value.input : undefined,
     output_format: typeof value.response_format === 'string' ? value.response_format : undefined,
     model: typeof value.model === 'string' ? value.model : undefined,
     extra_params: normalizeExtraParams(value.extra_params, VOICE_DESIGN_EXTRA_PARAM_RESERVED_FIELDS),

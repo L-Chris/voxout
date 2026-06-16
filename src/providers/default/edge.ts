@@ -63,9 +63,9 @@ export class EdgeTtsProvider implements TtsProvider {
     if (!url.searchParams.has('trustedclienttoken')) {
       url.searchParams.set('trustedclienttoken', getSecretString(context, 'trusted_client_token') ?? EDGE_TRUSTED_CLIENT_TOKEN)
     }
-    const timeout_ms = getConfigNumber(context, 'voices_timeout_ms') ?? 10000
+    const timeout = getConfigNumber(context, 'voices_timeout_ms') ?? 10000
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeout_ms)
+    const timer = setTimeout(() => controller.abort(), timeout)
     try {
       const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) throw new Error(`Edge voices request failed: ${response.status}`)
@@ -97,7 +97,7 @@ export class EdgeTtsProvider implements TtsProvider {
         pitch: request.pitch ?? 'default',
         rate: normalizeEdgeRate(request.speed),
         volume: request.volume ?? 'default',
-        timeout: getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+        timeout: getConfigNumber(context, 'timeout') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
         proxy: getConfigString(context, 'proxy'),
       })
 
@@ -140,37 +140,37 @@ async function createEdgeSpeechStream(request: SynthesizeRequest, context: Provi
     pitch: request.pitch ?? 'default',
     rate: normalizeEdgeRate(request.speed),
     volume: request.volume ?? 'default',
-    timeout: getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+    timeout: getConfigNumber(context, 'timeout') ?? DEFAULT_PROVIDER_TIMEOUT_MS,
     proxy: getConfigString(context, 'proxy'),
   })
   const ws = await tts._connectWebSocket()
-  const timeout_ms = getConfigNumber(context, 'timeout_ms') ?? DEFAULT_PROVIDER_TIMEOUT_MS
+  const timeoutMs = getConfigNumber(context, 'timeout') ?? DEFAULT_PROVIDER_TIMEOUT_MS
 
   let cancelStream: (() => void) | undefined
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false
-      const timeout = setTimeout(() => {
-        fail(new Error(`Edge TTS stream timed out after ${timeout_ms}ms`))
-      }, timeout_ms)
+      const timer = setTimeout(() => {
+        fail(new Error(`Edge TTS stream timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
       const close = () => {
         if (closed) return
         closed = true
-        clearTimeout(timeout)
+        clearTimeout(timer)
         controller.close()
         ws.close()
       }
       const fail = (error: Error) => {
         if (closed) return
         closed = true
-        clearTimeout(timeout)
+        clearTimeout(timer)
         controller.error(error)
         ws.close()
       }
       cancelStream = () => {
         if (closed) return
         closed = true
-        clearTimeout(timeout)
+        clearTimeout(timer)
         ws.close()
       }
 

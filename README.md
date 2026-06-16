@@ -93,7 +93,7 @@ Sound effect generation:
 curl -X POST http://127.0.0.1:4177/v1/audio/effect \
   -H 'content-type: application/json' \
   --output effect.mp3 \
-  --data '{"model":"eleven_text_to_sound_v2","input":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3"}'
+  --data '{"model":"eleven_text_to_sound_v2","instructions":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3"}'
 ```
 
 Voice isolation:
@@ -110,7 +110,7 @@ Voice design:
 ```bash
 curl -X POST http://127.0.0.1:4177/v1/audio/design \
   -H 'content-type: application/json' \
-  --data '{"model":"eleven_multilingual_ttv_v2","input":"A calm narrator voice with a clean tone.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
+  --data '{"model":"eleven_multilingual_ttv_v2","instructions":"A calm narrator voice with a clean tone.","input":"This is a preview sentence.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
 ```
 
 Voice cloning from an audio sample:

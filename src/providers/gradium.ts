@@ -221,7 +221,7 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
     headers: { 'x-api-key': api_key },
   })
   let settled = false
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   let timer: ReturnType<typeof setTimeout> | undefined
 
   return new ReadableStream<Uint8Array>({
@@ -230,7 +230,7 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
         settled = true
         ws.close()
         controller.error(new Error('Gradium text-to-speech stream timed out.'))
-      }, timeout_ms)
+      }, timeout)
 
       ws.on('open', () => {
         ws.send(JSON.stringify(mergeJsonBody({

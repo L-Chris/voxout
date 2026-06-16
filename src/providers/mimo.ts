@@ -153,9 +153,9 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const api_key = getSecretString(context, 'api_key')
     if (!api_key) throw new Error('mimo api_key is required in provider settings.')
 
-    const sampleText = normalizePrompt(request.text) ?? normalizePrompt(getConfigString(context, 'voice_sample_text')) ?? DEFAULT_VOICE_SAMPLE_TEXT
-    const voiceDescription = normalizePrompt(request.input)
-    if (!voiceDescription) throw new Error('input is required')
+    const sampleText = normalizePrompt(request.input) ?? normalizePrompt(getConfigString(context, 'voice_sample_text')) ?? DEFAULT_VOICE_SAMPLE_TEXT
+    const voiceDescription = normalizePrompt(request.instructions)
+    if (!voiceDescription) throw new Error('instructions is required')
     const model = request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL
     const sample = await this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, context, request.extra_params)
     const voice_id = `mimo_${randomUUID()}`
@@ -308,9 +308,9 @@ function buildAsrBody(request: TranscribeRequest, context: ProviderContext) {
 async function postMimoCompletion(api_key: string, body: unknown, context: ProviderContext): Promise<MimoCompletionResponse> {
   const base_url = trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
   const url = `${base_url}/chat/completions`
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout_ms)
+  const timer = setTimeout(() => controller.abort(), timeout)
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -341,9 +341,9 @@ async function postMimoCompletion(api_key: string, body: unknown, context: Provi
 
 async function postMimoCompletionStream(api_key: string, body: unknown, context: ProviderContext): Promise<Response> {
   const base_url = trimTrailingSlash(getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL)
-  const timeout_ms = getProviderTimeoutMs(context)
+  const timeout = getProviderTimeoutMs(context)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout_ms)
+  const timer = setTimeout(() => controller.abort(), timeout)
   let response: Response
   try {
     response = await fetch(`${base_url}/chat/completions`, {

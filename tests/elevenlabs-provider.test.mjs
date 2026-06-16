@@ -268,9 +268,9 @@ test('ElevenLabs provider sends voice design requests', async () => {
 
   const provider = new ElevenLabsProvider()
   const result = await provider.designVoice({
-    input: 'A warm expressive narrator voice.',
+    instructions: 'A warm expressive narrator voice.',
     name: 'Warm Narrator',
-    text: 'This is a preview text for the generated voice.',
+    input: 'This is a preview text for the generated voice.',
     output_format: 'mp3_44100_128',
     extra_params: {
       auto_generate_text: true,
