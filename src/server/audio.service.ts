@@ -270,16 +270,19 @@ export async function withTtsRetry<T>(
 ): Promise<T> {
   const retryCount = getProviderRetryCount(context)
   let attempt = 0
+  let retriedTimeout = false
   while (true) {
     try {
       return await withTimeout(execute(), timeout, timeoutMessage)
     } catch (error) {
-      if (attempt >= retryCount || isServiceTimeoutError(error, timeoutMessage)) throw error
+      const timedOut = isServiceTimeoutError(error, timeoutMessage)
+      if (attempt >= retryCount || (timedOut && retriedTimeout)) throw error
       attempt += 1
+      if (timedOut) retriedTimeout = true
       logProviderUpstreamError({
         provider: providerId,
         operation: `${operation}_retry`,
-        detail: `retrying attempt ${attempt} of ${retryCount}`,
+        detail: `retrying attempt ${attempt} of ${retryCount}${timedOut ? ' after timeout' : ''}`,
         error,
       })
     }
