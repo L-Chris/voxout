@@ -158,7 +158,8 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const voiceDescription = normalizePrompt(request.instructions)
     if (!voiceDescription) throw new Error('instructions is required')
     const model = request.model ?? getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL
-    const sample = await this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, context, request.extra_params)
+    const format = normalizeAudioFormat(request.output_format ?? getConfigString(context, 'format') ?? DEFAULT_FORMAT)
+    const sample = await this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, format, context, request.extra_params)
     const voice_id = `mimo_${randomUUID()}`
     return {
       provider: this.id,
@@ -169,7 +170,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
         description: voiceDescription,
         language: 'zh-CN',
         preview_audio_data: sample,
-        preview_mime_type: 'audio/wav',
+        preview_mime_type: getMimeType(format),
         metadata: {
           model,
         },
@@ -222,16 +223,18 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
   private getDesignedVoiceSample(api_key: string, voiceDescription: string, context: ProviderContext): Promise<string> {
     const sampleText = normalizePrompt(getConfigString(context, 'voice_sample_text')) ?? DEFAULT_VOICE_SAMPLE_TEXT
     const model = getConfigString(context, 'voice_design_model') ?? DEFAULT_VOICE_DESIGN_MODEL
+    const format = normalizeAudioFormat(getConfigString(context, 'format') ?? DEFAULT_FORMAT)
     const sampleKey = JSON.stringify({
       base_url: getConfigString(context, 'base_url') ?? DEFAULT_BASE_URL,
       model,
+      format,
       optimize: getBooleanConfig(context, 'optimize_text_preview', true),
       voiceDescription,
       sampleText,
     })
     const cached = this.designedVoiceSamples.get(sampleKey)
     if (cached) return cached
-    const promise = this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, context)
+    const promise = this.createDesignedVoiceSample(api_key, voiceDescription, sampleText, model, format, context)
       .catch(error => {
         this.designedVoiceSamples.delete(sampleKey)
         throw error
@@ -240,12 +243,12 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     return promise
   }
 
-  private async createDesignedVoiceSample(api_key: string, voiceDescription: string, sampleText: string, model: string, context: ProviderContext, extra_params?: SynthesizeRequest['extra_params']): Promise<string> {
+  private async createDesignedVoiceSample(api_key: string, voiceDescription: string, sampleText: string, model: string, format: 'mp3' | 'wav' | 'pcm16', context: ProviderContext, extra_params?: SynthesizeRequest['extra_params']): Promise<string> {
     const response = await postMimoCompletion(api_key, mergeJsonBody({
       model,
       messages: buildMessages(sampleText, voiceDescription),
       audio: {
-        format: 'wav',
+        format,
         optimize_text_preview: getBooleanConfig(context, 'optimize_text_preview', true),
       },
     }, extra_params), context)
@@ -254,7 +257,7 @@ export class MimoTtsProvider implements TtsProvider, AsrProvider, VoiceDesignPro
     const base64 = stripDataUrlPrefix(audio_data)
     const audio = Buffer.from(base64, 'base64')
     if (audio.length < 128) throw new Error('MiMo voice design response audio was empty.')
-    return `data:audio/wav;base64,${base64}`
+    return `data:${getMimeType(format)};base64,${base64}`
   }
 
   private async buildSynthesisBody(api_key: string, request: SynthesizeRequest, context: ProviderContext, streaming = false) {

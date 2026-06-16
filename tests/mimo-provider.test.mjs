@@ -114,9 +114,11 @@ test('Mimo provider designs a reusable voice preview', async () => {
 
   assert.equal(captured.url, 'https://api.xiaomimimo.com/v1/chat/completions')
   assert.equal(captured.body.model, 'mimo-custom-design-model')
+  assert.equal(captured.body.audio.format, 'mp3')
   assert.equal(result.voices[0].name, '冷静男声')
   assert.match(result.voices[0].voice_id, /^mimo_/)
-  assert.match(result.voices[0].preview_audio_data, /^data:audio\/wav;base64,/)
+  assert.equal(result.voices[0].preview_mime_type, 'audio/mpeg')
+  assert.match(result.voices[0].preview_audio_data, /^data:audio\/mpeg;base64,/)
 })
 
 test('Mimo provider creates a voice from preview data locally', async () => {

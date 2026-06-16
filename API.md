@@ -111,7 +111,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `instructions`，必填 string | 无；参考 speech 的语音风格/描述字段命名 | 不支持 | `voice_description` | 不支持 | 不支持 | voice description prompt | 不支持 | 无 |
 | `name`，可选 string | 无 | 不支持 | 仅用于保存 Voxout voice 名称，不发送给设计接口 | 不支持 | 不支持 | 用于保存 Voxout voice 名称 | 不支持 | 无 |
 | `input`，可选 string | 无；参考 speech 的文本输入字段命名 | 不支持 | `text` | 不支持 | 不支持 | sample text；缺省 `voice_sample_text` 配置或内置中文样例 | 不支持 | 无 |
-| `response_format`，可选 string | 无 | 不支持 | query `output_format` | 不支持 | 不支持 | 预览固定 `wav` | 不支持 | 无 |
+| `response_format`，可选 string | 无 | 不支持 | query `output_format` | 不支持 | 不支持 | `audio.format`；缺省 `mp3` | 不支持 | 无 |
 | `model`，必填，除非 `provider` 显式指定 | 无 | 不支持 | `model_id`；`model=elevenlabs` 只用于路由，`model=eleven_multilingual_ttv_v2` 会路由到 ElevenLabs 并下发为 model id | 不支持 | 不支持 | `model`；`model=mimo` 只用于路由，`model=mimo-v2.5-tts-voicedesign` 会路由到 MiMo 并下发为 model | 不支持 | 无 |
 | `extra_params`，可选 object | 无 | 不支持 | 深合并到 ElevenLabs voice design JSON body；常用 `auto_generate_text`、`loudness`、`seed`、`guidance_scale`、`quality`、`reference_audio_base64`、`prompt_strength`；adapter 已映射字段优先 | 不支持 | 不支持 | 深合并到 MiMo voice preview chat completion JSON body；adapter 已映射字段优先 | 不支持 | 仅接受 JSON object；不能包含 `provider/instructions/input/name/response_format/model` 等已识别字段 |
 | 响应 | 无 | 不支持 | ElevenLabs 返回 `previews[]`；Voxout 映射为 `{ object: "list", data: [{ id, object: "audio.voice.preview", generated_voice_id, name, instructions, preview_audio, preview_mime_type, duration_seconds, ... }] }` | 不支持 | 不支持 | Voxout 生成本地 preview，并返回同样的 list/audio.voice.preview 结构 | 不支持 | 不返回 provider link；preview 不写入 `/api/voices` |
