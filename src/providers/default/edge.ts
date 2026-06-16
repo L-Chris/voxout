@@ -9,6 +9,8 @@ import {
   getConfigString,
   getPositiveConfigNumber as getConfigNumber,
   getSecretString,
+  logProviderResponseError,
+  logProviderUpstreamError,
 } from '../provider-utils.js'
 
 const DEFAULT_VOICE = 'zh-CN-XiaoyiNeural'
@@ -47,7 +49,15 @@ export class EdgeTtsProvider implements TtsProvider {
     const now = Date.now()
     if (this.voiceCache && this.voiceCache.expiresAt > now) return this.voiceCache.voices
 
-    const voices = await this.fetchVoices(context).catch(() => fallbackEdgeVoices(this.id))
+    const voices = await this.fetchVoices(context).catch(error => {
+      logProviderUpstreamError({
+        provider: this.id,
+        operation: 'edge_voices',
+        url: getConfigString(context, 'voices_url') ?? EDGE_VOICES_URL,
+        error,
+      })
+      return fallbackEdgeVoices(this.id)
+    })
     const cacheMs = Math.max(0, getConfigNumber(context, 'voices_cache_ms') ?? DEFAULT_VOICE_CACHE_MS)
     if (cacheMs > 0) {
       this.voiceCache = {
@@ -68,7 +78,11 @@ export class EdgeTtsProvider implements TtsProvider {
     const timer = setTimeout(() => controller.abort(), timeout)
     try {
       const response = await fetch(url, { signal: controller.signal })
-      if (!response.ok) throw new Error(`Edge voices request failed: ${response.status}`)
+      if (!response.ok) {
+        const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+        logProviderResponseError(this.id, 'edge_voices', response, detail)
+        throw new Error(detail || `Edge voices request failed: ${response.status}`)
+      }
       const payload = await response.json() as EdgeVoicePayload[]
       if (!Array.isArray(payload)) throw new Error('Edge voices response was not an array.')
       const voices = payload
@@ -101,7 +115,14 @@ export class EdgeTtsProvider implements TtsProvider {
         proxy: getConfigString(context, 'proxy'),
       })
 
-      await tts.ttsPromise(request.text, audioPath)
+      await tts.ttsPromise(request.text, audioPath).catch(error => {
+        logProviderUpstreamError({
+          provider: this.id,
+          operation: 'speech',
+          error,
+        })
+        throw error
+      })
       const audio = await readFile(audioPath)
       return {
         audio,
@@ -184,6 +205,11 @@ async function createEdgeSpeechStream(request: SynthesizeRequest, context: Provi
         if (message.includes('Path:turn.end')) close()
       })
       ws.on('error', (error: Error) => {
+        logProviderUpstreamError({
+          provider: 'edge',
+          operation: 'speech_stream',
+          error,
+        })
         fail(error)
       })
       ws.on('close', () => close())

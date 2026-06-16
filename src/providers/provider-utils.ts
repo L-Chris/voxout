@@ -91,6 +91,40 @@ export async function readJsonResponse<T>(response: Response, fallback: 'errorSt
   }
 }
 
+export function logProviderResponseError(provider: string, operation: string, response: Response, detail?: unknown): void {
+  logProviderUpstreamError({
+    provider,
+    operation,
+    url: response.url,
+    status: response.status,
+    status_text: response.statusText,
+    detail,
+  })
+}
+
+export function logProviderUpstreamError(input: {
+  provider: string
+  operation: string
+  url?: string
+  status?: number
+  status_text?: string
+  detail?: unknown
+  error?: unknown
+}): void {
+  const payload = compactObject({
+    level: 'error',
+    event: 'provider_upstream_error',
+    provider: input.provider,
+    operation: input.operation,
+    url: sanitizeUrl(input.url),
+    status: input.status,
+    status_text: input.status_text,
+    detail: summarizeLogValue(input.detail),
+    error: summarizeLogValue(input.error),
+  })
+  console.error(JSON.stringify(payload))
+}
+
 export function getPayloadError(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return undefined
   const value = payload as { error?: unknown, message?: unknown, detail?: unknown }
@@ -102,6 +136,36 @@ export function getPayloadError(payload: unknown): string | undefined {
   if (typeof value.message === 'string') return value.message
   if (typeof value.detail === 'string') return value.detail
   return undefined
+}
+
+function summarizeLogValue(value: unknown): string | undefined {
+  if (value == null) return undefined
+  if (value instanceof Error) return truncateLogValue(value.message || value.name)
+  if (typeof value === 'string') return truncateLogValue(value)
+  try {
+    return truncateLogValue(JSON.stringify(value))
+  } catch {
+    return truncateLogValue(String(value))
+  }
+}
+
+function truncateLogValue(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 500)
+}
+
+function sanitizeUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const url = new URL(value)
+    for (const key of url.searchParams.keys()) {
+      if (/key|token|secret|signature|authorization/i.test(key)) {
+        url.searchParams.set(key, '[redacted]')
+      }
+    }
+    return url.toString()
+  } catch {
+    return value.replace(/([?&][^=]*(?:key|token|secret|signature|authorization)[^=]*=)[^&]+/ig, '$1[redacted]')
+  }
 }
 
 function deepMergeJson(base: JsonObject, extra: JsonObject): JsonObject {

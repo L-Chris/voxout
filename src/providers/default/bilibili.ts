@@ -3,6 +3,8 @@ import {
   fetchWithProviderTimeout,
   getConfigNumber,
   getConfigString,
+  logProviderResponseError,
+  logProviderUpstreamError,
   readJsonResponse,
   trimTrailingSlash,
 } from '../provider-utils.js'
@@ -157,6 +159,7 @@ async function uploadParts(
     }, context)
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError('default', 'bilibili_bcut_upload_part', response, detail)
       throw new Error(detail || `Bilibili Bcut upload part failed: ${response.status}`)
     }
     const etag = response.headers.get('etag')
@@ -223,7 +226,15 @@ async function pollTask(task_id: string, context: ProviderContext, model_id: str
       headers: getHeaders(),
     }, context)
     const payload = await readBcutData<BcutTaskResultPayload>(response, 'Bilibili Bcut task result')
-    if (payload.state === 3) throw new Error(payload.remark || 'Bilibili Bcut ASR task failed.')
+    if (payload.state === 3) {
+      logProviderUpstreamError({
+        provider: 'default',
+        operation: 'bilibili_bcut_task_result',
+        url: response.url,
+        detail: payload.remark || payload,
+      })
+      throw new Error(payload.remark || 'Bilibili Bcut ASR task failed.')
+    }
     if (payload.state === 4) return payload
     await sleep(Math.min(poll_interval_ms, Math.max(0, deadline - Date.now())))
   }
@@ -233,9 +244,16 @@ async function pollTask(task_id: string, context: ProviderContext, model_id: str
 async function readBcutData<T>(response: Response, label: string): Promise<T> {
   const payload = await readJsonResponse<BcutApiPayload<T>>(response, 'errorMessageObject')
   if (!response.ok) {
+    logProviderResponseError('default', label.replace(/^Bilibili Bcut\s+/i, 'bilibili_bcut_').replace(/\s+/g, '_').toLowerCase(), response, payload.message ?? payload)
     throw new Error(payload.message || `${label} request failed: ${response.status}`)
   }
   if (payload.code) {
+    logProviderUpstreamError({
+      provider: 'default',
+      operation: label.replace(/^Bilibili Bcut\s+/i, 'bilibili_bcut_').replace(/\s+/g, '_').toLowerCase(),
+      url: response.url,
+      detail: payload.message ?? payload,
+    })
     throw new Error(payload.message || `${label} returned code ${payload.code}`)
   }
   if (!payload.data) throw new Error(`${label} response did not include data.`)

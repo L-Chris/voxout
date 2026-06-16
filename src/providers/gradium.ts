@@ -19,6 +19,8 @@ import {
   getConfigNumber,
   getConfigString,
   getJsonStringParam,
+  logProviderResponseError,
+  logProviderUpstreamError,
   getSecretString,
   mergeJsonBody,
   omitJsonParams,
@@ -103,6 +105,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     const audio = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
       const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech', response, detail)
       throw new Error(detail || `Gradium text-to-speech request failed: ${response.status}`)
     }
     if (audio.length < 128) throw new Error('Gradium text-to-speech response audio was empty.')
@@ -141,7 +144,10 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
       body: new Blob([request.file.data], { type: request.file.mime_type }),
     }, context)
     const text = await response.text()
-    if (!response.ok) throw new Error(text.slice(0, 500) || `Gradium speech-to-text request failed: ${response.status}`)
+    if (!response.ok) {
+      logProviderResponseError(this.id, 'transcription', response, text)
+      throw new Error(text.slice(0, 500) || `Gradium speech-to-text request failed: ${response.status}`)
+    }
     const parsed = parseGradiumTranscription(text)
     if (!parsed.text) throw new Error('Gradium speech-to-text response did not include text.')
     return {
@@ -174,6 +180,7 @@ export class GradiumProvider implements TtsProvider, AsrProvider, VoiceCloneProv
     }, context)
     const payload = await readJsonResponse<GradiumCreateVoicePayload>(response)
     if (!response.ok) {
+      logProviderResponseError(this.id, 'voice_clone', response, payload.error ?? payload)
       throw new Error(payload.error || `Gradium voice clone request failed: ${response.status}`)
     }
     if (payload.error) throw new Error(payload.error)
@@ -206,7 +213,11 @@ async function listGradiumVoices(context: ProviderContext, api_key: string): Pro
     const response = await fetchWithProviderTimeout(url, {
       headers: { 'x-api-key': api_key },
     }, context)
-    if (!response.ok) return voices
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError('gradium', 'list_voices', response, detail)
+      return voices
+    }
     const payload = await readJsonResponse<GradiumVoicePayload[]>(response)
     const pageVoices = Array.isArray(payload) ? payload : []
     voices.push(...pageVoices)
@@ -252,6 +263,12 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
           settled = true
           clearStreamTimer(timer)
           ws.close()
+          logProviderUpstreamError({
+            provider: 'gradium',
+            operation: 'speech_stream',
+            url: `${getWsUrl(context)}/speech/tts`,
+            detail: message.message || message.error || message,
+          })
           controller.error(new Error(message.message || message.error || 'Gradium text-to-speech stream failed.'))
         } else if (message.type === 'end_of_stream') {
           settled = true
@@ -265,6 +282,12 @@ function createGradiumAudioStream(request: SynthesizeRequest, context: ProviderC
         if (settled) return
         settled = true
         clearStreamTimer(timer)
+        logProviderUpstreamError({
+          provider: 'gradium',
+          operation: 'speech_stream',
+          url: `${getWsUrl(context)}/speech/tts`,
+          error,
+        })
         controller.error(error)
       })
 

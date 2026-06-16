@@ -17,6 +17,7 @@ import {
   fetchWithProviderTimeout,
   getConfigString,
   getJsonStringParam,
+  logProviderResponseError,
   getPayloadError,
   getSecretString,
   mergeJsonBody,
@@ -94,6 +95,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     const audio = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
       const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech', response, detail)
       throw new Error(detail || `Cartesia text-to-speech request failed: ${response.status}`)
     }
     if (audio.length < 128) throw new Error('Cartesia text-to-speech response audio was empty.')
@@ -108,6 +110,7 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     const response = await this.createSpeech(request, context, '/tts/sse')
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech_stream', response, detail)
       throw new Error(detail || `Cartesia text-to-speech stream request failed: ${response.status}`)
     }
     if (!response.body) throw new Error('Cartesia text-to-speech stream response was empty.')
@@ -140,7 +143,9 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     }, context)
     const payload = await readJsonResponse<CartesiaTranscriptPayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `Cartesia speech-to-text request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'transcription', response, detail ?? payload)
+      throw new Error(detail || `Cartesia speech-to-text request failed: ${response.status}`)
     }
     const text = payload.text?.trim() ?? ''
     if (!text) throw new Error('Cartesia speech-to-text response did not include text.')
@@ -174,7 +179,9 @@ export class CartesiaProvider implements TtsProvider, AsrProvider, VoiceClonePro
     }, context)
     const payload = await readJsonResponse<CartesiaVoicePayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `Cartesia voice clone request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'voice_clone', response, detail ?? payload)
+      throw new Error(detail || `Cartesia voice clone request failed: ${response.status}`)
     }
     if (!payload.id) throw new Error('Cartesia voice clone response did not include id.')
     return {
@@ -229,7 +236,11 @@ async function listCartesiaVoices(context: ProviderContext, api_key: string): Pr
     const response = await fetchWithProviderTimeout(url, {
       headers: getHeaders(context, api_key),
     }, context)
-    if (!response.ok) return voices
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError('cartesia', 'list_voices', response, detail)
+      return voices
+    }
 
     const payload = await readJsonResponse<CartesiaVoiceListPayload>(response)
     voices.push(...(payload.data ?? []))

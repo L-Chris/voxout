@@ -26,6 +26,7 @@ import {
   getConfigNumber,
   getConfigString,
   getJsonStringParam,
+  logProviderResponseError,
   getPayloadError,
   getSecretString,
   mergeJsonBody,
@@ -115,7 +116,11 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     const response = await fetch(url, {
       headers: { 'xi-api-key': api_key },
     })
-    if (!response.ok) return [getDefaultVoice(this.id, context)]
+    if (!response.ok) {
+      const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'list_voices', response, detail)
+      return [getDefaultVoice(this.id, context)]
+    }
 
     const payload = await response.json() as { voices?: ElevenLabsVoicePayload[] }
     const voices = (payload.voices ?? [])
@@ -165,6 +170,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     })
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech_stream', response, detail)
       throw new Error(detail || `ElevenLabs text-to-speech stream request failed: ${response.status}`)
     }
     if (!response.body) throw new Error('ElevenLabs text-to-speech stream response was empty.')
@@ -191,7 +197,9 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     })
     const payload = await readJsonResponse<ElevenLabsTranscriptPayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `ElevenLabs speech-to-text request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'transcription', response, detail ?? payload)
+      throw new Error(detail || `ElevenLabs speech-to-text request failed: ${response.status}`)
     }
 
     const text = payload.text?.trim() ?? ''
@@ -236,6 +244,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     const buffer = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
       const detail = buffer.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'audio_isolation', response, detail)
       throw new Error(detail || `ElevenLabs audio isolation request failed: ${response.status}`)
     }
     return {
@@ -275,7 +284,9 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     })
     const payload = await readJsonResponse<ElevenLabsDesignPayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `ElevenLabs voice design request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'voice_design', response, detail ?? payload)
+      throw new Error(detail || `ElevenLabs voice design request failed: ${response.status}`)
     }
     const voices = (payload.previews ?? [])
       .filter(preview => preview.generated_voice_id)
@@ -323,7 +334,9 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     })
     const payload = await readJsonResponse<ElevenLabsCreateVoicePayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `ElevenLabs voice create request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'voice_create', response, detail ?? payload)
+      throw new Error(detail || `ElevenLabs voice create request failed: ${response.status}`)
     }
     if (!payload.voice_id) throw new Error('ElevenLabs voice create response did not include voice_id.')
     return {
@@ -364,7 +377,9 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
     })
     const payload = await readJsonResponse<ElevenLabsClonePayload>(response)
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `ElevenLabs voice clone request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'voice_clone', response, detail ?? payload)
+      throw new Error(detail || `ElevenLabs voice clone request failed: ${response.status}`)
     }
     if (!payload.voice_id) throw new Error('ElevenLabs voice clone response did not include voice_id.')
     return {
@@ -397,6 +412,7 @@ async function postJsonAudio(url: URL, body: Record<string, unknown>, api_key: s
   const audio = Buffer.from(arrayBuffer)
   if (!response.ok) {
     const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+    logProviderResponseError('elevenlabs', label.replace(/^ElevenLabs\s+/i, '').replace(/\s+/g, '_').toLowerCase(), response, detail)
     throw new Error(detail || `${label} request failed: ${response.status}`)
   }
   if (audio.length < 128) throw new Error(`${label} response audio was empty.`)

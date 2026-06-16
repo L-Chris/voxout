@@ -14,6 +14,7 @@ import type {
 import {
   appendJsonParamsToForm,
   getConfigString,
+  logProviderResponseError,
   getPayloadError,
   getSecretString,
   mergeJsonBody,
@@ -113,6 +114,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     const audio = Buffer.from(await response.arrayBuffer())
     if (!response.ok) {
       const detail = audio.toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech', response, detail)
       throw new Error(detail || `OpenAI speech request failed: ${response.status}`)
     }
     if (audio.length < 128) throw new Error('OpenAI speech response audio was empty.')
@@ -129,6 +131,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     const response = await this.createSpeech(request, context, response_format, stream_format)
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'speech_stream', response, detail)
       throw new Error(detail || `OpenAI speech stream request failed: ${response.status}`)
     }
     if (!response.body) throw new Error('OpenAI speech stream response was empty.')
@@ -185,7 +188,9 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     })
     const payload = await readJsonResponse<OpenAiVoicePayload>(response, 'errorMessageObject')
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `OpenAI voice clone request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'voice_clone', response, detail ?? payload)
+      throw new Error(detail || `OpenAI voice clone request failed: ${response.status}`)
     }
     if (!payload.id) throw new Error('OpenAI voice clone response did not include id.')
     return {
@@ -213,7 +218,10 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     })
     if (response_format === 'text' || response_format === 'srt' || response_format === 'vtt') {
       const text = await response.text()
-      if (!response.ok) throw new Error(text || `OpenAI transcription request failed: ${response.status}`)
+      if (!response.ok) {
+        logProviderResponseError(this.id, 'transcription', response, text)
+        throw new Error(text || `OpenAI transcription request failed: ${response.status}`)
+      }
       return {
         provider: this.id,
         format: request.format ?? 'txt',
@@ -222,7 +230,9 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     }
     const payload = await readJsonResponse<OpenAiTranscriptionPayload>(response, 'errorMessageObject')
     if (!response.ok) {
-      throw new Error(getPayloadError(payload) || `OpenAI transcription request failed: ${response.status}`)
+      const detail = getPayloadError(payload)
+      logProviderResponseError(this.id, 'transcription', response, detail ?? payload)
+      throw new Error(detail || `OpenAI transcription request failed: ${response.status}`)
     }
     const text = payload.text?.trim() ?? ''
     if (!text) throw new Error('OpenAI transcription response did not include text.')
@@ -252,6 +262,7 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
     })
     if (!response.ok) {
       const detail = (await response.text()).replace(/\s+/g, ' ').trim().slice(0, 500)
+      logProviderResponseError(this.id, 'transcription_stream', response, detail)
       throw new Error(detail || `OpenAI transcription stream request failed: ${response.status}`)
     }
     if (!response.body) throw new Error('OpenAI transcription stream response was empty.')

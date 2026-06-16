@@ -21,6 +21,7 @@ import {
   getConfigBooleanWithFallback as getBooleanConfig,
   getConfigString,
   getJsonStringParam,
+  logProviderResponseError,
   getSecretString,
   mergeJsonBody,
   trimTrailingSlash,
@@ -355,6 +356,7 @@ async function postMimoCompletion(api_key: string, body: unknown, context: Provi
     }
     if (!response.ok) {
       const message = (payload.error?.message ?? text.slice(0, 500)) || `MiMo request failed: ${response.status}`
+      logProviderResponseError('mimo', 'completion', response, message || payload)
       throw new Error(message)
     }
     return payload
@@ -385,6 +387,7 @@ async function postMimoCompletionStream(api_key: string, body: unknown, context:
   }
   if (!response.ok) {
     const text = await response.text()
+    logProviderResponseError('mimo', 'completion_stream', response, text)
     throw new Error(text.slice(0, 500) || `MiMo stream request failed: ${response.status}`)
   }
   return response
