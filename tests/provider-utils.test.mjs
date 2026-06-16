@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { logProviderResponseError } from '../dist/providers/provider-utils.js'
 import { getProviderRetryCount } from '../dist/timeout.js'
-import { withTtsRetry } from '../dist/server/audio.service.js'
+import { withProviderRetry } from '../dist/server/audio.service.js'
 
 const originalConsoleError = console.error
 
@@ -43,11 +43,11 @@ test('provider retry count requires auto_retry and is capped', () => {
   assert.equal(getProviderRetryCount({ config: { auto_retry: false, retry_count: 3 } }), 0)
 })
 
-test('TTS retry wrapper retries transient failures when enabled', async () => {
+test('provider retry wrapper retries transient failures when enabled', async () => {
   const logs = []
   console.error = message => logs.push(message)
   let attempts = 0
-  const result = await withTtsRetry('mock', 'speech', {
+  const result = await withProviderRetry('mock', 'speech', {
     config: { auto_retry: true, retry_count: 1 },
     secrets: {},
     enabled: true,
@@ -63,10 +63,10 @@ test('TTS retry wrapper retries transient failures when enabled', async () => {
   assert.equal(JSON.parse(logs[0]).operation, 'speech_retry')
 })
 
-test('TTS retry wrapper does not retry when disabled', async () => {
+test('provider retry wrapper does not retry when disabled', async () => {
   let attempts = 0
   await assert.rejects(
-    withTtsRetry('mock', 'speech', {
+    withProviderRetry('mock', 'speech', {
       config: { auto_retry: false, retry_count: 3 },
       secrets: {},
       enabled: true,
@@ -79,13 +79,13 @@ test('TTS retry wrapper does not retry when disabled', async () => {
   assert.equal(attempts, 1)
 })
 
-test('TTS retry wrapper retries service timeout at most once', async () => {
+test('provider retry wrapper retries service timeout at most once', async () => {
   const logs = []
   console.error = message => logs.push(message)
   let attempts = 0
 
   await assert.rejects(
-    withTtsRetry('mock', 'speech', {
+    withProviderRetry('mock', 'speech', {
       config: { auto_retry: true, retry_count: 5 },
       secrets: {},
       enabled: true,
@@ -99,4 +99,23 @@ test('TTS retry wrapper retries service timeout at most once', async () => {
   assert.equal(attempts, 2)
   assert.equal(logs.length, 1)
   assert.match(JSON.parse(logs[0]).detail, /after timeout/)
+})
+
+test('provider retry wrapper supports voice design operations', async () => {
+  const logs = []
+  console.error = message => logs.push(message)
+  let attempts = 0
+  const result = await withProviderRetry('mimo', 'voice_design', {
+    config: { auto_retry: true, retry_count: 1 },
+    secrets: {},
+    enabled: true,
+  }, 1000, async () => {
+    attempts += 1
+    if (attempts === 1) throw new Error('transient')
+    return 'preview'
+  }, 'timed out')
+
+  assert.equal(result, 'preview')
+  assert.equal(attempts, 2)
+  assert.equal(JSON.parse(logs[0]).operation, 'voice_design_retry')
 })

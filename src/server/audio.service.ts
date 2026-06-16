@@ -216,7 +216,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
   const timeout = getProviderTimeoutMs(context)
   if (stream_format) {
     if (!provider.streamSynthesize) throw new Error(`Provider does not support streaming speech: ${provider.id}`)
-    const result = await withTtsRetry(
+    const result = await withProviderRetry(
       provider.id,
       'speech_stream',
       context,
@@ -227,7 +227,7 @@ async function handleOpenAiSpeech(body: Record<string, unknown>, res: ServerResp
     sendStream(res, result.stream, stream_format === 'sse' ? result.mime_type : normalizeSpeechMimeType(speechFormat.response_format, result.mime_type))
     return
   }
-  const result = await withTtsRetry(
+  const result = await withProviderRetry(
     provider.id,
     'speech',
     context,
@@ -260,9 +260,9 @@ async function handleAudioEffect(body: Record<string, unknown>, res: ServerRespo
   sendBinary(res, output.audio, output.mime_type)
 }
 
-export async function withTtsRetry<T>(
+export async function withProviderRetry<T>(
   providerId: string,
-  operation: 'speech' | 'speech_stream',
+  operation: 'speech' | 'speech_stream' | 'voice_design',
   context: ProviderRuntimeConfig,
   timeout: number,
   execute: () => Promise<T>,
@@ -323,9 +323,12 @@ async function handleVoiceDesign(body: Record<string, unknown>, res: ServerRespo
 
   const request = normalizeVoiceDesignInput(provider.id, { ...body, model: target.model })
   const timeout = getProviderTimeoutMs(context)
-  const result = await withTimeout(
-    provider.designVoice(request, context),
+  const result = await withProviderRetry(
+    provider.id,
+    'voice_design',
+    context,
     timeout,
+    () => provider.designVoice(request, context),
     `Voice design timed out after ${timeout}ms for provider ${provider.id}`,
   )
   cacheVoicePreviews(provider.id, result.voices)

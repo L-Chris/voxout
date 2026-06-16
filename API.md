@@ -33,7 +33,7 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 |---|---|---|---|---|---|---|---|---|
 | `account_id` | 无 | 仅用于 Voxout voice 关联表 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
 | `timeout` | 无 | Voxout 调用超时 | Voxout 调用超时 | Voxout 调用超时 | HTTP 调用超时；WebSocket 流也使用该超时 | HTTP 调用和下载超时 | Edge TTS `timeout`；Bcut ASR 整体轮询超时；voice catalog 下载超时另用 `voices_timeout_ms` | 不下发，除 Default/Edge 映射到库参数 |
-| `auto_retry` | 无 | Voxout `/v1/audio/speech` 自动重试开关 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
+| `auto_retry` | 无 | Voxout `/v1/audio/speech` 和 `/v1/audio/voices/design` 自动重试开关 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
 | `retry_count` | 无 | `auto_retry=true` 时的额外重试次数，缺省 `2`，最大 `5`；service timeout 最多重试一次 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
 
 ## POST `/v1/audio/speech`
