@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import type {
   JsonObject,
+  ProviderApiKeyInput,
+  ProviderApiKeyRecord,
   ProviderConfigInput,
   ProviderConfigRecord,
   ProviderRuntimeConfig,
@@ -12,6 +14,19 @@ import type {
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient
   voices?: VoiceRecord[]
+  providerApiKeys?: ProviderApiKeyMemoryRecord[]
+}
+
+interface ProviderApiKeyMemoryRecord {
+  id: string
+  provider_id: string
+  name: string
+  api_key: string
+  weight: number
+  enabled: boolean
+  metadata: JsonObject
+  created_at: string
+  updated_at: string
 }
 
 export class ProviderConfigStore {
@@ -36,24 +51,30 @@ export class ProviderConfigStore {
   async listConfigs(): Promise<ProviderConfigRecord[]> {
     if (!this.prisma) return []
     const records = await this.prisma.providerConfig.findMany({ orderBy: { provider_id: 'asc' } })
-    return records.map(record => ({
+    await Promise.all(records.map(record => this.migrateLegacyApiKey(record.provider_id)))
+    const apiKeyCounts = await this.getApiKeyCounts(records.map(record => record.provider_id))
+    return Promise.all(records.map(async record => ({
       provider_id: record.provider_id,
       enabled: record.enabled,
       config: toJsonObject(record.config),
-      secrets: toJsonObject(record.secrets),
+      secrets: withSelectedApiKey(stripApiKey(toJsonObject(record.secrets)), await this.selectApiKey(record.provider_id)),
+      api_key_count: apiKeyCounts.get(record.provider_id) ?? 0,
       created_at: record.created_at.toISOString(),
       updated_at: record.updated_at.toISOString(),
-    }))
+    })))
   }
 
   async getConfig(provider_id: string): Promise<ProviderRuntimeConfig> {
-    if (!this.prisma) return { enabled: true, config: {}, secrets: {} }
+    if (!this.prisma) {
+      return { enabled: true, config: {}, secrets: withSelectedApiKey({}, await this.selectApiKey(provider_id)) }
+    }
+    await this.migrateLegacyApiKey(provider_id)
     const record = await this.prisma.providerConfig.findUnique({ where: { provider_id } })
     if (!record) return { enabled: true, config: {}, secrets: {} }
     return {
       enabled: record.enabled,
       config: toJsonObject(record.config),
-      secrets: toJsonObject(record.secrets),
+      secrets: withSelectedApiKey(stripApiKey(toJsonObject(record.secrets)), await this.selectApiKey(provider_id)),
     }
   }
 
@@ -61,8 +82,9 @@ export class ProviderConfigStore {
     if (!this.prisma) {
       throw new Error('DATABASE_URL is required before provider settings can be persisted.')
     }
+    await this.migrateLegacyApiKey(provider_id)
     const config = sanitizeObject(input.config)
-    const secrets = sanitizeObject(input.secrets)
+    const secrets = stripApiKey(sanitizeObject(input.secrets))
     const existing = await this.prisma.providerConfig.findUnique({ where: { provider_id } })
     const hasNewSecrets = Object.keys(secrets).length > 0
     const mergedSecrets = hasNewSecrets ? secrets : toJsonObject(existing?.secrets)
@@ -85,9 +107,179 @@ export class ProviderConfigStore {
       enabled: record.enabled,
       config: toJsonObject(record.config),
       secrets: toJsonObject(record.secrets),
+      api_key_count: await this.countApiKeys(provider_id),
       created_at: record.created_at.toISOString(),
       updated_at: record.updated_at.toISOString(),
     }
+  }
+
+  async listApiKeys(provider_id: string): Promise<ProviderApiKeyRecord[]> {
+    if (!this.prisma) {
+      return (globalForPrisma.providerApiKeys ?? [])
+        .filter(record => record.provider_id === provider_id)
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(toProviderApiKeyRecord)
+    }
+    await this.migrateLegacyApiKey(provider_id)
+    const records = await this.prisma.providerApiKey.findMany({
+      where: { provider_id },
+      orderBy: [{ name: 'asc' }, { created_at: 'asc' }],
+    })
+    return records.map(toProviderApiKeyRecord)
+  }
+
+  async createApiKey(provider_id: string, input: ProviderApiKeyInput): Promise<ProviderApiKeyRecord> {
+    const api_key = normalizeApiKey(input.api_key)
+    if (!api_key) throw new Error('api_key is required.')
+    const name = normalizeApiKeyName(input.name)
+    const weight = normalizeApiKeyWeight(input.weight)
+    const enabled = input.enabled ?? true
+    const metadata = sanitizeObject(input.metadata)
+
+    if (!this.prisma) {
+      const records = globalForPrisma.providerApiKeys ?? []
+      const now = new Date().toISOString()
+      const record: ProviderApiKeyMemoryRecord = {
+        id: `key_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`,
+        provider_id,
+        name,
+        api_key,
+        weight,
+        enabled,
+        metadata,
+        created_at: now,
+        updated_at: now,
+      }
+      records.push(record)
+      globalForPrisma.providerApiKeys = records
+      return toProviderApiKeyRecord(record)
+    }
+
+    await this.migrateLegacyApiKey(provider_id)
+    const record = await this.prisma.providerApiKey.create({
+      data: { provider_id, name, api_key, weight, enabled, metadata },
+    })
+    return toProviderApiKeyRecord(record)
+  }
+
+  async updateApiKey(provider_id: string, api_key_id: string, input: ProviderApiKeyInput): Promise<ProviderApiKeyRecord> {
+    if (!this.prisma) {
+      const records = globalForPrisma.providerApiKeys ?? []
+      const index = records.findIndex(record => record.provider_id === provider_id && record.id === api_key_id)
+      if (index < 0) throw new Error('API key not found.')
+      const existing = records[index]
+      const nextApiKey = input.api_key === undefined ? existing.api_key : normalizeApiKey(input.api_key)
+      if (!nextApiKey) throw new Error('api_key cannot be empty.')
+      const updated: ProviderApiKeyMemoryRecord = {
+        ...existing,
+        name: input.name === undefined ? existing.name : normalizeApiKeyName(input.name),
+        api_key: nextApiKey,
+        weight: input.weight === undefined ? existing.weight : normalizeApiKeyWeight(input.weight),
+        enabled: input.enabled ?? existing.enabled,
+        metadata: input.metadata === undefined ? existing.metadata : sanitizeObject(input.metadata),
+        updated_at: new Date().toISOString(),
+      }
+      records[index] = updated
+      return toProviderApiKeyRecord(updated)
+    }
+
+    await this.migrateLegacyApiKey(provider_id)
+    const existing = await this.prisma.providerApiKey.findFirst({ where: { id: api_key_id, provider_id } })
+    if (!existing) throw new Error('API key not found.')
+    const data: {
+      name?: string
+      api_key?: string
+      weight?: number
+      enabled?: boolean
+      metadata?: JsonObject
+    } = {}
+    if (input.name !== undefined) data.name = normalizeApiKeyName(input.name)
+    if (input.api_key !== undefined) {
+      const api_key = normalizeApiKey(input.api_key)
+      if (!api_key) throw new Error('api_key cannot be empty.')
+      data.api_key = api_key
+    }
+    if (input.enabled !== undefined) data.enabled = input.enabled
+    if (input.weight !== undefined) data.weight = normalizeApiKeyWeight(input.weight)
+    if (input.metadata !== undefined) data.metadata = sanitizeObject(input.metadata)
+    const record = await this.prisma.providerApiKey.update({
+      where: { id: api_key_id },
+      data,
+    })
+    return toProviderApiKeyRecord(record)
+  }
+
+  async deleteApiKey(provider_id: string, api_key_id: string): Promise<void> {
+    if (!this.prisma) {
+      globalForPrisma.providerApiKeys = (globalForPrisma.providerApiKeys ?? [])
+        .filter(record => !(record.provider_id === provider_id && record.id === api_key_id))
+      return
+    }
+    await this.migrateLegacyApiKey(provider_id)
+    const existing = await this.prisma.providerApiKey.findFirst({ where: { id: api_key_id, provider_id } })
+    if (!existing) throw new Error('API key not found.')
+    await this.prisma.providerApiKey.delete({ where: { id: api_key_id } })
+  }
+
+  private async selectApiKey(provider_id: string): Promise<string | undefined> {
+    if (!this.prisma) {
+      return selectWeightedApiKey((globalForPrisma.providerApiKeys ?? [])
+        .filter(record => record.provider_id === provider_id && record.enabled && record.weight > 0))
+    }
+    const records = await this.prisma.providerApiKey.findMany({
+      where: { provider_id, enabled: true, weight: { gt: 0 } },
+      orderBy: [{ name: 'asc' }, { created_at: 'asc' }],
+    })
+    return selectWeightedApiKey(records)
+  }
+
+  private async countApiKeys(provider_id: string): Promise<number> {
+    if (!this.prisma) {
+      return (globalForPrisma.providerApiKeys ?? [])
+        .filter(record => record.provider_id === provider_id)
+        .length
+    }
+    return this.prisma.providerApiKey.count({ where: { provider_id } })
+  }
+
+  private async getApiKeyCounts(provider_ids: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>()
+    if (!this.prisma || !provider_ids.length) return counts
+    const grouped = await this.prisma.providerApiKey.groupBy({
+      by: ['provider_id'],
+      where: { provider_id: { in: provider_ids } },
+      _count: { _all: true },
+    })
+    for (const item of grouped) counts.set(item.provider_id, item._count._all)
+    return counts
+  }
+
+  private async migrateLegacyApiKey(provider_id: string): Promise<void> {
+    if (!this.prisma) return
+    const config = await this.prisma.providerConfig.findUnique({ where: { provider_id } })
+    const secrets = toJsonObject(config?.secrets)
+    const legacyApiKey = normalizeApiKey(secrets.api_key)
+    if (!legacyApiKey) return
+
+    const existingCount = await this.prisma.providerApiKey.count({ where: { provider_id } })
+    if (existingCount === 0) {
+      await this.prisma.providerApiKey.create({
+        data: {
+          provider_id,
+          name: 'Default',
+          api_key: legacyApiKey,
+          weight: 1,
+          enabled: true,
+          metadata: {},
+        },
+      })
+    }
+
+    const { api_key: _legacyApiKey, ...restSecrets } = secrets
+    await this.prisma.providerConfig.update({
+      where: { provider_id },
+      data: { secrets: restSecrets },
+    })
   }
 
   async listVoices(provider_id?: string): Promise<VoiceRecord[]> {
@@ -234,6 +426,76 @@ function sanitizeObject(value: unknown): JsonObject {
 
 function toJsonObject(value: unknown): JsonObject {
   return sanitizeObject(value)
+}
+
+function withSelectedApiKey(secrets: JsonObject, api_key: string | undefined): JsonObject {
+  return api_key ? { ...secrets, api_key } : secrets
+}
+
+function stripApiKey(secrets: JsonObject): JsonObject {
+  const { api_key: _apiKey, ...rest } = secrets
+  return rest
+}
+
+function normalizeApiKey(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeApiKeyName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim() : ''
+  return name || 'Default'
+}
+
+function normalizeApiKeyWeight(value: unknown): number {
+  const weight = Number(value ?? 1)
+  if (!Number.isFinite(weight)) return 1
+  return Math.max(0, Math.floor(weight))
+}
+
+function selectWeightedApiKey(records: Array<{ api_key: string, weight: number }>): string | undefined {
+  const candidates = records.filter(record => record.weight > 0)
+  const totalWeight = candidates.reduce((total, record) => total + record.weight, 0)
+  if (totalWeight <= 0) return undefined
+  let cursor = Math.random() * totalWeight
+  for (const record of candidates) {
+    cursor -= record.weight
+    if (cursor < 0) return record.api_key
+  }
+  return candidates.at(-1)?.api_key
+}
+
+function toProviderApiKeyRecord(record: {
+  id: string
+  provider_id: string
+  name: string
+  api_key: string
+  weight: number
+  enabled: boolean
+  metadata: unknown
+  created_at: Date | string
+  updated_at: Date | string
+}): ProviderApiKeyRecord {
+  return {
+    id: record.id,
+    provider_id: record.provider_id,
+    name: record.name,
+    key_hint: maskApiKey(record.api_key),
+    weight: record.weight,
+    enabled: record.enabled,
+    metadata: toJsonObject(record.metadata),
+    created_at: toIsoString(record.created_at),
+    updated_at: toIsoString(record.updated_at),
+  }
+}
+
+function maskApiKey(api_key: string): string {
+  if (!api_key) return ''
+  if (api_key.length <= 8) return '********'
+  return `${api_key.slice(0, 4)}...${api_key.slice(-4)}`
+}
+
+function toIsoString(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value
 }
 
 function toVoiceRecord(record: {

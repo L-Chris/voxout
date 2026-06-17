@@ -49,6 +49,7 @@ export interface ProviderDefinition {
   fields?: ProviderFieldDefinition[]
   enabled: boolean
   configured: boolean
+  api_key_count?: number
   config: JsonObject
   secrets: JsonObject
 }
@@ -260,6 +261,7 @@ export interface ProviderRuntimeConfig {
   enabled: boolean
   config: JsonObject
   secrets: JsonObject
+  api_key_count?: number
 }
 
 export interface ProviderConfigInput {
@@ -270,8 +272,29 @@ export interface ProviderConfigInput {
 
 export interface ProviderConfigRecord extends ProviderRuntimeConfig {
   provider_id: string
+  api_key_count?: number
   created_at?: string
   updated_at?: string
+}
+
+export interface ProviderApiKeyRecord {
+  id: string
+  provider_id: string
+  name: string
+  key_hint: string
+  weight: number
+  enabled: boolean
+  metadata: JsonObject
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ProviderApiKeyInput {
+  name?: string
+  api_key?: string
+  weight?: number
+  enabled?: boolean
+  metadata?: JsonObject
 }
 
 export interface VoiceRecord {

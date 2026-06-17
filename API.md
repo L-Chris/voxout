@@ -36,6 +36,17 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | `auto_retry` | 无 | Voxout `/v1/audio/speech` 和 `/v1/audio/voices/design` 自动重试开关 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
 | `retry_count` | 无 | `auto_retry=true` 时的额外重试次数，缺省 `2`，最大 `5`；service timeout 最多重试一次 | 同左 | 同左 | 同左 | 同左 | 同左 | 不下发给 provider |
 
+## Provider API Key 管理
+
+API key 不再作为 provider config 的 `secrets.api_key` 保存。Voxout 使用独立的 provider API key 表管理多个 key；请求 provider 时从该 provider 启用且 `weight > 0` 的 key 中按权重随机选择一个，并在 adapter 内部注入为 `context.secrets.api_key`。旧配置中已有的 `secrets.api_key` 会在读取 provider 配置或 key 列表时迁移为一条名为 `Default`、`weight=1` 的 API key，并从旧 `secrets` 中移除。
+
+| 接口 | 传参 | 响应 | 说明 |
+|---|---|---|---|
+| `GET /api/providers/{provider_id}/api-keys` | 无 | `{ api_keys: [{ id, provider_id, name, key_hint, weight, enabled, metadata, created_at, updated_at }] }` | `key_hint` 是脱敏展示值，不返回明文 key |
+| `POST /api/providers/{provider_id}/api-keys` | JSON `{ name?, api_key, weight?, enabled?, metadata? }` | `{ api_key }` | `api_key` 必填；`weight` 缺省 `1`，最小 `0` |
+| `PUT /api/providers/{provider_id}/api-keys/{api_key_id}` | JSON `{ name?, api_key?, weight?, enabled?, metadata? }` | `{ api_key }` | 修改时 `api_key` 可省略，表示保留原 key |
+| `DELETE /api/providers/{provider_id}/api-keys/{api_key_id}` | 无 | `{ deleted: true }` | 删除后该 key 不再参与请求抽样 |
+
 ## POST `/v1/audio/speech`
 
 生成语音。请求体是 JSON。非流式返回音频 bytes；`stream_format` 存在时返回音频流或 SSE。
@@ -160,14 +171,14 @@ Voxout 自身的外部参数、provider 配置字段、capabilities 字段，以
 | 实际传参 | OpenAI 规范 | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | 无 | 无 | 返回 provider 定义、fields、enabled、configured | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
-| 响应 | 无 | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | secrets 被 mask | 内部测试 provider 默认不返回 |
+| 响应 | 无 | secrets 被 mask；API key 不出现在 fields 中，改用独立 key 管理接口 | 同左 | 同左 | 同左 | 同左 | 同左 | 内部测试 provider 默认不返回 |
 
 ## PUT `/api/providers/:provider_id/config`
 
 | 实际传参 | OpenAI 规范 | [OpenAI][openai-api] | [ElevenLabs][elevenlabs-api] | [Cartesia][cartesia-api] | [Gradium][gradium-api] | [MiMo][mimo-chat-api] | Default | 接受的透传参数 |
 |---|---|---|---|---|---|---|---|---|
 | `enabled` | 无 | 启停 provider | 同左 | 同左 | 同左 | 同左 | 同左 | 无 |
-| `secrets.api_key` | 无 | `Authorization: Bearer` | `xi-api-key` | `Authorization: Bearer` | `x-api-key` | `api-key` 和 `Authorization: Bearer` | 不使用；Edge 可配置 `trusted_client_token` | 仅 provider 读取的 secret 会下发 |
+| `secrets.*` | 无 | 不保存 API key；仅保留 provider 其他 secret 字段 | 同左 | 同左 | 同左 | 同左 | Default 可配置 `trusted_client_token` | API key 使用独立 `/api/providers/:provider_id/api-keys` 管理；旧 `secrets.api_key` 只作为一次性迁移来源 |
 | `config.base_url` | 无 | OpenAI API base URL | ElevenLabs API base URL | Cartesia API base URL | Gradium REST base URL | MiMo base URL | 不使用；Bcut 使用 `bcut_base_url` | 未读取字段会保存但不会下发 |
 | `config.tts_model` / `config.asr_model` | 无 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | TTS/ASR 默认模型 | `asr_model` 作为 Bcut `model_id`；TTS 不使用 | 未读取字段会保存但不会下发 |
 | provider 专属配置 | 无 | `default_voice`、`response_format` | `default_voice_id`、`output_format`、`sound_effect_model`、`voice_design_model`、`prompt_influence` | `api_version`、`default_voice_id`、`output_format`、`base_voice_id`、`pronunciation_dict_id` | `ws_url`、`default_voice_id`、`output_format`、`clone_timeout_seconds` | `voice_design_model`、`voice_clone_model`、`format`、`voice_sample_text`、`optimize_text_preview` | `voices_url`、`trusted_client_token`、`proxy`、`voices_cache_ms`、`voices_timeout_ms`、`bcut_base_url`、`bcut_poll_interval_ms` | `config` / `secrets` 可保存任意 JSON object；未读取字段不下发 |

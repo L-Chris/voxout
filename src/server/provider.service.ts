@@ -20,6 +20,7 @@ import {
 import { formatVoiceRecord, mergeVoices } from './voice-records.js'
 import type {
   ProviderConfigInput,
+  ProviderApiKeyInput,
   ProviderRuntimeConfig,
   ProviderCapabilities,
 } from '../types.js'
@@ -59,6 +60,31 @@ export class ProviderService {
     assertPublicProviderAccess(provider_id)
     const record = await configStore.upsertConfig(provider_id, input)
     return { provider: record }
+  }
+
+  async listProviderApiKeys(provider_id: string) {
+    assertKnownProvider(provider_id)
+    assertPublicProviderAccess(provider_id)
+    return { api_keys: await configStore.listApiKeys(provider_id) }
+  }
+
+  async createProviderApiKey(provider_id: string, input: ProviderApiKeyInput) {
+    assertKnownProvider(provider_id)
+    assertPublicProviderAccess(provider_id)
+    return { api_key: await configStore.createApiKey(provider_id, input) }
+  }
+
+  async updateProviderApiKey(provider_id: string, api_key_id: string, input: ProviderApiKeyInput) {
+    assertKnownProvider(provider_id)
+    assertPublicProviderAccess(provider_id)
+    return { api_key: await configStore.updateApiKey(provider_id, api_key_id, input) }
+  }
+
+  async deleteProviderApiKey(provider_id: string, api_key_id: string) {
+    assertKnownProvider(provider_id)
+    assertPublicProviderAccess(provider_id)
+    await configStore.deleteApiKey(provider_id, api_key_id)
+    return { deleted: true }
   }
 }
 

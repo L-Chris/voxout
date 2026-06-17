@@ -12,6 +12,9 @@ function App() {
   const [testMode, setTestMode] = useState('tts')
   const [testResult, setTestResult] = useState(null)
   const [formValues, setFormValues] = useState({})
+  const [apiKeys, setApiKeys] = useState([])
+  const [apiKeyStatus, setApiKeyStatus] = useState('')
+  const [apiKeyDialog, setApiKeyDialog] = useState(null)
   const [voiceOptions, setVoiceOptions] = useState([])
   const [speechForm, setSpeechForm] = useState(defaultSpeechForm())
   const [effectForm, setEffectForm] = useState(defaultEffectForm())
@@ -53,6 +56,9 @@ function App() {
     setIsConfigOpen(false)
     setSaveStatus('')
     setFormValues({})
+    setApiKeys([])
+    setApiKeyStatus('')
+    setApiKeyDialog(null)
     clearTestResult()
   }, [selectedProvider?.id])
 
@@ -96,6 +102,13 @@ function App() {
     return (payload.voices || []).map(formatVoiceOption)
   }
 
+  async function loadProviderApiKeys(providerId) {
+    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(providerId)}/api-keys`, api_base_url))
+    const payload = await response.json()
+    if (!response.ok) throw new Error(formatErrorPayload(payload) || 'Failed to load API keys')
+    return payload.api_keys || []
+  }
+
   function selectTestMode(mode) {
     if (!selectedProvider || !supportsTestMode(selectedProvider, mode)) return
     setTestMode(mode)
@@ -114,12 +127,105 @@ function App() {
     if (!selectedProvider) return
     setFormValues(getProviderFormValues(selectedProvider))
     setSaveStatus('')
+    setApiKeys([])
+    setApiKeyStatus('Loading API keys...')
     setIsConfigOpen(true)
+    loadProviderApiKeys(selectedProvider.id)
+      .then(keys => {
+        setApiKeys(keys)
+        setApiKeyStatus('')
+      })
+      .catch(error => setApiKeyStatus(error instanceof Error ? error.message : String(error)))
   }
 
   function closeConfig() {
     setIsConfigOpen(false)
     setSaveStatus('')
+    setApiKeyStatus('')
+    setApiKeyDialog(null)
+  }
+
+  function openApiKeyCreate() {
+    setApiKeyDialog({
+      mode: 'create',
+      values: { name: '', api_key: '', weight: '1', enabled: true },
+      status: '',
+    })
+  }
+
+  function openApiKeyEdit(apiKey) {
+    setApiKeyDialog({
+      mode: 'edit',
+      apiKey,
+      values: {
+        name: apiKey.name || '',
+        api_key: '',
+        weight: String(apiKey.weight ?? 1),
+        enabled: Boolean(apiKey.enabled),
+      },
+      status: '',
+    })
+  }
+
+  function updateApiKeyDialogValue(key, value) {
+    setApiKeyDialog(current => current ? ({
+      ...current,
+      values: { ...current.values, [key]: value },
+      status: '',
+    }) : current)
+  }
+
+  async function saveApiKey(event) {
+    event.preventDefault()
+    if (!selectedProvider || !apiKeyDialog) return
+    setApiKeyDialog(current => current ? { ...current, status: 'Saving...' } : current)
+
+    const values = apiKeyDialog.values
+    const body = {
+      name: values.name || undefined,
+      weight: values.weight === '' ? 1 : Number(values.weight) || 0,
+      enabled: Boolean(values.enabled),
+    }
+    if (values.api_key.trim()) body.api_key = values.api_key.trim()
+    if (apiKeyDialog.mode === 'create' && !body.api_key) {
+      setApiKeyDialog(current => current ? { ...current, status: 'api_key is required.' } : current)
+      return
+    }
+
+    const path = apiKeyDialog.mode === 'edit'
+      ? `/api/providers/${encodeURIComponent(selectedProvider.id)}/api-keys/${encodeURIComponent(apiKeyDialog.apiKey.id)}`
+      : `/api/providers/${encodeURIComponent(selectedProvider.id)}/api-keys`
+    const response = await fetch(apiUrl(path, api_base_url), {
+      method: apiKeyDialog.mode === 'edit' ? 'PUT' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      setApiKeyDialog(current => current ? { ...current, status: formatErrorPayload(payload) || 'Save failed' } : current)
+      return
+    }
+    const keys = await loadProviderApiKeys(selectedProvider.id)
+    setApiKeys(keys)
+    await loadProviders()
+    setApiKeyDialog(null)
+    setApiKeyStatus('Saved')
+  }
+
+  async function deleteApiKey(apiKey) {
+    if (!selectedProvider) return
+    setApiKeyStatus('Deleting...')
+    const response = await fetch(apiUrl(`/api/providers/${encodeURIComponent(selectedProvider.id)}/api-keys/${encodeURIComponent(apiKey.id)}`, api_base_url), {
+      method: 'DELETE',
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      setApiKeyStatus(formatErrorPayload(payload) || 'Delete failed')
+      return
+    }
+    setApiKeys(await loadProviderApiKeys(selectedProvider.id))
+    await loadProviders()
+    setApiKeyStatus('Deleted')
   }
 
   async function saveSelectedProvider(event) {
@@ -526,8 +632,17 @@ function App() {
 
                 {isConfigOpen ? (
                   <ConfigDialog
+                    apiKeyDialog={apiKeyDialog}
+                    apiKeys={apiKeys}
+                    apiKeyStatus={apiKeyStatus}
                     formValues={formValues}
+                    onApiKeyDialogClose={() => setApiKeyDialog(null)}
+                    onApiKeyFieldChange={updateApiKeyDialogValue}
+                    onApiKeySave={saveApiKey}
                     onClose={closeConfig}
+                    onCreateApiKey={openApiKeyCreate}
+                    onDeleteApiKey={deleteApiKey}
+                    onEditApiKey={openApiKeyEdit}
                     onFieldChange={(key, value) => setFormValues({ ...formValues, [key]: value })}
                     onSubmit={saveSelectedProvider}
                     provider={selectedProvider}
@@ -573,7 +688,23 @@ function FieldInput({ field, value, onChange }) {
   )
 }
 
-function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, saveStatus }) {
+function ConfigDialog({
+  apiKeyDialog,
+  apiKeys,
+  apiKeyStatus,
+  formValues,
+  onApiKeyDialogClose,
+  onApiKeyFieldChange,
+  onApiKeySave,
+  onClose,
+  onCreateApiKey,
+  onDeleteApiKey,
+  onEditApiKey,
+  onFieldChange,
+  onSubmit,
+  provider,
+  saveStatus,
+}) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6" onMouseDown={onClose}>
       <div className="modal-panel" onMouseDown={event => event.stopPropagation()}>
@@ -606,11 +737,120 @@ function ConfigDialog({ formValues, onClose, onFieldChange, onSubmit, provider, 
             ))}
           </div>
 
+          <section className="grid gap-3 border-t border-slate-200 pt-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-bold">API keys</h3>
+                <div className="text-sm text-slate-500">{apiKeys.length} configured</div>
+              </div>
+              <button className="btn-secondary" type="button" onClick={onCreateApiKey}>Add key</button>
+            </div>
+            <div className="grid gap-2">
+              {apiKeys.length ? apiKeys.map(apiKey => (
+                <div className="api-key-row" key={apiKey.id}>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <strong className="truncate">{apiKey.name}</strong>
+                      <span className="badge">{apiKey.enabled ? 'enabled' : 'disabled'}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {apiKey.key_hint} · weight {apiKey.weight ?? 1}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button className="btn-secondary" type="button" onClick={() => onEditApiKey(apiKey)}>Edit</button>
+                    <button className="btn-secondary" type="button" onClick={() => onDeleteApiKey(apiKey)}>Delete</button>
+                  </div>
+                </div>
+              )) : (
+                <div className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500">No API keys configured.</div>
+              )}
+            </div>
+          </section>
+
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-slate-500">{saveStatus}</span>
+            <span className="text-sm text-slate-500">{apiKeyStatus || saveStatus}</span>
             <div className="flex gap-2">
               <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
               <button className="btn-primary" type="submit">Save</button>
+            </div>
+          </div>
+        </form>
+      </div>
+      {apiKeyDialog ? (
+        <ApiKeyDialog
+          dialog={apiKeyDialog}
+          onClose={onApiKeyDialogClose}
+          onFieldChange={onApiKeyFieldChange}
+          onSubmit={onApiKeySave}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ApiKeyDialog({ dialog, onClose, onFieldChange, onSubmit }) {
+  const isEdit = dialog.mode === 'edit'
+  return (
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 px-4 py-6"
+      onMouseDown={event => {
+        event.stopPropagation()
+        onClose()
+      }}
+    >
+      <div className="modal-panel max-w-xl" onMouseDown={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-xl font-bold">{isEdit ? 'Edit API key' : 'Add API key'}</h2>
+            <div className="text-sm text-slate-500">{isEdit ? dialog.apiKey.key_hint : 'Weighted random selection uses enabled keys.'}</div>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close API key dialog">×</button>
+        </div>
+        <form className="grid gap-4 px-5 py-4" onSubmit={onSubmit}>
+          <label className="grid gap-1.5 text-sm font-semibold">
+            name
+            <input
+              className="input"
+              placeholder="Default"
+              value={dialog.values.name}
+              onChange={event => onFieldChange('name', event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold">
+            api_key
+            <input
+              className="input"
+              placeholder={isEdit ? 'Leave blank to keep existing key' : ''}
+              type="password"
+              value={dialog.values.api_key}
+              onChange={event => onFieldChange('api_key', event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold">
+            weight
+            <input
+              className="input"
+              min="0"
+              step="1"
+              type="number"
+              value={dialog.values.weight}
+              onChange={event => onFieldChange('weight', event.target.value)}
+            />
+          </label>
+          <label className="inline-flex items-center gap-2 font-semibold">
+            <input
+              type="checkbox"
+              checked={Boolean(dialog.values.enabled)}
+              onChange={event => onFieldChange('enabled', event.target.checked)}
+            />
+            enabled
+          </label>
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-slate-500">{dialog.status}</span>
+            <div className="flex gap-2">
+              <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
+              <button className="btn-primary" type="submit">Save key</button>
             </div>
           </div>
         </form>

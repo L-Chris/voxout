@@ -116,6 +116,61 @@ test('GET /api/providers does not expose internal test providers', async () => {
   assert.equal(elevenlabs.capabilities.isolation, true)
   assert.equal(elevenlabs.capabilities.voice_design, true)
   assert.equal(elevenlabs.capabilities.voice_clone, true)
+  assert.ok(!elevenlabs.fields.some(field => field.key === 'api_key'))
+})
+
+test('provider API keys can be created, updated, listed, and deleted', async () => {
+  const createResponse = await fetch(`${base_url}/api/providers/openai/api-keys`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'primary',
+      api_key: 'sk-test-primary',
+      weight: 3,
+      enabled: true,
+    }),
+  })
+  const createPayload = await createResponse.json()
+
+  assert.equal(createResponse.status, 200)
+  assert.equal(createPayload.api_key.name, 'primary')
+  assert.equal(createPayload.api_key.weight, 3)
+  assert.equal(createPayload.api_key.enabled, true)
+  assert.equal(createPayload.api_key.key_hint, 'sk-t...mary')
+  assert.equal(createPayload.api_key.api_key, undefined)
+
+  const updateResponse = await fetch(`${base_url}/api/providers/openai/api-keys/${createPayload.api_key.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'backup',
+      weight: 0,
+      enabled: false,
+    }),
+  })
+  const updatePayload = await updateResponse.json()
+  assert.equal(updateResponse.status, 200)
+  assert.equal(updatePayload.api_key.name, 'backup')
+  assert.equal(updatePayload.api_key.weight, 0)
+  assert.equal(updatePayload.api_key.enabled, false)
+  assert.equal(updatePayload.api_key.key_hint, 'sk-t...mary')
+
+  const listResponse = await fetch(`${base_url}/api/providers/openai/api-keys`)
+  const listPayload = await listResponse.json()
+  assert.equal(listResponse.status, 200)
+  assert.ok(listPayload.api_keys.some(apiKey => apiKey.id === createPayload.api_key.id && apiKey.weight === 0))
+  assert.ok(listPayload.api_keys.every(apiKey => apiKey.api_key === undefined))
+
+  const deleteResponse = await fetch(`${base_url}/api/providers/openai/api-keys/${createPayload.api_key.id}`, {
+    method: 'DELETE',
+  })
+  const deletePayload = await deleteResponse.json()
+  assert.equal(deleteResponse.status, 200)
+  assert.equal(deletePayload.deleted, true)
+
+  const finalListResponse = await fetch(`${base_url}/api/providers/openai/api-keys`)
+  const finalListPayload = await finalListResponse.json()
+  assert.ok(!finalListPayload.api_keys.some(apiKey => apiKey.id === createPayload.api_key.id))
 })
 
 test('server errors use OpenAI-style error objects', async () => {

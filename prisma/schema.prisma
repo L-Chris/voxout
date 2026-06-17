@@ -19,6 +19,21 @@ model ProviderConfig {
   @@index([enabled])
 }
 
+model ProviderApiKey {
+  id          String   @id @default(cuid())
+  provider_id String
+  name        String
+  api_key     String   @db.Text
+  weight      Int      @default(1)
+  enabled     Boolean  @default(true)
+  metadata    Json?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([provider_id])
+  @@index([enabled])
+}
+
 model Voice {
   id                String   @id @default(cuid())
   voice_id          String   @unique

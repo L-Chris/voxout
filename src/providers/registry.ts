@@ -165,9 +165,10 @@ export function listProviderDefinitions(
       id: provider.id,
       name: provider.name,
       capabilities: provider.capabilities,
-      fields: mergeProviderFields(provider.fields),
+      fields: mergeProviderFields(provider.fields).filter(field => field.key !== 'api_key'),
       enabled: config.enabled,
-      configured: hasConfiguredSecrets(config.secrets),
+      configured: hasConfiguredSecrets(config.secrets) || Boolean(config.api_key_count),
+      api_key_count: config.api_key_count ?? 0,
       config: config.config,
       secrets: maskSecrets(config.secrets),
     }
