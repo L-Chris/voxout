@@ -23,9 +23,12 @@ export class SearchService {
       url.searchParams.set(key, value)
     }
 
-    const headers: Record<string, string> = { accept: 'application/json' }
     const token = process.env.FREESOUND_API_KEY?.trim()
-    if (token) headers.authorization = `Token ${token}`
+    if (!token) throw httpError('FREESOUND_API_KEY is required for Freesound token authentication.', 400)
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Token ${token}`,
+    }
 
     const response = await fetch(url, { headers })
     const payload = await readFreesoundJson(response)
