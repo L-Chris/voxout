@@ -1,12 +1,17 @@
-import { Body, Delete, Get, JsonController, Param, Post, Put, QueryParam } from 'routing-controllers'
+import { Body, Ctx, Delete, Get, JsonController, Param, Post, Put, QueryParam } from 'routing-controllers'
+import type { Context } from 'koa'
 import { Service } from 'typedi'
 import { ProviderService } from './provider.service.js'
+import { SearchService } from './search.service.js'
 import type { ProviderApiKeyInput, ProviderConfigInput } from '../types.js'
 
 @JsonController()
 @Service()
 export class ApiController {
-  constructor(private readonly providers: ProviderService) {}
+  constructor(
+    private readonly providers: ProviderService,
+    private readonly searchService: SearchService,
+  ) {}
 
   @Get('/health')
   health() {
@@ -21,6 +26,11 @@ export class ApiController {
   @Get('/api/voices')
   listVoices(@QueryParam('provider') provider?: string) {
     return this.providers.listVoices(provider)
+  }
+
+  @Get('/api/search')
+  search(@Ctx() ctx: Context) {
+    return this.searchService.search(ctx.querystring)
   }
 
   @Get('/api/providers/:provider_id/voices')

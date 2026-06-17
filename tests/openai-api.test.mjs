@@ -5,9 +5,13 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { createServer } from 'node:net'
+import { createServer as createHttpServer } from 'node:http'
 import { after, before, test } from 'node:test'
 
 let serverProcess
+let freesoundServer
+let freesoundBaseUrl
+let freesoundLastRequest
 let base_url
 let audioDir
 let serverStdout = ''
@@ -15,13 +19,20 @@ let serverStderr = ''
 
 before(async () => {
   const port = await getFreePort()
+  const freesoundPort = await getFreePort()
   audioDir = await mkdtemp(join(tmpdir(), 'voxout-openai-'))
   base_url = `http://127.0.0.1:${port}`
+  freesoundBaseUrl = `http://127.0.0.1:${freesoundPort}`
+  freesoundServer = createFreesoundServer()
+  freesoundServer.listen(freesoundPort, '127.0.0.1')
+  await once(freesoundServer, 'listening')
   serverProcess = spawn(process.execPath, ['dist/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
       ...process.env,
       DATABASE_URL: '',
+      FREESOUND_API_BASE_URL: freesoundBaseUrl,
+      FREESOUND_API_KEY: 'test-freesound-key',
       NODE_ENV: 'test',
       PORT: String(port),
       TTS_AUDIO_DIR: audioDir,
@@ -41,6 +52,10 @@ after(async () => {
   if (serverProcess && !serverProcess.killed) {
     serverProcess.kill()
     await once(serverProcess, 'exit').catch(() => {})
+  }
+  if (freesoundServer) {
+    freesoundServer.close()
+    await once(freesoundServer, 'close').catch(() => {})
   }
   if (audioDir) await rm(audioDir, { recursive: true, force: true })
 })
@@ -171,6 +186,23 @@ test('provider API keys can be created, updated, listed, and deleted', async () 
   const finalListResponse = await fetch(`${base_url}/api/providers/openai/api-keys`)
   const finalListPayload = await finalListResponse.json()
   assert.ok(!finalListPayload.api_keys.some(apiKey => apiKey.id === createPayload.api_key.id))
+})
+
+test('GET /api/search proxies Freesound search with public search parameters', async () => {
+  const response = await fetch(`${base_url}/api/search?q=rain&page=2&page_size=999&sort=duration_desc&unknown=ignored`)
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.count, 1)
+  assert.equal(payload.results[0].id, 123)
+  assert.equal(freesoundLastRequest.pathname, '/apiv2/search/')
+  assert.equal(freesoundLastRequest.searchParams.get('query'), 'rain')
+  assert.equal(freesoundLastRequest.searchParams.get('page'), '2')
+  assert.equal(freesoundLastRequest.searchParams.get('page_size'), '150')
+  assert.equal(freesoundLastRequest.searchParams.get('sort'), 'duration_desc')
+  assert.equal(freesoundLastRequest.searchParams.get('fields'), 'id,name,tags,username,license,url,previews,duration,type')
+  assert.equal(freesoundLastRequest.searchParams.has('unknown'), false)
+  assert.equal(freesoundLastRequest.authorization, 'Token test-freesound-key')
 })
 
 test('server errors use OpenAI-style error objects', async () => {
@@ -1226,6 +1258,39 @@ async function getFreePort() {
   server.close()
   await once(server, 'close')
   return address.port
+}
+
+function createFreesoundServer() {
+  return createHttpServer((req, res) => {
+    const url = new URL(req.url, freesoundBaseUrl)
+    freesoundLastRequest = {
+      pathname: url.pathname,
+      searchParams: url.searchParams,
+      authorization: req.headers.authorization,
+    }
+    if (url.pathname !== '/apiv2/search/') {
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ detail: 'not found' }))
+      return
+    }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{
+        id: 123,
+        name: 'Rain loop',
+        tags: ['rain'],
+        username: 'tester',
+        license: 'Creative Commons 0',
+        url: 'https://freesound.org/s/123/',
+        previews: { 'preview-hq-mp3': 'https://example.com/rain.mp3' },
+        duration: 2.5,
+        type: 'wav',
+      }],
+    }))
+  })
 }
 
 function createTinyWav() {
