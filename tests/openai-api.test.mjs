@@ -87,10 +87,17 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(stepfun.owned_by, 'voxout')
   assert.equal(stepfun.capabilities.tts, true)
   assert.equal(stepfun.capabilities.tts_streaming, true)
+  assert.equal(stepfun.capabilities.asr, true)
+  assert.equal(stepfun.capabilities.asr_streaming, true)
+  assert.equal(stepfun.capabilities.voice_clone, true)
   const stepfunTtsModel = payload.data.find(model => model.id === 'step-tts-mini')
   assert.equal(stepfunTtsModel.owned_by, 'stepfun')
   assert.equal(stepfunTtsModel.capabilities.tts, true)
   assert.deepEqual(stepfunTtsModel.providers, ['stepfun'])
+  const stepfunAsrModel = payload.data.find(model => model.id === 'stepaudio-2.5-asr')
+  assert.equal(stepfunAsrModel.owned_by, 'stepfun')
+  assert.equal(stepfunAsrModel.capabilities.asr, true)
+  assert.deepEqual(stepfunAsrModel.providers, ['stepfun'])
   const openaiAsrModel = payload.data.find(model => model.id === 'gpt-4o-transcribe')
   assert.equal(openaiAsrModel.owned_by, 'openai')
   assert.equal(openaiAsrModel.capabilities.asr, true)
@@ -144,7 +151,11 @@ test('GET /api/providers does not expose internal test providers', async () => {
   const stepfun = payload.providers.find(provider => provider.id === 'stepfun')
   assert.equal(stepfun.capabilities.tts, true)
   assert.equal(stepfun.capabilities.tts_streaming, true)
+  assert.equal(stepfun.capabilities.asr, true)
+  assert.equal(stepfun.capabilities.asr_streaming, true)
+  assert.equal(stepfun.capabilities.voice_clone, true)
   assert.ok(stepfun.fields.some(field => field.key === 'tts_model'))
+  assert.ok(stepfun.fields.some(field => field.key === 'asr_model'))
   assert.ok(!stepfun.fields.some(field => field.key === 'api_key'))
 })
 
@@ -1257,6 +1268,21 @@ test('POST /v1/audio/transcriptions routes provider model ids to their provider'
 
   assert.equal(response.status, 400)
   assert.match(errorMessage(payload), /mimo api_key is required/)
+})
+
+test('POST /v1/audio/transcriptions routes StepFun model ids to StepFun', async () => {
+  const form = new FormData()
+  form.set('model', 'stepaudio-2.5-asr')
+  form.set('file', new Blob([Buffer.alloc(256, 1)], { type: 'audio/wav' }), 'sample.wav')
+
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: form,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(errorMessage(payload), /stepfun api_key is required/)
 })
 
 function waitForServer(child) {
