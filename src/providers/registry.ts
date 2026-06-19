@@ -5,6 +5,7 @@ import { GradiumProvider } from './gradium.js'
 import { MimoTtsProvider } from './mimo.js'
 import { MockAsrProvider, MockTtsProvider } from './mock.js'
 import { OpenAiProvider } from './openai.js'
+import { StepFunProvider } from './stepfun.js'
 import type {
   AsrProvider,
   AudioIsolationProvider,
@@ -204,6 +205,8 @@ const openAiProvider = new OpenAiProvider()
 registerTtsProvider(openAiProvider)
 registerAsrProvider(openAiProvider)
 registerVoiceCloneProvider(openAiProvider)
+const stepFunProvider = new StepFunProvider()
+registerTtsProvider(stepFunProvider)
 const cartesiaProvider = new CartesiaProvider()
 registerTtsProvider(cartesiaProvider)
 registerAsrProvider(cartesiaProvider)

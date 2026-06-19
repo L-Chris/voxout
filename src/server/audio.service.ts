@@ -594,7 +594,7 @@ function assertSupportedJsonFields(body: Record<string, unknown>, allowed_fields
 async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
   const voice = request.voice
   if (!voice) return
-  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium') {
+  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium' && providerId !== 'stepfun') {
     return
   }
   const voiceRecord = await configStore.getVoice(providerId, voice)
@@ -1063,6 +1063,10 @@ function resolveSpeechResponseFormat(providerId: string, value: string | undefin
   }
   if (providerId === 'cartesia' || providerId === 'mimo' || providerId === 'default') {
     if (format === 'wav' || format === 'pcm' || format === 'mp3') return { provider_format: format, response_format: format }
+    throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
+  }
+  if (providerId === 'stepfun') {
+    if (format === 'mp3' || format === 'opus' || format === 'flac' || format === 'wav' || format === 'pcm') return { provider_format: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
   return { provider_format: format, response_format: format }

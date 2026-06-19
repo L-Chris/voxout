@@ -82,6 +82,15 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(openaiTtsModel.owned_by, 'openai')
   assert.equal(openaiTtsModel.capabilities.tts, true)
   assert.deepEqual(openaiTtsModel.providers, ['openai'])
+  const stepfun = payload.data.find(model => model.id === 'stepfun')
+  assert.equal(stepfun.object, 'model')
+  assert.equal(stepfun.owned_by, 'voxout')
+  assert.equal(stepfun.capabilities.tts, true)
+  assert.equal(stepfun.capabilities.tts_streaming, true)
+  const stepfunTtsModel = payload.data.find(model => model.id === 'step-tts-mini')
+  assert.equal(stepfunTtsModel.owned_by, 'stepfun')
+  assert.equal(stepfunTtsModel.capabilities.tts, true)
+  assert.deepEqual(stepfunTtsModel.providers, ['stepfun'])
   const openaiAsrModel = payload.data.find(model => model.id === 'gpt-4o-transcribe')
   assert.equal(openaiAsrModel.owned_by, 'openai')
   assert.equal(openaiAsrModel.capabilities.asr, true)
@@ -132,6 +141,11 @@ test('GET /api/providers does not expose internal test providers', async () => {
   assert.equal(elevenlabs.capabilities.voice_design, true)
   assert.equal(elevenlabs.capabilities.voice_clone, true)
   assert.ok(!elevenlabs.fields.some(field => field.key === 'api_key'))
+  const stepfun = payload.providers.find(provider => provider.id === 'stepfun')
+  assert.equal(stepfun.capabilities.tts, true)
+  assert.equal(stepfun.capabilities.tts_streaming, true)
+  assert.ok(stepfun.fields.some(field => field.key === 'tts_model'))
+  assert.ok(!stepfun.fields.some(field => field.key === 'api_key'))
 })
 
 test('provider API keys can be created, updated, listed, and deleted', async () => {
@@ -382,6 +396,21 @@ test('POST /v1/audio/speech routes provider model ids to their provider', async 
 
   assert.equal(response.status, 400)
   assert.match(errorMessage(payload), /elevenlabs api_key is required/)
+})
+
+test('POST /v1/audio/speech routes StepFun model ids to StepFun', async () => {
+  const response = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'step-tts-mini',
+      input: 'hello from a StepFun model id',
+    }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(errorMessage(payload), /stepfun api_key is required/)
 })
 
 test('POST /v1/audio/speech defaults MiMo response_format to mp3', async () => {
