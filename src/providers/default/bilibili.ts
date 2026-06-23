@@ -11,6 +11,7 @@ import {
 
 const DEFAULT_BASE_URL = 'https://member.bilibili.com/x/bcut/rubick-interface'
 const DEFAULT_MODEL_ID = '8'
+const DEFAULT_ASR_MODEL = 'default-asr'
 const DEFAULT_POLL_INTERVAL_MS = 5000
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 const SUPPORTED_FORMATS = new Set(['flac', 'aac', 'm4a', 'mp3', 'wav', 'mp4', 'm4s'])
@@ -71,7 +72,8 @@ export class BilibiliBcutAsrProvider implements AsrProvider {
   readonly name: string
   readonly capabilities = { asr: true }
   readonly fields: ProviderFieldDefinition[] = [
-    { key: 'asr_model', label: 'ASR Model', type: 'text', placeholder: DEFAULT_MODEL_ID, options: [DEFAULT_MODEL_ID] },
+    { key: 'asr_model', label: 'ASR Model', type: 'text', placeholder: DEFAULT_ASR_MODEL, options: [DEFAULT_ASR_MODEL] },
+    { key: 'bcut_model_id', label: 'Bcut Model ID', type: 'text', placeholder: DEFAULT_MODEL_ID },
     { key: 'bcut_base_url', label: 'Bcut Base URL', type: 'url', placeholder: DEFAULT_BASE_URL },
     { key: 'bcut_poll_interval_ms', label: 'ASR Poll Interval (ms)', type: 'number', placeholder: String(DEFAULT_POLL_INTERVAL_MS) },
   ]
@@ -307,8 +309,13 @@ function stringifyFormValue(value: JsonValue): string {
 
 function getModelId(provider_id: string, request: TranscribeRequest, context: ProviderContext): string {
   const model = request.model?.trim()
-  if (model && model !== provider_id) return model
-  return getConfigString(context, 'asr_model') ?? DEFAULT_MODEL_ID
+  if (model && model !== provider_id && model !== DEFAULT_ASR_MODEL) return model
+  return getConfigString(context, 'bcut_model_id') ?? normalizeConfiguredModelId(getConfigString(context, 'asr_model')) ?? DEFAULT_MODEL_ID
+}
+
+function normalizeConfiguredModelId(value: string | undefined): string | undefined {
+  if (!value || value === DEFAULT_ASR_MODEL) return undefined
+  return value
 }
 
 function getFileFormat(file_name: string, mime_type: string): string {

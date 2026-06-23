@@ -70,6 +70,7 @@ test('Default provider sends Bilibili Bcut ASR upload and task requests', async 
 
   const provider = new DefaultProvider()
   const result = await provider.transcribe({
+    model: 'default-asr',
     file: {
       data: Buffer.alloc(256, 1),
       mime_type: 'audio/wav',
@@ -127,7 +128,10 @@ test('Default provider exposes combined TTS and ASR metadata', () => {
   assert.equal(defaultProvider.capabilities.tts_streaming, true)
   assert.equal(defaultProvider.capabilities.asr, true)
   assert.ok(defaultProvider.fields.some(field => field.key === 'voices_url'))
-  assert.ok(defaultProvider.fields.some(field => field.key === 'asr_model'))
+  const asrModelField = defaultProvider.fields.find(field => field.key === 'asr_model')
+  assert.ok(asrModelField)
+  assert.deepEqual(asrModelField.options, ['default-asr'])
+  assert.ok(defaultProvider.fields.some(field => field.key === 'bcut_model_id'))
   assert.ok(!definitions.some(provider => provider.id === 'bilibili-asr'))
 })
 
