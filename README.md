@@ -349,9 +349,7 @@ Project layout:
 - Upstream pricing, quotas, supported voices, and model availability are owned
   by each provider and can change independently of voxout.
 
-## 致谢 / Acknowledgments
+## Acknowledgments
 
-| 类别 | 致谢对象 |
-|---|---|
-| AI | [Qwen.ai](https://qwen.ai/) |
-| 社区 | [Linux.do](https://linux.do) |
+- [Qwen.ai](https://qwen.ai/)
+- [Linux.do](https://linux.do)
