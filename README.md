@@ -1,139 +1,197 @@
 # voxout
 
-Provider gateway for speech synthesis, sound effects, and ASR.
+OpenAI-compatible audio gateway for speech, transcription, sound effects, audio
+isolation, voice design, and voice cloning.
 
-voxout exposes OpenAI-compatible audio endpoints plus a provider configuration
-surface. It stores provider settings in MySQL through Prisma; provider keys,
-base URLs, and model choices should be managed from the web console or inserted
-into the `ProviderConfig` table.
+voxout gives one stable API and one web console for multiple audio providers.
+Applications can call OpenAI-style endpoints while operators switch providers,
+manage keys, route models, test voices, and persist provider-specific settings
+without changing client code.
 
-## Providers
+## Why voxout
 
-- `default`: Microsoft Edge online TTS plus Bilibili/Bcut file-upload ASR.
-- `openai`: OpenAI TTS, ASR, and custom voice cloning.
-- `cartesia`: Cartesia TTS, streaming TTS, ASR, voice listing, and voice cloning.
-- `mimo`: Xiaomi MiMo TTS with preset voices, voice design, and ASR.
-- `gradium`: Gradium TTS, streaming TTS, ASR, voice listing, and voice cloning.
-- `elevenlabs`: ElevenLabs TTS, ASR, sound effects, isolation, voice design, and voice cloning.
-- `cambai`: Camb.ai TTS, streaming TTS, ASR, text-to-sound, audio separation, voice design, and voice cloning.
+- **OpenAI-compatible surface**: use familiar `/v1/audio/*` endpoints for speech,
+  transcription, and voice cloning, with Voxout extensions for audio effects,
+  isolation, and voice design.
+- **Multi-provider routing**: route by explicit `provider` or by model id, so one
+  client can use OpenAI, ElevenLabs, Cartesia, Camb.ai, MiMo, Gradium, StepFun,
+  and the built-in default provider.
+- **More than TTS**: speech synthesis, streaming speech, ASR, text-to-sound,
+  vocal/background separation, generated voice previews, and custom voice
+  cloning share the same gateway.
+- **Provider-neutral voices**: store one Voxout voice record and link it to
+  provider-specific voice ids or accounts.
+- **Operational console**: configure providers, API keys, models, voices, and
+  test requests from the built-in React UI.
+- **Self-hostable**: run as a Node service, a Docker image, or split the static
+  frontend behind any reverse proxy.
 
-## API
+## Supported Providers
 
-OpenAI-compatible audio API:
+| Provider | Capabilities |
+|---|---|
+| `default` | Microsoft Edge online TTS and Bilibili/Bcut file-upload ASR |
+| `openai` | TTS, ASR, custom voice cloning |
+| `elevenlabs` | TTS, streaming TTS, ASR, sound effects, isolation, voice design, voice cloning |
+| `cartesia` | TTS, streaming TTS, ASR, voice listing, voice cloning |
+| `cambai` | TTS, streaming TTS, ASR, text-to-sound, audio separation, voice design, voice cloning |
+| `mimo` | Xiaomi MiMo TTS, preset voices, voice design, ASR |
+| `gradium` | TTS, streaming TTS, ASR, voice listing, voice cloning |
+| `stepfun` | TTS, streaming TTS, ASR streaming, system/cloned voices, voice cloning |
+
+Provider availability depends on your configured API keys and the upstream
+account plan. The built-in `default` provider is useful for getting started, but
+production deployments should configure the providers that match your quality,
+latency, language, and cost requirements.
+
+## API Overview
+
+OpenAI-compatible endpoints:
 
 - `GET /v1/models`
 - `POST /v1/audio/speech`
-- `POST /v1/audio/voices`
 - `POST /v1/audio/transcriptions`
+- `POST /v1/audio/voices`
 
-voxout extension audio API:
+Voxout extension endpoints:
 
 - `POST /v1/audio/effect`
 - `POST /v1/audio/isolation`
 - `POST /v1/audio/voices/design`
 - `POST /v1/audio/voices/create`
 
-`/v1/audio/speech` follows the OpenAI speech request shape: `model` is the TTS
-model, `input` is the text, `voice` is the voice name or id, and
-`response_format`, `speed`, `stream_format`, and `instructions` are optional.
-Use voxout's `provider` extension to choose a backend such as `default`,
-`openai`, `cartesia`, `mimo`, `gradium`, `elevenlabs`, or `cambai`. When
-`provider` is omitted, OpenAI model ids route to OpenAI and unique provider
-model ids route to the matching provider.
-`/v1/audio/transcriptions` follows the OpenAI multipart shape: `model` is the
-ASR model, `file` is the uploaded audio, and `response_format`, `language`, and
-`prompt` are optional. Use the `provider` extension to choose a non-OpenAI ASR
-backend. `/v1/audio/voices` follows the OpenAI form-data shape with `name`,
-`consent`, and `audio_sample`, plus the same optional `provider` extension.
-Provider-specific clone fields can be passed as an `extra_params` JSON object
-form field.
-For streaming TTS, pass OpenAI-compatible `stream_format` with `audio` or
-`sse`. Streaming support is currently exposed by `default`, `openai`,
-`cartesia`, `mimo`, `gradium`, `elevenlabs`, and `cambai`; `elevenlabs`,
-`gradium`, and `cambai` support raw audio streaming only.
-
-Stored voices are provider-neutral records. Platform-specific voice ids and
-account bindings are kept in `VoiceProviderLink`, so one voxout `voice_id` can
-be linked to multiple provider accounts. MiMo uploads do not return a platform
-voice id; voxout stores the uploaded audio sample in the provider link and uses
-that sample with MiMo's voice clone model during TTS.
-
-Provider management API:
+Management endpoints:
 
 - `GET /health`
 - `GET /api/providers`
 - `GET /api/providers/:provider_id/voices`
 - `GET /api/voices?provider=:provider_id`
+- `GET /api/providers/:provider_id/api-keys`
+- `POST /api/providers/:provider_id/api-keys`
 - `PUT /api/providers/:provider_id/config`
-- `GET /audio/:file`
 
-The old `/v1/tts/*` API has been removed.
+For detailed field mapping, provider-specific behavior, and compatibility
+notes, see [API.md](./API.md).
+
+## Quick Start
+
+### Run Locally
+
+Requirements:
+
+- Node.js 20+
+- npm
+- Optional MySQL database for persisted provider settings and API keys
+
+```bash
+npm install
+cp .env.example .env
+npm run build
+npm start
+```
+
+Open the console at:
+
+```text
+http://127.0.0.1:4177/
+```
+
+Without `DATABASE_URL`, provider settings fall back to in-memory behavior where
+supported. Set `DATABASE_URL` when you want configuration, API keys, and voice
+records to survive restarts.
+
+### Run With Docker
+
+Build and run the image:
+
+```bash
+docker build -t voxout:latest .
+docker run --rm -p 4177:4177 \
+  -e PORT=4177 \
+  -e TTS_AUDIO_DIR=/app/audio \
+  -v "$PWD/audio:/app/audio" \
+  voxout:latest
+```
+
+With MySQL persistence:
+
+```bash
+docker run --rm -p 4177:4177 \
+  -e PORT=4177 \
+  -e DATABASE_URL='mysql://user:password@mysql-host:3306/voxout' \
+  -e TTS_AUDIO_DIR=/app/audio \
+  -v "$PWD/audio:/app/audio" \
+  voxout:latest
+```
+
+On startup, the Docker image runs Prisma database synchronization when
+`DATABASE_URL` is present, then starts `node dist/server.js`.
+
+## Configuration
+
+Core environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | HTTP port, default `4177` |
+| `DATABASE_URL` | Optional MySQL connection string for persisted settings |
+| `TTS_AUDIO_DIR` | Directory for generated/static audio files |
+| `TTS_SYNTHESIS_TIMEOUT_MS` | Optional upstream request timeout override |
+| `FREESOUND_API_KEY` | Optional token for `/api/search` Freesound proxy |
+
+Provider credentials are managed through the web console or the
+`/api/providers/:provider_id/api-keys` API. API keys are stored separately from
+provider config, can be weighted, and are selected at runtime for upstream
+requests.
+
+Enable and configure a provider through the API:
+
+```bash
+curl -X PUT http://127.0.0.1:4177/api/providers/cambai/config \
+  -H 'content-type: application/json' \
+  --data '{"enabled":true,"config":{"default_language":"en-us"}}'
+```
+
+Add a provider API key:
+
+```bash
+curl -X POST http://127.0.0.1:4177/api/providers/cambai/api-keys \
+  -H 'content-type: application/json' \
+  --data '{"name":"main","api_key":"YOUR_PROVIDER_KEY","weight":1,"enabled":true}'
+```
 
 ## Examples
 
-Speech generation:
+### Text to Speech
 
 ```bash
 curl -X POST http://127.0.0.1:4177/v1/audio/speech \
   -H 'content-type: application/json' \
   --output speech.mp3 \
-  --data '{"provider":"default","input":"你好，voxout。","voice":"zh-CN-XiaoyiNeural","response_format":"mp3"}'
+  --data '{
+    "provider": "default",
+    "input": "Hello from voxout.",
+    "voice": "en-US-JennyNeural",
+    "response_format": "mp3"
+  }'
 ```
 
-Streaming speech:
+### Streaming Speech
 
 ```bash
 curl -N -X POST http://127.0.0.1:4177/v1/audio/speech \
   -H 'content-type: application/json' \
   --output speech.pcm \
-  --data '{"provider":"mimo","model":"mimo-v2.5-tts","input":"你好，voxout。","voice":"Chloe","response_format":"pcm","stream_format":"audio"}'
+  --data '{
+    "provider": "mimo",
+    "input": "Streaming audio from voxout.",
+    "voice": "Chloe",
+    "response_format": "pcm",
+    "stream_format": "audio"
+  }'
 ```
 
-Sound effect generation:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/effect \
-  -H 'content-type: application/json' \
-  --output effect.mp3 \
-  --data '{"model":"eleven_text_to_sound_v2","instructions":"a short cinematic whoosh","duration_seconds":1.5,"prompt_influence":0.3,"response_format":"mp3"}'
-```
-
-Voice isolation:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/isolation \
-  --output isolated.mp3 \
-  -F provider=elevenlabs \
-  -F file=@sample.wav
-```
-
-Voice design:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/voices/design \
-  -H 'content-type: application/json' \
-  --data '{"model":"eleven_multilingual_ttv_v2","instructions":"A calm narrator voice with a clean tone.","input":"This is a preview sentence.","name":"Calm Narrator","extra_params":{"auto_generate_text":true}}'
-```
-
-Create a designed voice from a selected preview:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/voices/create \
-  -H 'content-type: application/json' \
-  --data '{"provider":"elevenlabs","generated_voice_id":"preview_voice_id","name":"Calm Narrator","instructions":"A calm narrator voice with a clean tone.","labels":{"use":"narration"}}'
-```
-
-Voice cloning from an audio sample:
-
-```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/voices \
-  -F provider=openai \
-  -F name='Narrator Clone' \
-  -F consent=cons_1234 \
-  -F audio_sample=@sample.wav
-```
-
-Transcription from a local file:
+### Transcription
 
 ```bash
 curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
@@ -144,63 +202,84 @@ curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
   -F file=@sample.wav
 ```
 
-Default Bcut transcription:
+### Sound Effects
 
 ```bash
-curl -X POST http://127.0.0.1:4177/v1/audio/transcriptions \
-  -F provider=default \
-  -F response_format=verbose_json \
-  -F file=@sample.wav
-```
-
-## Provider Config
-
-```bash
-curl -X PUT http://127.0.0.1:4177/api/providers/mimo/config \
+curl -X POST http://127.0.0.1:4177/v1/audio/effect \
   -H 'content-type: application/json' \
-  --data '{"enabled":true,"config":{"base_url":"https://api.xiaomimimo.com/v1"},"secrets":{"api_key":"..."} }'
+  --output effect.mp3 \
+  --data '{
+    "provider": "elevenlabs",
+    "instructions": "a short cinematic whoosh",
+    "duration_seconds": 1.5,
+    "prompt_influence": 0.3,
+    "response_format": "mp3"
+  }'
 ```
 
-The web console at `/` provides the same configuration and invocation workflow.
-
-## Development
+### Audio Isolation
 
 ```bash
-npm install
-npm run build
-npm test
-npm start
+curl -X POST http://127.0.0.1:4177/v1/audio/isolation \
+  --output isolated.wav \
+  -F provider=cambai \
+  -F file=@mix.wav \
+  -F 'extra_params={"stem":"foreground"}'
 ```
 
-The web console is built with React, Tailwind CSS, and Vite. Source files live
-under `frontend/`; `npm run build:web` writes the static build output to
-`public/`. During local UI work, run:
+For Camb.ai, use `{"stem":"background"}` to return the background track.
+
+### Voice Design and Creation
 
 ```bash
-npm run dev
+curl -X POST http://127.0.0.1:4177/v1/audio/voices/design \
+  -H 'content-type: application/json' \
+  --data '{
+    "provider": "elevenlabs",
+    "instructions": "A calm narrator voice with a clean tone.",
+    "input": "This is a preview sentence.",
+    "name": "Calm Narrator"
+  }'
 ```
 
-Set `DATABASE_URL` to enable persisted provider settings. Deployment
-environment variables are limited to service-level settings such as port,
-database URL, audio storage, and global synthesis timeout.
-
-## Static Frontend Deployment
-
-Run `npm run build:web` first. The generated files under `public/` can be served
-by voxout itself or copied to the existing static-server document tree:
+Then create a stored voice from a selected preview:
 
 ```bash
-rsync -a --delete public/ /home/data/www/tts.rethinkos.com/
+curl -X POST http://127.0.0.1:4177/v1/audio/voices/create \
+  -H 'content-type: application/json' \
+  --data '{
+    "provider": "elevenlabs",
+    "generated_voice_id": "preview_voice_id",
+    "name": "Calm Narrator",
+    "instructions": "A calm narrator voice with a clean tone."
+  }'
 ```
 
-For the current `nginx-proxy-manager` + `static-server` deployment, route
-`tts.rethinkos.com` like this:
+### Voice Cloning
 
-- `/`, `/assets/*`, and `/voxout.config.json` -> `static-server:80`
-- `/api`, `/audio`, and `/health` -> `voxout:4177`
+```bash
+curl -X POST http://127.0.0.1:4177/v1/audio/voices \
+  -F provider=openai \
+  -F name='Narrator Clone' \
+  -F consent=cons_1234 \
+  -F audio_sample=@sample.wav
+```
 
-When the API is exposed on the same origin, keep
-`frontend/public/voxout.config.json` as:
+## Frontend Deployment
+
+voxout can serve the compiled frontend itself from `public/`. This is the
+simplest deployment: put a reverse proxy in front of the Node service and route
+all paths to the same backend.
+
+If you prefer a split deployment, build the frontend and publish `public/` to
+any static host:
+
+```bash
+npm run build:web
+rsync -a --delete public/ /path/to/static/site/
+```
+
+Configure `frontend/public/voxout.config.json` before building:
 
 ```json
 {
@@ -208,5 +287,62 @@ When the API is exposed on the same origin, keep
 }
 ```
 
-If the static frontend is hosted on a different origin, set `api_base_url` to the
-public voxout API origin, for example `https://tts.rethinkos.com`.
+Use an empty `api_base_url` when the frontend and API share the same origin.
+When the frontend is served from a different origin, set it to the public Voxout
+API origin, for example:
+
+```json
+{
+  "api_base_url": "https://api.example.com"
+}
+```
+
+Typical reverse proxy rules:
+
+- Same-origin deployment: proxy `/`, `/assets/*`, `/api/*`, `/v1/*`,
+  `/audio/*`, and `/health` to the Voxout service.
+- Split frontend deployment: serve `/` and `/assets/*` from static hosting, and
+  proxy `/api/*`, `/v1/*`, `/audio/*`, and `/health` to the Voxout service.
+
+## Development
+
+Run the full build and test suite:
+
+```bash
+npm test
+```
+
+Server-only build:
+
+```bash
+npm run build:server
+```
+
+Frontend-only build:
+
+```bash
+npm run build:web
+```
+
+Frontend development server:
+
+```bash
+npm run dev
+```
+
+Project layout:
+
+- `src/`: server, provider adapters, API routing, persistence helpers
+- `frontend/`: React console source
+- `public/`: compiled frontend assets
+- `prisma/`: Prisma schema and migration helpers
+- `tests/`: provider and API behavior tests
+
+## Notes
+
+- voxout intentionally normalizes common audio operations while preserving
+  provider-specific controls through `extra_params`.
+- Some providers expose asynchronous task APIs. Voxout hides the polling flow and
+  returns final audio or normalized JSON where possible.
+- Upstream pricing, quotas, supported voices, and model availability are owned
+  by each provider and can change independently of voxout.
