@@ -4,3 +4,4 @@ dist/
 audio/
 .env
 .codegraph/
+.agent/

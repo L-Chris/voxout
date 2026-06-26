@@ -525,19 +525,30 @@ function App() {
   }, [selectedProvider])
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-7 lg:px-8">
-        <header>
-          <div>
-            <h1 className="text-3xl font-bold tracking-normal">voxout</h1>
-            <p className="mt-1 text-slate-500">Provider configuration and audio testing</p>
+    <main className="min-h-screen bg-[#0F172A] text-[#F8FAFC]">
+      <div className="mx-auto grid max-w-7xl gap-6 px-5 py-7 lg:px-8">
+        <header className="border-b border-slate-800/80 pb-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="font-mono text-3xl font-bold tracking-tight text-white">voxout</h1>
+                <span className="relative flex h-2.5 w-2.5 mt-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+              <p className="mt-1.5 text-sm text-slate-400">Provider gateway configuration and audio testing playground</p>
+            </div>
+            <div className="self-start sm:self-auto text-xs text-slate-400 font-mono bg-slate-900/80 px-3.5 py-2 rounded-lg border border-slate-800">
+              v0.1.0 · <span className="text-emerald-400 font-bold">GATEWAY ACTIVE</span>
+            </div>
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
-          <aside className="panel">
-            <h2 className="mb-4 text-lg font-bold">Providers</h2>
-            <div className="grid gap-2">
+        <section className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <aside className="panel h-fit">
+            <h2 className="mb-4 text-sm font-bold font-mono tracking-wider text-slate-400 uppercase">Providers</h2>
+            <div className="grid gap-2.5">
               {providers.map(provider => (
                 <button
                   className={`provider-card ${provider.id === selectedProvider?.id ? 'provider-card-active' : ''}`}
@@ -546,10 +557,10 @@ function App() {
                   onClick={() => setSelectedProviderId(provider.id)}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <strong>{provider.name}</strong>
+                    <strong className="text-slate-200">{provider.name}</strong>
                     <span className="badge">{provider.enabled ? 'enabled' : 'disabled'}</span>
                   </div>
-                  <div className="text-slate-500">{provider.id}</div>
+                  <div className="text-xs text-slate-500 font-mono mt-1">{provider.id}</div>
                 </button>
               ))}
             </div>
@@ -558,19 +569,19 @@ function App() {
           <section className="panel">
             {selectedProvider ? (
               <>
-                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold">{selectedProvider.name}</h2>
-                    <div className="text-slate-500">{capabilityText}</div>
+                    <h2 className="text-2xl font-bold font-mono text-white">{selectedProvider.name}</h2>
+                    <div className="text-xs text-emerald-400 font-mono mt-1 tracking-wider uppercase">{capabilityText}</div>
                   </div>
                   <button className="btn-secondary" type="button" onClick={openConfig}>Configure</button>
                 </div>
 
-                <div className="border-t border-slate-200 pt-5">
-                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="text-lg font-bold">Test API</h2>
+                <div className="border-t border-slate-800/80 pt-6">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="text-sm font-bold font-mono tracking-wider text-slate-400 uppercase">Test API</h2>
                   </div>
-                  <div className="mb-4 flex flex-wrap gap-2">
+                  <div className="mb-5 flex flex-wrap gap-2.5">
                     {getSupportedTestModes(selectedProvider).map(mode => (
                       <button
                         className={`tab ${testMode === mode ? 'tab-active' : ''}`}
@@ -706,20 +717,21 @@ function ConfigDialog({
   saveStatus,
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 py-6" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 backdrop-blur-sm px-4 py-6" onMouseDown={onClose}>
       <div className="modal-panel" onMouseDown={event => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4 bg-slate-900/80">
           <div>
-            <h2 className="text-xl font-bold">{provider.name}</h2>
-            <div className="text-sm text-slate-500">{provider.id}</div>
+            <h2 className="text-xl font-bold font-mono text-white">{provider.name}</h2>
+            <div className="text-xs text-slate-400 font-mono mt-0.5">{provider.id}</div>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close configuration">×</button>
         </div>
 
         <form className="grid gap-4 px-5 py-4" onSubmit={onSubmit}>
-          <label className="inline-flex items-center gap-2 font-semibold">
+          <label className="inline-flex items-center gap-2 font-semibold text-slate-200 cursor-pointer text-sm">
             <input
               type="checkbox"
+              className="rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20"
               checked={Boolean(formValues.enabled)}
               onChange={event => onFieldChange('enabled', event.target.checked)}
             />
@@ -737,40 +749,40 @@ function ConfigDialog({
             ))}
           </div>
 
-          <section className="grid gap-3 border-t border-slate-200 pt-4">
+          <section className="grid gap-3 border-t border-slate-800 pt-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="font-bold">API keys</h3>
-                <div className="text-sm text-slate-500">{apiKeys.length} configured</div>
+                <h3 className="font-bold font-mono text-slate-200 uppercase tracking-wider text-sm">API keys</h3>
+                <div className="text-xs text-slate-400 font-mono">{apiKeys.length} configured</div>
               </div>
-              <button className="btn-secondary" type="button" onClick={onCreateApiKey}>Add key</button>
+              <button className="btn-secondary py-1.5 px-3 text-xs" type="button" onClick={onCreateApiKey}>Add key</button>
             </div>
             <div className="grid gap-2">
               {apiKeys.length ? apiKeys.map(apiKey => (
                 <div className="api-key-row" key={apiKey.id}>
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <strong className="truncate">{apiKey.name}</strong>
+                      <strong className="truncate text-slate-200">{apiKey.name}</strong>
                       <span className="badge">{apiKey.enabled ? 'enabled' : 'disabled'}</span>
                     </div>
-                    <div className="mt-1 text-sm text-slate-500">
+                    <div className="mt-1 text-xs text-slate-400 font-mono">
                       {apiKey.key_hint} · weight {apiKey.weight ?? 1}
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <button className="btn-secondary" type="button" onClick={() => onEditApiKey(apiKey)}>Edit</button>
-                    <button className="btn-secondary" type="button" onClick={() => onDeleteApiKey(apiKey)}>Delete</button>
+                    <button className="btn-secondary py-1.5 px-3 text-xs" type="button" onClick={() => onEditApiKey(apiKey)}>Edit</button>
+                    <button className="btn-secondary py-1.5 px-3 text-xs" type="button" onClick={() => onDeleteApiKey(apiKey)}>Delete</button>
                   </div>
                 </div>
               )) : (
-                <div className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500">No API keys configured.</div>
+                <div className="rounded-lg border border-dashed border-slate-800 bg-slate-950/20 p-4 text-sm text-slate-500 text-center font-mono">No API keys configured.</div>
               )}
             </div>
           </section>
 
-          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-slate-500">{apiKeyStatus || saveStatus}</span>
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-slate-400 font-mono">{apiKeyStatus || saveStatus}</span>
+            <div className="flex gap-2 justify-end">
               <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
               <button className="btn-primary" type="submit">Save</button>
             </div>
@@ -793,22 +805,22 @@ function ApiKeyDialog({ dialog, onClose, onFieldChange, onSubmit }) {
   const isEdit = dialog.mode === 'edit'
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 px-4 py-6"
+      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/70 backdrop-blur-sm px-4 py-6"
       onMouseDown={event => {
         event.stopPropagation()
         onClose()
       }}
     >
       <div className="modal-panel max-w-xl" onMouseDown={event => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4 bg-slate-900/80">
           <div>
-            <h2 className="text-xl font-bold">{isEdit ? 'Edit API key' : 'Add API key'}</h2>
-            <div className="text-sm text-slate-500">{isEdit ? dialog.apiKey.key_hint : 'Weighted random selection uses enabled keys.'}</div>
+            <h2 className="text-xl font-bold font-mono text-white">{isEdit ? 'Edit API key' : 'Add API key'}</h2>
+            <div className="text-xs text-slate-400 font-mono mt-0.5">{isEdit ? dialog.apiKey.key_hint : 'Weighted random selection uses enabled keys.'}</div>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close API key dialog">×</button>
         </div>
         <form className="grid gap-4 px-5 py-4" onSubmit={onSubmit}>
-          <label className="grid gap-1.5 text-sm font-semibold">
+          <label className="grid gap-1.5 text-xs font-semibold text-slate-300 font-mono tracking-wider">
             name
             <input
               className="input"
@@ -817,7 +829,7 @@ function ApiKeyDialog({ dialog, onClose, onFieldChange, onSubmit }) {
               onChange={event => onFieldChange('name', event.target.value)}
             />
           </label>
-          <label className="grid gap-1.5 text-sm font-semibold">
+          <label className="grid gap-1.5 text-xs font-semibold text-slate-300 font-mono tracking-wider">
             api_key
             <input
               className="input"
@@ -827,7 +839,7 @@ function ApiKeyDialog({ dialog, onClose, onFieldChange, onSubmit }) {
               onChange={event => onFieldChange('api_key', event.target.value)}
             />
           </label>
-          <label className="grid gap-1.5 text-sm font-semibold">
+          <label className="grid gap-1.5 text-xs font-semibold text-slate-300 font-mono tracking-wider">
             weight
             <input
               className="input"
@@ -838,17 +850,18 @@ function ApiKeyDialog({ dialog, onClose, onFieldChange, onSubmit }) {
               onChange={event => onFieldChange('weight', event.target.value)}
             />
           </label>
-          <label className="inline-flex items-center gap-2 font-semibold">
+          <label className="inline-flex items-center gap-2 font-semibold text-slate-200 cursor-pointer text-sm font-mono">
             <input
               type="checkbox"
+              className="rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500/20"
               checked={Boolean(dialog.values.enabled)}
               onChange={event => onFieldChange('enabled', event.target.checked)}
             />
             enabled
           </label>
-          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-slate-500">{dialog.status}</span>
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-slate-400 font-mono">{dialog.status}</span>
+            <div className="flex gap-2 justify-end">
               <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
               <button className="btn-primary" type="submit">Save key</button>
             </div>
@@ -1401,14 +1414,22 @@ function ExtraParamsField({ onChange, value }) {
 function ResultPreview({ onCreatePreview, result }) {
   if (!result) return null
   if (result.kind === 'error') {
-    return <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{result.message}</div>
+    return (
+      <div className="mt-5 rounded-xl border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400 font-mono shadow-inner shadow-red-950/10">
+        <span className="font-bold text-red-500 mr-1.5">[ERROR]</span>
+        {result.message}
+      </div>
+    )
   }
   if (result.kind === 'audio') {
     return (
-      <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-        <div className="text-sm text-slate-500">{result.endpoint} · {result.mime_type} · {formatBytes(result.size)}</div>
-        <audio className="w-full" controls src={result.objectUrl} />
-        <div>
+      <div className="mt-5 grid gap-4 rounded-xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-sm">
+        <div className="text-xs text-slate-400 font-mono flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <span>{result.endpoint}</span>
+          <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500">{result.mime_type} · {formatBytes(result.size)}</span>
+        </div>
+        <audio className="w-full mt-2" controls src={result.objectUrl} />
+        <div className="mt-1">
           <a className="link" href={result.objectUrl} rel="noreferrer" target="_blank">Open audio preview</a>
         </div>
       </div>
@@ -1416,26 +1437,32 @@ function ResultPreview({ onCreatePreview, result }) {
   }
   const voicePreviews = getVoicePreviewItems(result.payload)
   return (
-    <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <div className="text-sm text-slate-500">{result.endpoint} · {result.mime_type}</div>
+    <div className="mt-5 grid gap-4 rounded-xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-sm">
+      <div className="text-xs text-slate-400 font-mono flex items-center justify-between border-b border-slate-800 pb-2.5">
+        <span>{result.endpoint}</span>
+        <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500">{result.mime_type}</span>
+      </div>
       {result.createError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{result.createError}</div>
+        <div className="rounded-xl border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-400 font-mono">
+          <span className="font-bold text-red-500 mr-1.5">[CREATE ERROR]</span>
+          {result.createError}
+        </div>
       ) : null}
       {voicePreviews.length ? (
-        <div className="grid gap-2">
+        <div className="grid gap-3 mt-1">
           {voicePreviews.map(preview => {
             const createdId = result.createdPreviewIds?.[preview.generated_voice_id]
             return (
               <div className="preview-card" key={preview.generated_voice_id || preview.id}>
                 <div className="min-w-0">
-                  <div className="truncate font-semibold">{preview.name || preview.generated_voice_id || preview.id}</div>
-                  <div className="text-sm text-slate-500">
+                  <div className="truncate font-semibold text-slate-200">{preview.name || preview.generated_voice_id || preview.id}</div>
+                  <div className="text-xs text-slate-400 font-mono mt-1">
                     {[preview.language, preview.preview_mime_type, formatDuration(preview.duration_seconds)].filter(Boolean).join(' · ')}
                   </div>
-                  {preview.preview_audio ? <audio className="mt-2 w-full" controls src={preview.preview_audio} /> : null}
+                  {preview.preview_audio ? <audio className="mt-3 w-full" controls src={preview.preview_audio} /> : null}
                 </div>
                 <button
-                  className="btn-primary shrink-0"
+                  className="btn-primary shrink-0 self-center"
                   disabled={Boolean(createdId)}
                   type="button"
                   onClick={() => onCreatePreview?.(preview)}
@@ -1447,7 +1474,13 @@ function ResultPreview({ onCreatePreview, result }) {
           })}
         </div>
       ) : null}
-      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-sm text-slate-100">{result.content}</pre>
+      <div className="flex flex-col gap-2 mt-2">
+        <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-t-xl border-b-0">
+          <span>RESPONSE DATA</span>
+          <span className="text-[10px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded font-mono">JSON</span>
+        </div>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-b-xl border border-slate-800/80 bg-slate-950/80 p-4 text-xs text-emerald-400 font-mono leading-relaxed shadow-inner">{result.content}</pre>
+      </div>
     </div>
   )
 }
