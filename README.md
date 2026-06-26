@@ -348,3 +348,10 @@ Project layout:
   returns final audio or normalized JSON where possible.
 - Upstream pricing, quotas, supported voices, and model availability are owned
   by each provider and can change independently of voxout.
+
+## 致谢 / Acknowledgments
+
+| 类别 | 致谢对象 |
+|---|---|
+| AI | [Qwen.ai](https://qwen.ai/) |
+| 社区 | [Linux.do](https://linux.do) |
