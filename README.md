@@ -1,5 +1,7 @@
 # voxout
 
+> **Developed with [Qwen3.7-Max](https://qwenlm.github.io/)** — This project was built by the AI model Qwen3.7-Max.
+
 OpenAI-compatible audio gateway for speech, transcription, sound effects, audio
 isolation, voice design, and voice cloning.
 
