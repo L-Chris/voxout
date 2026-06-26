@@ -15,6 +15,7 @@ into the `ProviderConfig` table.
 - `mimo`: Xiaomi MiMo TTS with preset voices, voice design, and ASR.
 - `gradium`: Gradium TTS, streaming TTS, ASR, voice listing, and voice cloning.
 - `elevenlabs`: ElevenLabs TTS, ASR, sound effects, isolation, voice design, and voice cloning.
+- `cambai`: Camb.ai TTS, streaming TTS, ASR, text-to-sound, audio separation, voice design, and voice cloning.
 
 ## API
 
@@ -36,9 +37,9 @@ voxout extension audio API:
 model, `input` is the text, `voice` is the voice name or id, and
 `response_format`, `speed`, `stream_format`, and `instructions` are optional.
 Use voxout's `provider` extension to choose a backend such as `default`,
-`openai`, `cartesia`, `mimo`, `gradium`, or `elevenlabs`. When `provider` is
-omitted, OpenAI model ids route to OpenAI and unique provider model ids route to
-the matching provider.
+`openai`, `cartesia`, `mimo`, `gradium`, `elevenlabs`, or `cambai`. When
+`provider` is omitted, OpenAI model ids route to OpenAI and unique provider
+model ids route to the matching provider.
 `/v1/audio/transcriptions` follows the OpenAI multipart shape: `model` is the
 ASR model, `file` is the uploaded audio, and `response_format`, `language`, and
 `prompt` are optional. Use the `provider` extension to choose a non-OpenAI ASR
@@ -48,8 +49,8 @@ Provider-specific clone fields can be passed as an `extra_params` JSON object
 form field.
 For streaming TTS, pass OpenAI-compatible `stream_format` with `audio` or
 `sse`. Streaming support is currently exposed by `default`, `openai`,
-`cartesia`, `mimo`, `gradium`, and `elevenlabs`; `elevenlabs` and `gradium`
-support raw audio streaming only.
+`cartesia`, `mimo`, `gradium`, `elevenlabs`, and `cambai`; `elevenlabs`,
+`gradium`, and `cambai` support raw audio streaming only.
 
 Stored voices are provider-neutral records. Platform-specific voice ids and
 account bindings are kept in `VoiceProviderLink`, so one voxout `voice_id` can

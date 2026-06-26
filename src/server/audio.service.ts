@@ -594,7 +594,7 @@ function assertSupportedJsonFields(body: Record<string, unknown>, allowed_fields
 async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
   const voice = request.voice
   if (!voice) return
-  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium' && providerId !== 'stepfun') {
+  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium' && providerId !== 'stepfun' && providerId !== 'cambai') {
     return
   }
   const voiceRecord = await configStore.getVoice(providerId, voice)
@@ -1069,6 +1069,13 @@ function resolveSpeechResponseFormat(providerId: string, value: string | undefin
     if (format === 'mp3' || format === 'opus' || format === 'flac' || format === 'wav' || format === 'pcm') return { provider_format: format, response_format: format }
     throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
   }
+  if (providerId === 'cambai') {
+    if (format === 'mp3' || format === 'wav' || format === 'flac' || format === 'pcm') return { provider_format: format, response_format: format }
+    if (format === 'aac') return { provider_format: 'adts', response_format: 'aac' }
+    if (format === 'adts') return { provider_format: 'adts' }
+    if (format.startsWith('pcm_')) return { provider_format: format }
+    throw new Error(`Provider ${providerId} cannot synthesize response_format "${format}" without an audio encoder`)
+  }
   return { provider_format: format, response_format: format }
 }
 
@@ -1090,6 +1097,10 @@ function resolveAudioEffectResponseFormat(providerId: string, value: string | un
   if (providerId === 'mock') {
     if (format === 'wav') return { provider_format: 'wav', response_format: 'wav' }
     if (format === 'pcm') return { provider_format: 'wav', response_format: 'pcm', conversion: 'wav-to-pcm' }
+    throw new Error(`Provider ${providerId} cannot generate response_format "${format}" without an audio encoder`)
+  }
+  if (providerId === 'cambai') {
+    if (format === 'wav') return { provider_format: 'wav', response_format: 'wav' }
     throw new Error(`Provider ${providerId} cannot generate response_format "${format}" without an audio encoder`)
   }
   return { provider_format: format, response_format: format }

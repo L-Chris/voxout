@@ -1,4 +1,5 @@
 import { CartesiaProvider } from './cartesia.js'
+import { CambAiProvider } from './cambai.js'
 import { ElevenLabsProvider } from './elevenlabs.js'
 import { DefaultProvider } from './default/index.js'
 import { GradiumProvider } from './gradium.js'
@@ -230,6 +231,13 @@ registerSoundEffectProvider(elevenLabsProvider)
 registerAudioIsolationProvider(elevenLabsProvider)
 registerVoiceDesignProvider(elevenLabsProvider)
 registerVoiceCloneProvider(elevenLabsProvider)
+const cambAiProvider = new CambAiProvider()
+registerTtsProvider(cambAiProvider)
+registerAsrProvider(cambAiProvider)
+registerSoundEffectProvider(cambAiProvider)
+registerAudioIsolationProvider(cambAiProvider)
+registerVoiceDesignProvider(cambAiProvider)
+registerVoiceCloneProvider(cambAiProvider)
 registerAsrProvider(new MockAsrProvider())
 registerAsrProvider(mimoProvider)
 registerVoiceDesignProvider(mimoProvider)
