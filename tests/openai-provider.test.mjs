@@ -190,6 +190,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
     return new Response(JSON.stringify({
       text: 'Recognized by OpenAI',
       segments: [{ start: 0, end: 0.8, text: 'Recognized by OpenAI' }],
+      words: [{ start: 0, end: 0.5, word: 'Recognized' }],
       logprobs: [{ token: 'Recognized', bytes: [82], logprob: -0.01 }],
     }), {
       status: 200,
@@ -243,6 +244,7 @@ test('OpenAI provider sends speech-to-text requests', async () => {
   assert.equal(result.raw.text, 'Recognized by OpenAI')
   assert.deepEqual(result.raw.logprobs, [{ token: 'Recognized', bytes: [82], logprob: -0.01 }])
   assert.deepEqual(result.segments, [{ from: 0, to: 0.8, content: 'Recognized by OpenAI' }])
+  assert.deepEqual(result.words, [{ from: 0, to: 0.5, content: 'Recognized' }])
 })
 
 test('OpenAI provider streams speech-to-text requests', async () => {

@@ -1213,7 +1213,7 @@ function transcriptionTextContentType(format: 'text' | 'srt' | 'vtt'): string {
 
 function formatTranscriptionText(format: 'text' | 'srt' | 'vtt', result: TranscribeResult): string {
   if (format === 'text') return result.text ?? ''
-  const segments = result.segments ?? []
+  const segments = result.segments?.length ? result.segments : result.words ?? []
   if (!segments.length) return result.text ?? ''
   if (format === 'vtt') {
     return `WEBVTT\n\n${segments.map((segment, index) => [
@@ -1245,6 +1245,13 @@ function formatDetailedTranscriptionResult(text: string, result: TranscribeResul
       start: segment.from,
       end: segment.to,
       text: segment.content,
+    }))
+  }
+  if (!Array.isArray(payload.words) && result.words?.length) {
+    payload.words = result.words.map(word => ({
+      word: word.content,
+      start: word.from,
+      end: word.to,
     }))
   }
   return payload

@@ -86,6 +86,11 @@ interface OpenAiTranscriptionPayload {
     end?: number
     text?: string
   }>
+  words?: Array<{
+    start?: number
+    end?: number
+    word?: string
+  }>
 }
 
 export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvider {
@@ -244,6 +249,11 @@ export class OpenAiProvider implements TtsProvider, AsrProvider, VoiceCloneProvi
         from: segment.start ?? 0,
         to: segment.end ?? 0,
         content: segment.text ?? '',
+      })),
+      words: payload.words?.map(word => ({
+        from: word.start ?? 0,
+        to: word.end ?? 0,
+        content: word.word ?? '',
       })),
       raw: request.format === 'raw' || request.include?.length ? payload : undefined,
     }

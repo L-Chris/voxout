@@ -153,6 +153,7 @@ test('ElevenLabs provider sends speech-to-text requests', async () => {
   assert.equal(captured.diarize, 'true')
   assert.deepEqual(captured.custom_tags, ['meeting', 'clean'])
   assert.equal(result.text, 'Recognized text')
+  assert.deepEqual(result.words, [{ from: 0, to: 0.5, content: 'Recognized' }])
   assert.equal(result.raw.text, 'Recognized text')
 })
 

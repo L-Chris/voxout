@@ -115,11 +115,18 @@ export interface TranscribeSegment {
   content: string
 }
 
+export interface TranscribeWord {
+  from: number
+  to: number
+  content: string
+}
+
 export interface TranscribeResult {
   provider: string
   format: string
   text?: string
   segments?: TranscribeSegment[]
+  words?: TranscribeWord[]
   raw?: unknown
 }
 

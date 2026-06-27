@@ -1211,6 +1211,30 @@ test('POST /v1/audio/transcriptions returns OpenAI-style verbose JSON segments',
   assert.equal(payload.segments[0].content, undefined)
 })
 
+test('POST /v1/audio/transcriptions returns OpenAI-style verbose JSON words', async () => {
+  const form = new FormData()
+  form.set('provider', 'mock-asr')
+  form.set('model', 'mock-asr-model')
+  form.set('response_format', 'verbose_json')
+  form.set('timestamp_granularities[]', 'word')
+  form.set('file', new Blob([Buffer.from('fake audio bytes')], { type: 'audio/wav' }), 'sample.wav')
+
+  const response = await fetch(`${base_url}/v1/audio/transcriptions`, {
+    method: 'POST',
+    body: form,
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.text, 'Mock transcript for inline audio')
+  assert.deepEqual(payload.words, [
+    { word: 'Mock', start: 0, end: 0.25 },
+    { word: 'transcript', start: 0.25, end: 0.75 },
+  ])
+  assert.equal(payload.words[0].from, undefined)
+  assert.equal(payload.words[0].content, undefined)
+})
+
 test('POST /v1/audio/transcriptions rejects unsupported streaming providers', async () => {
   const form = new FormData()
   form.set('provider', 'mock-asr')

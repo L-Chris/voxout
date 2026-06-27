@@ -208,7 +208,7 @@ export class ElevenLabsProvider implements TtsProvider, AsrProvider, SoundEffect
       provider: this.id,
       format: request.format ?? 'txt',
       text,
-      segments: normalizeWords(payload.words),
+      words: normalizeWords(payload.words),
       raw: request.format === 'raw' ? payload : undefined,
     }
   }

@@ -134,6 +134,12 @@ export class MockAsrProvider implements AsrProvider {
       segments: request.format === 'raw' || request.format === 'srt' || request.format === 'vtt'
         ? [{ from: 0, to: 1.25, content: text }]
         : undefined,
+      words: request.timestamp_granularities?.includes('word')
+        ? [
+            { from: 0, to: 0.25, content: 'Mock' },
+            { from: 0.25, to: 0.75, content: 'transcript' },
+          ]
+        : undefined,
       raw: request.format === 'raw' ? { text } : undefined,
     }
   }
