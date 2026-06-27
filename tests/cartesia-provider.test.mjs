@@ -252,7 +252,11 @@ test('Cartesia provider exposes metadata', async () => {
   assert.equal(cartesia.capabilities.tts_streaming, true)
   assert.equal(cartesia.capabilities.asr, true)
   assert.equal(cartesia.capabilities.voice_clone, true)
-  assert.ok(cartesia.fields.find(field => field.key === 'tts_model').options.includes('sonic-3.5'))
+  const ttsModels = cartesia.fields.find(field => field.key === 'tts_model').options
+  assert.ok(ttsModels.includes('sonic-3.5'))
+  assert.ok(ttsModels.includes('sonic-3.5-2026-05-04'))
+  assert.ok(ttsModels.includes('sonic-turbo-2025-06-04'))
+  assert.equal(ttsModels.includes('sonic-3-latest'), false)
   assert.ok(cartesia.fields.find(field => field.key === 'asr_model').options.includes('ink-whisper'))
 })
 

@@ -32,7 +32,20 @@ const DEFAULT_TTS_MODEL = 'sonic-3.5'
 const DEFAULT_ASR_MODEL = 'ink-whisper'
 const DEFAULT_VOICE_ID = 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4'
 const DEFAULT_OUTPUT_FORMAT = 'mp3'
-const CARTESIA_TTS_MODELS = ['sonic-3.5', 'sonic-3', 'sonic-latest']
+const CARTESIA_TTS_MODELS = [
+  'sonic-3.5',
+  'sonic-3.5-2026-05-04',
+  'sonic-3',
+  'sonic-3-2026-01-12',
+  'sonic-3-2025-10-27',
+  'sonic-2',
+  'sonic-2-2025-06-11',
+  'sonic-2-2025-05-08',
+  'sonic-2-2025-04-16',
+  'sonic-turbo',
+  'sonic-turbo-2025-06-04',
+  'sonic-latest',
+]
 const CARTESIA_ASR_MODELS = [DEFAULT_ASR_MODEL]
 
 interface CartesiaVoicePayload {
