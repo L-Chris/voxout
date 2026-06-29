@@ -5,3 +5,4 @@ audio/
 .env
 .codegraph/
 .agent/
+AGENTS.md

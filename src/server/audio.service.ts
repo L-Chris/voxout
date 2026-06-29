@@ -594,7 +594,7 @@ function assertSupportedJsonFields(body: Record<string, unknown>, allowed_fields
 async function resolveVoiceForSynthesis(providerId: string, request: SynthesizeRequest): Promise<void> {
   const voice = request.voice
   if (!voice) return
-  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium' && providerId !== 'stepfun' && providerId !== 'cambai') {
+  if (providerId !== 'openai' && providerId !== 'elevenlabs' && providerId !== 'mimo' && providerId !== 'cartesia' && providerId !== 'gradium' && providerId !== 'stepfun' && providerId !== 'cambai' && providerId !== 'boson') {
     return
   }
   const voiceRecord = await configStore.getVoice(providerId, voice)

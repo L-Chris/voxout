@@ -11,6 +11,7 @@ import { AudioController } from './server/audio.controller.js'
 import { AudioService } from './server/audio.service.js'
 import { ErrorMiddleware } from './server/error.middleware.js'
 import { sendError, setCorsHeaders } from './server/http.js'
+import { VideoController } from './server/video.controller.js'
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url))
 
@@ -46,7 +47,7 @@ app.use(async (ctx, next) => {
 })
 
 useKoaServer(app, {
-  controllers: [ApiController, AudioController],
+  controllers: [ApiController, AudioController, VideoController],
   middlewares: [ErrorMiddleware],
   defaultErrorHandler: false,
   validation: false,

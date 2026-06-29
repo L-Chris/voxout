@@ -25,6 +25,9 @@ function App() {
   const [cloneFile, setCloneFile] = useState(null)
   const [transcriptionForm, setTranscriptionForm] = useState(defaultTranscriptionForm())
   const [transcriptionFile, setTranscriptionFile] = useState(null)
+  const [videoForm, setVideoForm] = useState(defaultVideoForm())
+  const [videoImageFile, setVideoImageFile] = useState(null)
+  const [videoAudioFile, setVideoAudioFile] = useState(null)
 
   const api_base_url = normalize_api_base_url(appConfig.api_base_url)
   const selectedProvider = providers.find(provider => provider.id === selectedProviderId) ?? providers[0]
@@ -53,6 +56,9 @@ function App() {
     setCloneFile(null)
     setTranscriptionForm(defaultTranscriptionForm(selectedProvider))
     setTranscriptionFile(null)
+    setVideoForm(defaultVideoForm(selectedProvider))
+    setVideoImageFile(null)
+    setVideoAudioFile(null)
     setIsConfigOpen(false)
     setSaveStatus('')
     setFormValues({})
@@ -277,6 +283,8 @@ function App() {
         await runEffectTest()
       } else if (testMode === 'asr') {
         await runTranscriptionTest()
+      } else if (testMode === 'video') {
+        await runVideoTest()
       } else {
         await runSpeechTest()
       }
@@ -516,6 +524,143 @@ function App() {
     }
   }
 
+  async function runVideoTest() {
+    if (videoForm.operation === 'retrieve' || videoForm.operation === 'download') {
+      const videoId = videoForm.video_id.trim()
+      if (!videoId) throw new Error('video_id is required.')
+      const query = new URLSearchParams({ provider: selectedProvider.id })
+      const path = videoForm.operation === 'download'
+        ? `/v1/videos/${encodeURIComponent(videoId)}/content?${query.toString()}`
+        : `/v1/videos/${encodeURIComponent(videoId)}?${query.toString()}`
+      const response = await fetch(apiUrl(path, api_base_url))
+      if (!response.ok) throw new Error(await readError(response))
+      if (videoForm.operation === 'download') {
+        const blob = await response.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        setTestResult({
+          kind: 'video',
+          objectUrl,
+          mime_type: response.headers.get('content-type') || blob.type,
+          size: blob.size,
+          endpoint: 'GET /v1/videos/{video_id}/content',
+        })
+        return
+      }
+      const payload = await response.json()
+      setTestResult({
+        kind: 'json',
+        payload,
+        content: JSON.stringify(payload, null, 2),
+        mime_type: 'application/json',
+        endpoint: 'GET /v1/videos/{video_id}',
+      })
+      return
+    }
+
+    const form = new FormData()
+    form.set('provider', selectedProvider.id)
+    if (videoForm.model.trim()) form.set('model', videoForm.model.trim())
+    form.set('size', videoForm.size)
+    if (videoImageFile) {
+      form.set('ref_image', videoImageFile)
+    } else if (videoForm.ref_image.trim()) {
+      form.set('ref_image', videoForm.ref_image.trim())
+    } else {
+      throw new Error('ref_image is required.')
+    }
+    if (videoForm.input_mode === 'tts') {
+      const input = videoForm.tts_input.trim()
+      if (!input) throw new Error('input_tts.input is required.')
+      form.set('input_tts', JSON.stringify(compactPayload({
+        input,
+        model: videoForm.tts_model.trim() || undefined,
+        voice: videoForm.tts_voice.trim() || undefined,
+        response_format: videoForm.tts_response_format,
+      })))
+    } else if (videoAudioFile) {
+      form.set('input', videoAudioFile)
+    } else if (videoForm.input.trim()) {
+      form.set('input', videoForm.input.trim())
+    } else {
+      throw new Error('input is required.')
+    }
+    appendExtraParams(form, videoForm.extra_params)
+
+    const response = await fetch(apiUrl('/v1/videos', api_base_url), {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) throw new Error(await readError(response))
+    const payload = await response.json()
+    setVideoForm(current => current.video_id || !payload.id ? current : { ...current, video_id: payload.id })
+    if (!payload.id) {
+      setTestResult({
+        kind: 'json',
+        payload,
+        content: JSON.stringify(payload, null, 2),
+        mime_type: 'application/json',
+        endpoint: 'POST /v1/videos',
+      })
+      return
+    }
+
+    setVideoProgressResult(payload, 'POST /v1/videos')
+    const finalPayload = await pollVideoResult(payload.id)
+    const contentQuery = new URLSearchParams({ provider: selectedProvider.id })
+    const contentResponse = await fetch(apiUrl(`/v1/videos/${encodeURIComponent(payload.id)}/content?${contentQuery.toString()}`, api_base_url))
+    if (!contentResponse.ok) throw new Error(await readError(contentResponse))
+    const blob = await contentResponse.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    setTestResult({
+      kind: 'video',
+      objectUrl,
+      payload: finalPayload,
+      content: JSON.stringify(finalPayload, null, 2),
+      mime_type: contentResponse.headers.get('content-type') || blob.type,
+      size: blob.size,
+      endpoint: 'GET /v1/videos/{video_id}/content',
+    })
+  }
+
+  async function pollVideoResult(videoId) {
+    const timeoutMs = 10 * 60 * 1000
+    const intervalMs = 3000
+    const deadline = Date.now() + timeoutMs
+    let attempt = 0
+    let lastPayload = null
+    while (Date.now() <= deadline) {
+      if (attempt > 0) await delay(intervalMs)
+      attempt += 1
+      const query = new URLSearchParams({ provider: selectedProvider.id })
+      const response = await fetch(apiUrl(`/v1/videos/${encodeURIComponent(videoId)}?${query.toString()}`, api_base_url), {
+        cache: 'no-store',
+      })
+      if (!response.ok) throw new Error(await readError(response))
+      const payload = await response.json()
+      lastPayload = payload
+      setVideoProgressResult(payload, 'GET /v1/videos/{video_id}', attempt)
+      const status = normalizeVideoStatus(payload.status)
+      if (isVideoSuccessStatus(status)) return payload
+      if (isVideoErrorStatus(status)) {
+        throw new Error(payload.error?.message || payload.error || `Video task failed with status: ${payload.status || 'unknown'}`)
+      }
+    }
+    throw new Error(`Video task did not complete after ${Math.round(timeoutMs / 1000)}s. Last response: ${JSON.stringify(lastPayload)}`)
+  }
+
+  function setVideoProgressResult(payload, endpoint, attempt = 0) {
+    const progress = formatVideoProgress(payload)
+    const status = payload?.status ? String(payload.status) : 'pending'
+    setTestStatus(`${status}${progress ? ` · ${progress}` : ''}${attempt ? ` · poll ${attempt}` : ''}`)
+    setTestResult({
+      kind: 'json',
+      payload,
+      content: JSON.stringify(payload, null, 2),
+      mime_type: 'application/json',
+      endpoint,
+    })
+  }
+
   const capabilityText = useMemo(() => {
     if (!selectedProvider) return ''
     return Object.entries(selectedProvider.capabilities || {})
@@ -613,6 +758,17 @@ function App() {
                       />
                     ) : testMode === 'effect' ? (
                       <EffectTestForm form={effectForm} onFormChange={setEffectForm} />
+                    ) : testMode === 'video' ? (
+                      <VideoTestForm
+                        audioFile={videoAudioFile}
+                        form={videoForm}
+                        imageFile={videoImageFile}
+                        modelField={getProviderField(selectedProvider, 'video_model')}
+                        onAudioFileChange={setVideoAudioFile}
+                        onFormChange={setVideoForm}
+                        onImageFileChange={setVideoImageFile}
+                        voiceField={getProviderField(selectedProvider, 'tts_voice')}
+                      />
                     ) : testMode === 'asr' ? (
                       <TranscriptionTestForm
                         file={transcriptionFile}
@@ -1210,6 +1366,205 @@ function AudioFileControl({ file, inputId, onFileChange }) {
   )
 }
 
+function VideoTestForm({
+  audioFile,
+  form,
+  imageFile,
+  modelField,
+  onAudioFileChange,
+  onFormChange,
+  onImageFileChange,
+  voiceField,
+}) {
+  const modelListId = modelField?.options?.length ? 'video-model-options' : undefined
+  const voiceListId = voiceField?.options?.length ? 'video-tts-voice-options' : undefined
+  const isCreate = form.operation === 'create'
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <label className="grid gap-1.5 text-sm font-semibold">
+        operation
+        <select
+          className="input"
+          value={form.operation}
+          onChange={event => onFormChange({ ...form, operation: event.target.value })}
+        >
+          <option value="create">create</option>
+          <option value="retrieve">retrieve</option>
+          <option value="download">download</option>
+        </select>
+      </label>
+      {!isCreate ? (
+        <label className="grid gap-1.5 text-sm font-semibold">
+          video_id
+          <input
+            className="input"
+            value={form.video_id}
+            onChange={event => onFormChange({ ...form, video_id: event.target.value })}
+          />
+        </label>
+      ) : null}
+      {isCreate ? (
+        <>
+          {modelField ? (
+            <label className="grid gap-1.5 text-sm font-semibold">
+              model
+              <input
+                className="input"
+                list={modelListId}
+                placeholder={modelField.placeholder || 'provider default'}
+                value={form.model}
+                onChange={event => onFormChange({ ...form, model: event.target.value })}
+              />
+              {modelListId ? (
+                <datalist id={modelListId}>
+                  {modelField.options.map(option => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+              ) : null}
+            </label>
+          ) : null}
+          <label className="grid gap-1.5 text-sm font-semibold">
+            size
+            <select
+              className="input"
+              value={form.size}
+              onChange={event => onFormChange({ ...form, size: event.target.value })}
+            >
+              <option value="640x640">640x640</option>
+              <option value="640x480">640x480</option>
+              <option value="480x640">480x640</option>
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+            ref_image
+            <input
+              className="input"
+              placeholder="https://example.com/avatar.png"
+              value={form.ref_image}
+              onChange={event => onFormChange({ ...form, ref_image: event.target.value })}
+            />
+          </label>
+          <FilePicker
+            accept="image/png,image/jpeg,image/webp"
+            file={imageFile}
+            inputId="video-ref-image"
+            label="ref_image_file"
+            onFileChange={onImageFileChange}
+          />
+          <label className="grid gap-1.5 text-sm font-semibold">
+            input_mode
+            <select
+              className="input"
+              value={form.input_mode}
+              onChange={event => onFormChange({ ...form, input_mode: event.target.value })}
+            >
+              <option value="tts">input_tts</option>
+              <option value="audio">input</option>
+            </select>
+          </label>
+          {form.input_mode === 'tts' ? (
+            <>
+              <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+                input_tts.input
+                <textarea
+                  className="textarea min-h-24"
+                  value={form.tts_input}
+                  onChange={event => onFormChange({ ...form, tts_input: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold">
+                input_tts.voice
+                <input
+                  className="input"
+                  list={voiceListId}
+                  placeholder={voiceField?.placeholder || 'preset or custom voice ID'}
+                  value={form.tts_voice}
+                  onChange={event => onFormChange({ ...form, tts_voice: event.target.value })}
+                />
+                {voiceListId ? (
+                  <datalist id={voiceListId}>
+                    {voiceField.options.map(option => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold">
+                input_tts.model
+                <input
+                  className="input"
+                  placeholder="higgs-tts-3"
+                  value={form.tts_model}
+                  onChange={event => onFormChange({ ...form, tts_model: event.target.value })}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold">
+                input_tts.response_format
+                <select
+                  className="input"
+                  value={form.tts_response_format}
+                  onChange={event => onFormChange({ ...form, tts_response_format: event.target.value })}
+                >
+                  <option value="mp3">mp3</option>
+                  <option value="wav">wav</option>
+                  <option value="aac">aac</option>
+                  <option value="flac">flac</option>
+                  <option value="opus">opus</option>
+                  <option value="pcm">pcm</option>
+                </select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+                input
+                <input
+                  className="input"
+                  placeholder="https://example.com/speech.mp3"
+                  value={form.input}
+                  onChange={event => onFormChange({ ...form, input: event.target.value })}
+                />
+              </label>
+              <FilePicker
+                accept="audio/aac,audio/wav,audio/mpeg,audio/flac,audio/ogg"
+                file={audioFile}
+                inputId="video-driving-audio"
+                label="input_file"
+                onFileChange={onAudioFileChange}
+              />
+            </>
+          )}
+          <ExtraParamsField value={form.extra_params} onChange={extra_params => onFormChange({ ...form, extra_params })} />
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function FilePicker({ accept, file, inputId, label, onFileChange }) {
+  return (
+    <div className="grid gap-1.5 text-sm font-semibold md:col-span-2">
+      <label htmlFor={inputId}>{label}</label>
+      <div className="audio-source-actions rounded-lg border border-slate-800">
+        <span className="truncate text-sm font-normal text-slate-500">
+          {file ? file.name : 'Choose file'}
+        </span>
+        <label className="btn-secondary shrink-0 cursor-pointer" htmlFor={inputId}>
+          Choose file
+        </label>
+        <input
+          accept={accept}
+          className="sr-only"
+          id={inputId}
+          type="file"
+          onChange={event => onFileChange(event.target.files?.[0] ?? null)}
+        />
+      </div>
+    </div>
+  )
+}
+
 function EffectTestForm({ form, onFormChange }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -1435,6 +1790,29 @@ function ResultPreview({ onCreatePreview, result }) {
       </div>
     )
   }
+  if (result.kind === 'video') {
+    return (
+      <div className="mt-5 grid gap-4 rounded-xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-sm">
+        <div className="text-xs text-slate-400 font-mono flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <span>{result.endpoint}</span>
+          <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500">{result.mime_type} · {formatBytes(result.size)}</span>
+        </div>
+        <video className="mt-2 w-full max-h-[32rem] rounded-lg bg-black" controls src={result.objectUrl} />
+        <div className="mt-1">
+          <a className="link" href={result.objectUrl} rel="noreferrer" target="_blank">Open video preview</a>
+        </div>
+        {result.content ? (
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-t-xl border-b-0">
+              <span>RESPONSE DATA</span>
+              <span className="text-[10px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded font-mono">JSON</span>
+            </div>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-b-xl border border-slate-800/80 bg-slate-950/80 p-4 text-xs text-emerald-400 font-mono leading-relaxed shadow-inner">{result.content}</pre>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
   const voicePreviews = getVoicePreviewItems(result.payload)
   return (
     <div className="mt-5 grid gap-4 rounded-xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl shadow-slate-950/10 backdrop-blur-sm">
@@ -1503,6 +1881,29 @@ async function readError(response) {
   }
 }
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function normalizeVideoStatus(status) {
+  return String(status ?? '').trim().toLowerCase()
+}
+
+function isVideoSuccessStatus(status) {
+  return ['completed', 'complete', 'succeeded', 'success', 'done', 'finished'].includes(status)
+}
+
+function isVideoErrorStatus(status) {
+  return ['failed', 'failure', 'error', 'cancelled', 'canceled', 'expired'].includes(status)
+}
+
+function formatVideoProgress(payload) {
+  const value = payload?.progress
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const percent = value <= 1 ? value * 100 : value
+  return `${Math.max(0, Math.min(100, Math.round(percent)))}%`
+}
+
 function formatErrorPayload(payload) {
   const error = payload?.error
   if (!error) return ''
@@ -1526,11 +1927,12 @@ function supportsTestMode(provider, mode) {
   if (mode === 'isolation') return Boolean(provider.capabilities?.isolation)
   if (mode === 'design') return Boolean(provider.capabilities?.voice_design)
   if (mode === 'clone') return Boolean(provider.capabilities?.voice_clone)
+  if (mode === 'video') return Boolean(provider.capabilities?.video)
   return Boolean(provider.capabilities?.tts)
 }
 
 function getSupportedTestModes(provider) {
-  return ['tts', 'asr', 'effect', 'isolation', 'design', 'clone']
+  return ['tts', 'asr', 'effect', 'isolation', 'design', 'clone', 'video']
     .filter(mode => supportsTestMode(provider, mode))
 }
 
@@ -1544,6 +1946,7 @@ function getTestModeLabel(mode) {
   if (mode === 'effect') return 'Effect'
   if (mode === 'isolation') return 'Isolation'
   if (mode === 'clone') return 'Clone'
+  if (mode === 'video') return 'Video'
   return 'Design'
 }
 
@@ -1608,6 +2011,23 @@ function defaultTranscriptionForm(provider) {
     temperature: '',
     stream: false,
     response_format: 'json',
+    extra_params: '',
+  }
+}
+
+function defaultVideoForm(provider) {
+  return {
+    operation: 'create',
+    model: getProviderField(provider, 'video_model') ? provider?.config?.video_model ?? '' : '',
+    size: provider?.config?.video_size ?? '640x640',
+    ref_image: '',
+    input_mode: 'tts',
+    input: '',
+    tts_input: 'Hello from voxout.',
+    tts_model: 'higgs-tts-3',
+    tts_voice: provider?.config?.tts_voice ?? 'chloe',
+    tts_response_format: 'mp3',
+    video_id: '',
     extra_params: '',
   }
 }

@@ -1,5 +1,6 @@
 import { CartesiaProvider } from './cartesia.js'
 import { CambAiProvider } from './cambai.js'
+import { BosonProvider } from './boson.js'
 import { ElevenLabsProvider } from './elevenlabs.js'
 import { DefaultProvider } from './default/index.js'
 import { GradiumProvider } from './gradium.js'
@@ -15,6 +16,7 @@ import type {
   ProviderRuntimeConfig,
   SoundEffectProvider,
   TtsProvider,
+  VideoProvider,
   VoiceCloneProvider,
   VoiceDesignProvider,
 } from '../types.js'
@@ -33,6 +35,7 @@ const soundEffectProviders = new Map<string, SoundEffectProvider>()
 const audioIsolationProviders = new Map<string, AudioIsolationProvider>()
 const voiceDesignProviders = new Map<string, VoiceDesignProvider>()
 const voiceCloneProviders = new Map<string, VoiceCloneProvider>()
+const videoProviders = new Map<string, VideoProvider>()
 
 export function registerTtsProvider(provider: TtsProvider): void {
   ttsProviders.set(provider.id, provider)
@@ -56,6 +59,10 @@ export function registerVoiceDesignProvider(provider: VoiceDesignProvider): void
 
 export function registerVoiceCloneProvider(provider: VoiceCloneProvider): void {
   voiceCloneProviders.set(provider.id, provider)
+}
+
+export function registerVideoProvider(provider: VideoProvider): void {
+  videoProviders.set(provider.id, provider)
 }
 
 export function getTtsProvider(id = 'mock'): TtsProvider {
@@ -106,13 +113,22 @@ export function getVoiceCloneProvider(id: string): VoiceCloneProvider {
   return provider
 }
 
-export function getProvider(id: string): TtsProvider | AsrProvider | SoundEffectProvider | AudioIsolationProvider | VoiceDesignProvider | VoiceCloneProvider {
+export function getVideoProvider(id = 'boson'): VideoProvider {
+  const provider = videoProviders.get(id)
+  if (!provider) {
+    throw new Error(`Unknown video provider: ${id}`)
+  }
+  return provider
+}
+
+export function getProvider(id: string): TtsProvider | AsrProvider | SoundEffectProvider | AudioIsolationProvider | VoiceDesignProvider | VoiceCloneProvider | VideoProvider {
   const provider = ttsProviders.get(id)
     ?? asrProviders.get(id)
     ?? soundEffectProviders.get(id)
     ?? audioIsolationProviders.get(id)
     ?? voiceDesignProviders.get(id)
     ?? voiceCloneProviders.get(id)
+    ?? videoProviders.get(id)
   if (!provider) {
     throw new Error(`Unknown provider: ${id}`)
   }
@@ -147,6 +163,10 @@ export function listVoiceCloneProviders(): VoiceCloneProvider[] {
   return [...voiceCloneProviders.values()]
 }
 
+export function listVideoProviders(): VideoProvider[] {
+  return [...videoProviders.values()]
+}
+
 export function listProviderDefinitions(
   configs = new Map<string, ProviderRuntimeConfig>(),
   options: { includeInternal?: boolean } = {},
@@ -159,6 +179,7 @@ export function listProviderDefinitions(
       ...audioIsolationProviders.values(),
       ...voiceDesignProviders.values(),
       ...voiceCloneProviders.values(),
+      ...videoProviders.values(),
     ].map(provider => [provider.id, provider]),
   ).values()].filter(provider => options.includeInternal || !INTERNAL_PROVIDER_IDS.has(provider.id))
   return providers.map(provider => {
@@ -238,6 +259,10 @@ registerSoundEffectProvider(cambAiProvider)
 registerAudioIsolationProvider(cambAiProvider)
 registerVoiceDesignProvider(cambAiProvider)
 registerVoiceCloneProvider(cambAiProvider)
+const bosonProvider = new BosonProvider()
+registerTtsProvider(bosonProvider)
+registerVoiceCloneProvider(bosonProvider)
+registerVideoProvider(bosonProvider)
 registerAsrProvider(new MockAsrProvider())
 registerAsrProvider(mimoProvider)
 registerVoiceDesignProvider(mimoProvider)

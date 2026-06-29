@@ -4,6 +4,7 @@ import {
   getAudioIsolationProvider,
   getSoundEffectProvider,
   getTtsProvider,
+  getVideoProvider,
   getVoiceCloneProvider,
   getVoiceDesignProvider,
   isInternalProviderId,
@@ -51,7 +52,12 @@ export function assertKnownProvider(providerId: string): void {
             getVoiceDesignProvider(providerId)
             return
           } catch {
-            getVoiceCloneProvider(providerId)
+            try {
+              getVoiceCloneProvider(providerId)
+              return
+            } catch {
+              getVideoProvider(providerId)
+            }
           }
         }
       }

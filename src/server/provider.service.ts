@@ -7,6 +7,7 @@ import {
   listProviderDefinitions,
   listSoundEffectProviders,
   listTtsProviders,
+  listVideoProviders,
   listVoiceCloneProviders,
   listVoiceDesignProviders,
 } from '../providers/registry.js'
@@ -116,6 +117,7 @@ function listOpenAiModels(): Array<{
     ...listAudioIsolationProviders(),
     ...listVoiceDesignProviders(),
     ...listVoiceCloneProviders(),
+    ...listVideoProviders(),
   ].filter(provider => !isInternalProviderId(provider.id))
   const uniqueProviders = [...new Map(providers.map(provider => [provider.id, provider])).values()]
   const providerIds = new Set(uniqueProviders.map(provider => provider.id))
@@ -179,6 +181,7 @@ function getModelFieldCapability(fieldKey: string): keyof ProviderCapabilities |
   if (fieldKey === 'asr_model') return 'asr'
   if (fieldKey === 'sound_effect_model') return 'sound_effects'
   if (fieldKey === 'voice_design_model') return 'voice_design'
+  if (fieldKey === 'video_model') return 'video'
   return undefined
 }
 

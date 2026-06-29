@@ -12,6 +12,8 @@ export interface TtsProviderCapabilities {
   tts_streaming?: boolean
   asr?: boolean
   asr_streaming?: boolean
+  video?: boolean
+  video_streaming?: boolean
   voice_design?: boolean
   voice_clone?: boolean
   sound_effects?: boolean
@@ -219,6 +221,33 @@ export interface AudioGenerationResult {
   duration_ms: number
 }
 
+export interface ProviderFile {
+  data: Buffer
+  mime_type: string
+  file_name: string
+}
+
+export interface VideoCreateRequest {
+  provider?: string
+  model?: string
+  ref_image: string | ProviderFile
+  input?: string | ProviderFile
+  input_tts?: JsonObject
+  size?: '640x640' | '640x480' | '480x640'
+  extra_params?: JsonObject
+}
+
+export interface VideoContentResult {
+  video: Buffer
+  mime_type: string
+}
+
+export interface VideoStreamResult {
+  stream: ReadableStream<Uint8Array>
+  mime_type: string
+  video_id?: string
+}
+
 export interface AsrProvider {
   readonly id: string
   readonly name: string
@@ -262,6 +291,17 @@ export interface VoiceCloneProvider {
   readonly capabilities?: ProviderCapabilities
   readonly fields?: ProviderFieldDefinition[]
   cloneVoice(request: VoiceCloneRequest, context?: ProviderContext): Promise<VoiceCloneResult>
+}
+
+export interface VideoProvider {
+  readonly id: string
+  readonly name: string
+  readonly capabilities?: ProviderCapabilities
+  readonly fields?: ProviderFieldDefinition[]
+  createVideo(request: VideoCreateRequest, context?: ProviderContext): Promise<JsonObject>
+  retrieveVideo(video_id: string, context?: ProviderContext): Promise<JsonObject>
+  downloadVideoContent(video_id: string, variant: 'video' | undefined, context?: ProviderContext): Promise<VideoContentResult>
+  streamVideo?(request: VideoCreateRequest, context?: ProviderContext): Promise<VideoStreamResult>
 }
 
 export interface ProviderRuntimeConfig {

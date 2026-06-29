@@ -61,10 +61,16 @@ export function sendBinary(res: ServerResponse, value: Buffer, contentType: stri
   res.end(value)
 }
 
-export function sendStream(res: ServerResponse, stream: ReadableStream<Uint8Array>, contentType: string): void {
+export function sendStream(
+  res: ServerResponse,
+  stream: ReadableStream<Uint8Array>,
+  contentType: string,
+  headers: Record<string, string> = {},
+): void {
   res.writeHead(200, {
     'content-type': contentType,
     'cache-control': 'no-cache',
+    ...headers,
   })
   Readable.fromWeb(stream).on('error', error => res.destroy(error)).pipe(res)
 }

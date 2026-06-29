@@ -12,6 +12,9 @@ let serverProcess
 let freesoundServer
 let freesoundBaseUrl
 let freesoundLastRequest
+let bosonServer
+let bosonBaseUrl
+let bosonRequests = []
 let base_url
 let audioDir
 let serverStdout = ''
@@ -20,17 +23,23 @@ let serverStderr = ''
 before(async () => {
   const port = await getFreePort()
   const freesoundPort = await getFreePort()
+  const bosonPort = await getFreePort()
   audioDir = await mkdtemp(join(tmpdir(), 'voxout-openai-'))
   base_url = `http://127.0.0.1:${port}`
   freesoundBaseUrl = `http://127.0.0.1:${freesoundPort}`
+  bosonBaseUrl = `http://127.0.0.1:${bosonPort}`
   freesoundServer = createFreesoundServer()
   freesoundServer.listen(freesoundPort, '127.0.0.1')
   await once(freesoundServer, 'listening')
+  bosonServer = createBosonServer()
+  bosonServer.listen(bosonPort, '127.0.0.1')
+  await once(bosonServer, 'listening')
   serverProcess = spawn(process.execPath, ['dist/server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
       ...process.env,
       DATABASE_URL: '',
+      BOSON_API_BASE_URL: bosonBaseUrl,
       FREESOUND_API_BASE_URL: freesoundBaseUrl,
       FREESOUND_API_KEY: 'test-freesound-key',
       NODE_ENV: 'test',
@@ -56,6 +65,10 @@ after(async () => {
   if (freesoundServer) {
     freesoundServer.close()
     await once(freesoundServer, 'close').catch(() => {})
+  }
+  if (bosonServer) {
+    bosonServer.close()
+    await once(bosonServer, 'close').catch(() => {})
   }
   if (audioDir) await rm(audioDir, { recursive: true, force: true })
 })
@@ -126,6 +139,22 @@ test('GET /v1/models returns OpenAI-style model objects', async () => {
   assert.equal(defaultAsrModel.owned_by, 'default')
   assert.equal(defaultAsrModel.capabilities.asr, true)
   assert.deepEqual(defaultAsrModel.providers, ['default'])
+  const boson = payload.data.find(model => model.id === 'boson')
+  assert.equal(boson.object, 'model')
+  assert.equal(boson.owned_by, 'voxout')
+  assert.equal(boson.capabilities.tts, true)
+  assert.equal(boson.capabilities.tts_streaming, true)
+  assert.equal(boson.capabilities.video, true)
+  assert.equal(boson.capabilities.video_streaming, true)
+  assert.equal(boson.capabilities.voice_clone, true)
+  const bosonTtsModel = payload.data.find(model => model.id === 'higgs-tts-3')
+  assert.equal(bosonTtsModel.owned_by, 'boson')
+  assert.equal(bosonTtsModel.capabilities.tts, true)
+  assert.deepEqual(bosonTtsModel.providers, ['boson'])
+  const bosonVideoModel = payload.data.find(model => model.id === 'higgs-avatar')
+  assert.equal(bosonVideoModel.owned_by, 'boson')
+  assert.equal(bosonVideoModel.capabilities.video, true)
+  assert.deepEqual(bosonVideoModel.providers, ['boson'])
   const modelIds = payload.data.map(model => model.id)
   assert.ok(!modelIds.includes('edge'))
   assert.ok(!modelIds.includes('bilibili-asr'))
@@ -165,6 +194,17 @@ test('GET /api/providers does not expose internal test providers', async () => {
   const defaultProvider = payload.providers.find(provider => provider.id === 'default')
   assert.ok(defaultProvider.fields.find(field => field.key === 'asr_model').options.includes('default-asr'))
   assert.ok(defaultProvider.fields.some(field => field.key === 'bcut_model_id'))
+  const boson = payload.providers.find(provider => provider.id === 'boson')
+  assert.equal(boson.capabilities.tts, true)
+  assert.equal(boson.capabilities.tts_streaming, true)
+  assert.equal(boson.capabilities.video, true)
+  assert.equal(boson.capabilities.video_streaming, true)
+  assert.equal(boson.capabilities.voice_clone, true)
+  assert.ok(boson.fields.find(field => field.key === 'tts_model').options.includes('higgs-tts-3'))
+  assert.ok(boson.fields.find(field => field.key === 'video_model').options.includes('higgs-avatar'))
+  assert.ok(boson.fields.find(field => field.key === 'tts_voice').options.includes('chloe'))
+  assert.ok(boson.fields.find(field => field.key === 'tts_voice').options.includes('oliver'))
+  assert.ok(!boson.fields.some(field => field.key === 'api_key'))
 })
 
 test('provider API keys can be created, updated, listed, and deleted', async () => {
@@ -238,6 +278,131 @@ test('GET /api/search proxies Freesound search with public search parameters', a
   assert.equal(freesoundLastRequest.searchParams.get('fields'), 'id,name,tags,username,license,url,previews,duration,type')
   assert.equal(freesoundLastRequest.searchParams.has('unknown'), false)
   assert.equal(freesoundLastRequest.authorization, 'Token test-freesound-key')
+})
+
+test('POST /v1/videos proxies Boson video creation, retrieval, download, and streaming', async () => {
+  bosonRequests = []
+  const keyResponse = await fetch(`${base_url}/api/providers/boson/api-keys`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'video',
+      api_key: 'test-boson-key',
+    }),
+  })
+  assert.equal(keyResponse.status, 200)
+
+  const createResponse = await fetch(`${base_url}/v1/videos`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'boson',
+      model: 'higgs-avatar',
+      ref_image: 'https://example.com/avatar.png',
+      input_tts: {
+        input: 'Hello from a Boson avatar.',
+        voice: 'default',
+        response_format: 'mp3',
+      },
+      size: '640x480',
+    }),
+  })
+  const createPayload = await createResponse.json()
+  if (createResponse.status !== 200) throw new Error(JSON.stringify(createPayload))
+  assert.equal(createResponse.status, 200)
+  assert.equal(createPayload.id, 'video_test_1')
+  assert.equal(bosonRequests[0].method, 'POST')
+  assert.equal(bosonRequests[0].pathname, '/v1/videos')
+  assert.equal(bosonRequests[0].authorization, 'Bearer test-boson-key')
+  assert.equal(bosonRequests[0].json.provider, undefined)
+  assert.deepEqual(bosonRequests[0].json.input_tts, {
+    input: 'Hello from a Boson avatar.',
+    voice: 'default',
+    response_format: 'mp3',
+  })
+
+  const retrieveResponse = await fetch(`${base_url}/v1/videos/video_test_1?provider=boson`)
+  const retrievePayload = await retrieveResponse.json()
+  if (retrieveResponse.status !== 200) throw new Error(JSON.stringify(retrievePayload))
+  assert.equal(retrieveResponse.status, 200)
+  assert.equal(retrievePayload.status, 'completed')
+  assert.equal(bosonRequests[1].pathname, '/v1/videos/video_test_1')
+
+  const contentResponse = await fetch(`${base_url}/v1/videos/video_test_1/content?provider=boson`)
+  const content = Buffer.from(await contentResponse.arrayBuffer())
+  assert.equal(contentResponse.status, 200)
+  assert.match(contentResponse.headers.get('content-type'), /^video\/mp4/)
+  assert.equal(content.length, 64)
+  assert.equal(bosonRequests[2].pathname, '/v1/videos/video_test_1/content')
+
+  const streamResponse = await fetch(`${base_url}/v1/videos/stream`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'boson',
+      ref_image: 'https://example.com/avatar.png',
+      input_tts: { input: 'Stream avatar.' },
+    }),
+  })
+  const streamContent = Buffer.from(await streamResponse.arrayBuffer())
+  assert.equal(streamResponse.status, 200)
+  assert.match(streamResponse.headers.get('content-type'), /^video\/mp4/)
+  assert.equal(streamResponse.headers.get('x-video-id'), 'video_stream_1')
+  assert.equal(streamContent.length, 32)
+  assert.equal(bosonRequests[3].pathname, '/v1/videos/stream')
+})
+
+test('Boson provider supports speech, voices, and voice cloning through public APIs', async () => {
+  bosonRequests = []
+  const keyResponse = await fetch(`${base_url}/api/providers/boson/api-keys`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'audio',
+      api_key: 'test-boson-audio-key',
+    }),
+  })
+  assert.equal(keyResponse.status, 200)
+
+  const speechResponse = await fetch(`${base_url}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'boson',
+      input: 'Hello from Boson TTS.',
+      voice: 'nora',
+      response_format: 'mp3',
+    }),
+  })
+  const speech = Buffer.from(await speechResponse.arrayBuffer())
+  assert.equal(speechResponse.status, 200)
+  assert.match(speechResponse.headers.get('content-type'), /^audio\/mpeg/)
+  assert.equal(speech.length, 256)
+  assert.equal(bosonRequests[0].pathname, '/v1/audio/speech')
+  assert.match(bosonRequests[0].authorization, /^Bearer /)
+  assert.equal(bosonRequests[0].json.voice, 'nora')
+
+  const voicesResponse = await fetch(`${base_url}/api/providers/boson/voices`)
+  const voicesPayload = await voicesResponse.json()
+  assert.equal(voicesResponse.status, 200)
+  assert.ok(voicesPayload.voices.some(voice => voice.id === 'chloe'))
+  assert.ok(voicesPayload.voices.some(voice => voice.id === 'voice_boson_existing'))
+  assert.equal(bosonRequests[1].pathname, '/v1/audio/voices')
+
+  const cloneForm = new FormData()
+  cloneForm.set('provider', 'boson')
+  cloneForm.set('name', 'Boson clone')
+  cloneForm.set('audio_sample', new Blob([Buffer.from('reference audio')], { type: 'audio/mpeg' }), 'sample.mp3')
+  cloneForm.set('extra_params', JSON.stringify({ ref_text: 'Reference transcript.' }))
+  const cloneResponse = await fetch(`${base_url}/v1/audio/voices`, {
+    method: 'POST',
+    body: cloneForm,
+  })
+  const clonePayload = await cloneResponse.json()
+  assert.equal(cloneResponse.status, 200)
+  assert.equal(clonePayload.id, 'voice_boson_new')
+  assert.equal(bosonRequests[2].pathname, '/v1/audio/voices')
+  assert.match(bosonRequests[2].body, /Reference transcript/)
 })
 
 test('server errors use OpenAI-style error objects', async () => {
@@ -1380,6 +1545,118 @@ function createFreesoundServer() {
       }],
     }))
   })
+}
+
+function createBosonServer() {
+  return createHttpServer(async (req, res) => {
+    try {
+      const url = new URL(req.url, bosonBaseUrl)
+      const body = await readRequestBody(req)
+      const text = body.toString('utf8')
+      const request = {
+        method: req.method,
+        pathname: url.pathname,
+        searchParams: url.searchParams,
+        authorization: req.headers.authorization,
+        contentType: req.headers['content-type'],
+        body: text,
+        json: parseJson(text),
+      }
+      bosonRequests.push(request)
+
+      if (req.method === 'POST' && url.pathname === '/v1/videos') {
+        sendBosonJson(res, {
+          id: 'video_test_1',
+          object: 'video',
+          model: request.json?.model ?? 'higgs-avatar',
+          status: 'queued',
+          progress: 0,
+          size: request.json?.size ?? '640x640',
+          created_at: 123,
+          error: null,
+        })
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/videos/video_test_1') {
+        sendBosonJson(res, {
+          id: 'video_test_1',
+          object: 'video',
+          model: 'higgs-avatar',
+          status: 'completed',
+          progress: 100,
+          size: '640x480',
+          created_at: 123,
+          error: null,
+        })
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/videos/video_test_1/content') {
+        res.writeHead(200, { 'content-type': 'video/mp4' })
+        res.end(Buffer.alloc(64, 4))
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/v1/videos/stream') {
+        res.writeHead(200, {
+          'content-type': 'video/mp4',
+          'x-video-id': 'video_stream_1',
+        })
+        res.end(Buffer.alloc(32, 5))
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === '/v1/audio/speech') {
+        res.writeHead(200, { 'content-type': request.json?.response_format === 'pcm' ? 'audio/L16' : 'audio/mpeg' })
+        res.end(Buffer.alloc(request.json?.stream ? 256 : 256, 6))
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/audio/voices') {
+        sendBosonJson(res, {
+          object: 'list',
+          data: [{
+            voice: 'voice_boson_existing',
+            description: 'Existing Boson voice',
+            created_at: '2026-01-01T00:00:00Z',
+          }],
+        })
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/v1/audio/voices') {
+        sendBosonJson(res, {
+          voice: 'voice_boson_new',
+          description: 'Boson clone',
+          created_at: '2026-01-01T00:00:00Z',
+          ref_text: 'Reference transcript.',
+        })
+        return
+      }
+
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: { message: 'not found' } }))
+    } catch (error) {
+      res.writeHead(500, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: { message: error instanceof Error ? error.message : String(error) } }))
+    }
+  })
+}
+
+function sendBosonJson(res, payload) {
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify(payload))
+}
+
+async function readRequestBody(req) {
+  const chunks = []
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  return Buffer.concat(chunks)
+}
+
+function parseJson(text) {
+  if (!text.trim()) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 function createTinyWav() {

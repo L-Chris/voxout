@@ -40,6 +40,7 @@ without changing client code.
 | `mimo` | Xiaomi MiMo TTS, preset voices, voice design, ASR |
 | `gradium` | TTS, streaming TTS, ASR, voice listing, voice cloning |
 | `stepfun` | TTS, streaming TTS, ASR streaming, system/cloned voices, voice cloning |
+| `boson` | TTS, streaming TTS, preset/custom voices, voice cloning, avatar video generation |
 
 Provider availability depends on your configured API keys and the upstream
 account plan. The built-in `default` provider is useful for getting started, but
